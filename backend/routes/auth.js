@@ -24,6 +24,14 @@ import zxcvbn from 'zxcvbn';
 import { checkFailedLoginAnomaly } from '../utils/anomalies.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { verifyTotp, hashBackupCode } from '../utils/totp.js';
+import { 
+  registrationSchema, 
+  loginSchema, 
+  changePasswordSchema,
+  validateRequest 
+} from '../middleware/requestValidation.js';
+import { encryptSensitiveData, decryptSensitiveData } from '../utils/encryption.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -85,7 +93,7 @@ function requireCsrfForCookieRefresh(req) {
   return Boolean(csrfCookie && csrfHeader && csrfCookie === csrfHeader);
 }
 
-router.post('/register', async (req, res) => {
+router.post('/register', validateRequest(registrationSchema), async (req, res) => {
   /*
     #swagger.tags = ['Auth']
     #swagger.summary = 'Register a new user'
@@ -98,10 +106,14 @@ router.post('/register', async (req, res) => {
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
     #swagger.responses[409] = { description: 'User exists', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { fullName, email, phone, password } = req.body || {};
-  if (!fullName || !email || !password) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  // Use validated request data instead of raw body
+  const { fullName, email, phone, password, dateOfBirth, agreedToTerms } = req.validated || req.body || {};
+  
+  // Verify agreement to terms (already validated but double-check)
+  if (!agreedToTerms) {
+    return res.status(400).json({ error: 'You must agree to the terms and conditions' });
   }
+
   const passwordError = validatePasswordStrength(password);
   if (passwordError) {
     return res.status(400).json({ error: passwordError });
@@ -116,10 +128,16 @@ router.post('/register', async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const userId = crypto.randomUUID();
+  
   try {
+    // Encrypt PII before storing
+    const encryptedEmail = encryptSensitiveData(email, process.env.COOKIE_ENC_SECRET);
+    const encryptedPhone = phone ? encryptSensitiveData(phone, process.env.COOKIE_ENC_SECRET) : null;
+    const encryptedFullName = encryptSensitiveData(fullName, process.env.COOKIE_ENC_SECRET);
+    
     await pool.query(
-      'INSERT INTO users (id, full_name, email, phone, password_hash, kyc_level, kyc_status, kyc_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, fullName, email, phone || null, passwordHash, 1, 'pending', JSON.stringify({})]
+      'INSERT INTO users (id, full_name, email, phone, password_hash, kyc_level, kyc_status, kyc_payload, date_of_birth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [userId, encryptedFullName, encryptedEmail, encryptedPhone, passwordHash, 1, 'pending', JSON.stringify({}), dateOfBirth]
     );
     await pool.query('INSERT INTO wallets (id, user_id, balance, currency) VALUES (UUID(), ?, 0, ?)', [
       userId,
@@ -144,6 +162,7 @@ router.post('/register', async (req, res) => {
       }
     } catch (err) {
       // Customer creation can be retried later
+      logger.warn('Flutterwave customer creation failed', { error: logger.format(err) });
     }
 
     const accountReference = `GLY-${userId}`;
@@ -181,6 +200,7 @@ router.post('/register', async (req, res) => {
         bankName: account.bank_name,
       }).catch(console.error);
     } catch (err) {
+      logger.warn('Virtual account creation failed', { error: logger.format(err) });
       sendWelcomeEmail({ to: email, name: fullName }).catch(console.error);
     }
     logAudit({
@@ -200,7 +220,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', otpLimiter, async (req, res) => {
+router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res) => {
   /*
     #swagger.tags = ['Auth']
     #swagger.summary = 'Login and obtain tokens'
@@ -212,8 +232,8 @@ router.post('/login', otpLimiter, async (req, res) => {
     #swagger.responses[200] = { description: 'Logged in', schema: { $ref: '#/definitions/AuthLoginResponse' } }
     #swagger.responses[401] = { description: 'Invalid credentials', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { email, password, deviceId } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
+  // Use validated request data
+  const { email, password, deviceId, totp } = req.validated || req.body || {};
 
   const [rows] = await pool.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
   if (!rows.length) return res.status(401).json({ error: 'Invalid credentials' });

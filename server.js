@@ -39,6 +39,8 @@ import { csrfMiddleware } from './backend/middleware/csrf.js';
 import { attachRealtime } from './backend/utils/realtime.js';
 import { pruneWebhookEvents, pruneAuditLogs, pruneSecurityEvents } from './backend/utils/retention.js';
 import { logger } from './backend/utils/logger.js';
+import { SecretValidator } from './backend/utils/secretValidator.js';
+import { TokenCleanupManager } from './backend/utils/tokenCleanup.js';
 
 dotenv.config();
 
@@ -339,11 +341,22 @@ const server = http.createServer(app);
 attachRealtime(server);
 
 async function startServer() {
+  // Validate all required secrets before any other operations
+  try {
+    SecretValidator.validateSecrets();
+  } catch (err) {
+    console.error('Secret validation failed:', err.message);
+    process.exit(1);
+  }
+
   try {
     await initDatabase();
     dbReady = true;
     dbCheckedAt = new Date().toISOString();
     dbError = null;
+    
+    // Initialize token cleanup jobs after successful database connection
+    TokenCleanupManager.initializeCleanupJobs();
   } catch (err) {
     dbReady = false;
     dbCheckedAt = new Date().toISOString();

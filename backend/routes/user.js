@@ -24,6 +24,8 @@ import {
 import zxcvbn from 'zxcvbn';
 import { getKycLimitConfig } from '../utils/kycLimits.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { changePasswordSchema, validateRequest } from '../middleware/requestValidation.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 const MIN_PASSWORD_LENGTH = 10;
@@ -389,11 +391,9 @@ router.post('/sessions/:id/label', requireUser, async (req, res) => {
   return res.json({ message: 'Device label updated' });
 });
 
-router.post('/password/change', requireUser, async (req, res) => {
-  const { currentPassword, newPassword } = req.body || {};
-  if (!currentPassword || !newPassword) {
-    return res.status(400).json({ error: 'Missing fields' });
-  }
+router.post('/password/change', requireUser, validateRequest(changePasswordSchema), async (req, res) => {
+  const { currentPassword, newPassword } = req.validated || req.body || {};
+  
   const passwordError = validatePasswordStrength(newPassword);
   if (passwordError) return res.status(400).json({ error: passwordError });
   const [[user]] = await pool.query(
@@ -427,6 +427,14 @@ router.post('/password/change', requireUser, async (req, res) => {
     action: 'user.password.change',
     entityType: 'user',
     entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  logSecurityEvent({
+    type: 'password.changed',
+    severity: 'low',
+    actorType: 'user',
+    actorId: req.user.sub,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
   }).catch(() => null);
