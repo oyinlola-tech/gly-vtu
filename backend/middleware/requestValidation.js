@@ -128,10 +128,10 @@ export const billPaymentSchema = Joi.object({
 
   pin: Joi.string()
     .required()
-    .length(4)
+    .length(6)
     .pattern(/^\d+$/)
     .messages({
-      'string.length': 'PIN must be 4 digits',
+      'string.length': 'PIN must be 6 digits',
       'string.pattern.base': 'PIN must contain only digits'
     }),
 
@@ -171,10 +171,10 @@ export const walletTransferSchema = Joi.object({
 
   pin: Joi.string()
     .required()
-    .length(4)
+    .length(6)
     .pattern(/^\d+$/)
     .messages({
-      'string.length': 'PIN must be 4 digits'
+      'string.length': 'PIN must be 6 digits'
     }),
 
   description: Joi.string()

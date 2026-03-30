@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
 import { generateStatementPdf, sendStatementEmail, generateReceiptPdf } from '../utils/email.js';
+import { applyUserPII } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -130,7 +131,11 @@ router.get('/:id/receipt', requireUser, async (req, res) => {
     }
   }
 
-  const [[user]] = await pool.query('SELECT full_name FROM users WHERE id = ?', [req.user.sub]);
+  const [[userRaw]] = await pool.query(
+    'SELECT id, full_name, full_name_encrypted FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const user = applyUserPII(userRaw);
   const title = 'Transaction Receipt';
   const details = [
     `Reference: ${tx.reference}`,
@@ -184,11 +189,12 @@ router.post('/statement', requireUser, async (req, res) => {
     return res.status(400).json({ error: 'Start date must be before end date' });
   }
 
-  const [[user]] = await pool.query(
-    'SELECT full_name, email FROM users WHERE id = ?',
+  const [[userRaw2]] = await pool.query(
+    'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
     [req.user.sub]
   );
-  if (!user?.email) {
+  const user2 = applyUserPII(userRaw2);
+  if (!user2?.email) {
     return res.status(400).json({ error: 'Email address not found' });
   }
 
@@ -199,8 +205,8 @@ router.post('/statement', requireUser, async (req, res) => {
   });
 
   await sendStatementEmail({
-    to: user.email,
-    name: user.full_name,
+    to: user2.email,
+    name: user2.full_name,
     startDate,
     endDate,
     openingBalance,
@@ -237,10 +243,11 @@ router.post('/statement/download', requireUser, async (req, res) => {
     return res.status(400).json({ error: 'Start date must be before end date' });
   }
 
-  const [[user]] = await pool.query(
-    'SELECT full_name FROM users WHERE id = ?',
+  const [[userRaw3]] = await pool.query(
+    'SELECT id, full_name, full_name_encrypted FROM users WHERE id = ?',
     [req.user.sub]
   );
+  const user3 = applyUserPII(userRaw3);
 
   const { rows, openingBalance, closingBalance } = await buildStatementData({
     userId: req.user.sub,
@@ -249,7 +256,7 @@ router.post('/statement/download', requireUser, async (req, res) => {
   });
 
   const pdf = await generateStatementPdf({
-    name: user?.full_name,
+    name: user3?.full_name,
     startDate,
     endDate,
     openingBalance,

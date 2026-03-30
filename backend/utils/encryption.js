@@ -153,6 +153,62 @@ export function hashPIIForSearch(plaintext, field = '') {
     .digest('hex');
 }
 
+export function normalizeEmail(email) {
+  if (!email) return '';
+  return String(email).trim().toLowerCase();
+}
+
+export function normalizePhone(phone) {
+  if (!phone) return '';
+  return String(phone).replace(/\s+/g, '').trim();
+}
+
+export function hashEmail(email) {
+  const normalized = normalizeEmail(email);
+  return normalized ? hashPIIForSearch(normalized, 'email') : null;
+}
+
+export function hashPhone(phone) {
+  const normalized = normalizePhone(phone);
+  return normalized ? hashPIIForSearch(normalized, 'phone') : null;
+}
+
+export function encryptJson(data, aad = null) {
+  if (data === null || data === undefined) return null;
+  return encryptPII(JSON.stringify(data), aad);
+}
+
+export function decryptJson(encrypted, aad = null) {
+  if (!encrypted) return null;
+  const decrypted = decryptPII(encrypted, aad);
+  if (!decrypted) return null;
+  try {
+    return JSON.parse(decrypted);
+  } catch (err) {
+    logger.error('JSON decryption failed', { error: err.message });
+    return null;
+  }
+}
+
+export function applyUserPII(row) {
+  if (!row || typeof row !== 'object') return row;
+  const userId = row.user_id || row.id || null;
+  const next = { ...row };
+  if ('full_name_encrypted' in row) {
+    next.full_name = decryptPII(row.full_name_encrypted, userId) || row.full_name || null;
+    delete next.full_name_encrypted;
+  }
+  if ('email_encrypted' in row) {
+    next.email = decryptPII(row.email_encrypted, userId) || row.email || null;
+    delete next.email_encrypted;
+  }
+  if ('phone_encrypted' in row) {
+    next.phone = decryptPII(row.phone_encrypted, userId) || row.phone || null;
+    delete next.phone_encrypted;
+  }
+  return next;
+}
+
 /**
  * Check if a value can be safely displayed in logs
  * Returns true if the value has been properly redacted
@@ -228,6 +284,13 @@ export default {
   encryptMultiplePII,
   decryptMultiplePII,
   hashPIIForSearch,
+  normalizeEmail,
+  normalizePhone,
+  hashEmail,
+  hashPhone,
+  encryptJson,
+  decryptJson,
+  applyUserPII,
   isSafeForLogging,
   sanitizeForLogging
 };

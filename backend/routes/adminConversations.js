@@ -5,19 +5,20 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { emitToAdmins, emitToUser } from '../utils/realtime.js';
 import { logAudit } from '../utils/audit.js';
+import { applyUserPII } from '../utils/encryption.js';
 
 const router = express.Router();
 
 router.get('/', requireAdmin, requirePermission('support:chat'), async (req, res) => {
   const [rows] = await pool.query(
     `SELECT c.id, c.user_id, c.status, c.subject, c.last_message_at,
-            u.full_name, u.email
+            u.full_name, u.email, u.full_name_encrypted, u.email_encrypted
      FROM conversations c
      JOIN users u ON u.id = c.user_id
      ORDER BY c.last_message_at DESC
      LIMIT 200`
   );
-  return res.json(rows);
+  return res.json(rows.map((row) => applyUserPII(row)));
 });
 
 router.get('/:id/messages', requireAdmin, requirePermission('support:chat'), async (req, res) => {

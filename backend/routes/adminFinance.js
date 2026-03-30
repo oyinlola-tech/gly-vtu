@@ -7,6 +7,7 @@ import { logAudit } from '../utils/audit.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { checkAdminAdjustmentAnomaly } from '../utils/anomalies.js';
+import { applyUserPII } from '../utils/encryption.js';
 
 const router = express.Router();
 const ADMIN_ADJUSTMENT_MAX = Number(process.env.ADMIN_ADJUSTMENT_MAX || 1000000);
@@ -54,14 +55,14 @@ router.get('/balances', requireAdmin, requirePermission('finance:read'), async (
   const limit = Math.min(Number(req.query.limit || 100), 200);
   const offset = Number(req.query.offset || 0);
   const [rows] = await pool.query(
-    `SELECT u.full_name, u.email, w.balance, w.currency, w.updated_at
+    `SELECT u.id, u.full_name, u.email, u.full_name_encrypted, u.email_encrypted, w.balance, w.currency, w.updated_at
      FROM wallets w
      JOIN users u ON u.id = w.user_id
      ORDER BY w.balance DESC
      LIMIT ? OFFSET ?`,
     [limit, offset]
   );
-  return res.json(rows);
+  return res.json(rows.map((row) => applyUserPII(row)));
 });
 
 router.get('/export', requireAdmin, requirePermission('finance:read'), async (req, res) => {
@@ -150,7 +151,7 @@ router.get('/adjustments', requireAdmin, requirePermission('transactions:read'),
   const where = status ? 'WHERE status = ?' : '';
   if (status) params.push(status);
   const [rows] = await pool.query(
-    `SELECT a.id, a.user_id, u.full_name, a.type, a.amount, a.status, a.reason, a.requested_by, a.approved_by, a.created_at
+    `SELECT a.id, a.user_id, u.full_name, u.full_name_encrypted, a.type, a.amount, a.status, a.reason, a.requested_by, a.approved_by, a.created_at
      FROM admin_adjustments a
      JOIN users u ON u.id = a.user_id
      ${where}
@@ -158,7 +159,7 @@ router.get('/adjustments', requireAdmin, requirePermission('transactions:read'),
      LIMIT 200`,
     params
   );
-  return res.json(rows);
+  return res.json(rows.map((row) => applyUserPII(row)));
 });
 
 router.post(

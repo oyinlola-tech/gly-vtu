@@ -11,17 +11,7 @@ export function csrfMiddleware(req, res, next) {
   const csrfExemptPaths = [
     '/api/flutterwave/webhook',
     '/api/vtpass/webhook',
-    '/api/auth/login',
-    '/api/auth/register',
-    '/api/auth/verify-device',
-    '/api/auth/forgot-password',
-    '/api/auth/reset-password',
-    '/api/auth/refresh',
     '/api/auth/csrf',
-    '/api/admin/auth/login',
-    '/api/admin/auth/forgot-password',
-    '/api/admin/auth/reset-password',
-    '/api/admin/auth/refresh',
     '/api/admin/auth/csrf',
   ];
   const path = req.path || '';
@@ -36,7 +26,21 @@ export function csrfMiddleware(req, res, next) {
   // regardless of authentication method (Authorization header doesn't exempt CSRF checks)
   const csrfCookie = req.cookies?.csrf_token;
   const csrfHeader = req.headers['x-csrf-token'];
-  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+  if (!csrfCookie || !csrfHeader) {
+    return res.status(403).json({ error: 'CSRF validation failed' });
+  }
+  const cookieValue = Array.isArray(csrfCookie) ? csrfCookie[0] : csrfCookie;
+  const headerValue = Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader;
+  if (!cookieValue || !headerValue || cookieValue.length !== headerValue.length) {
+    return res.status(403).json({ error: 'CSRF validation failed' });
+  }
+  let isMatch = false;
+  try {
+    isMatch = crypto.timingSafeEqual(Buffer.from(cookieValue), Buffer.from(headerValue));
+  } catch (err) {
+    isMatch = false;
+  }
+  if (!isMatch) {
     return res.status(403).json({ error: 'CSRF validation failed' });
   }
   return next();

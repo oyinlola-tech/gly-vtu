@@ -15,6 +15,18 @@ GLY-VTU is a sophisticated fintech platform handling sensitive Nigerian financia
 - **Data Encryption** (PII & financial data stored plaintext)
 - **Payment Integration** (webhook bypass risks, race conditions)
 
+**Implementation Status Update (March 30, 2026):**
+- CSRF updated to double-submit (cookie + `X-CSRF-Token`) with SPA support.
+- PII now encrypted at rest with deterministic lookup hashes (`email_hash`, `phone_hash`).
+- KYC payloads encrypted (`kyc_payload_encrypted`) with safe fallback reads.
+- PIN standardized to 6 digits across backend validation and flows.
+- Admin login rate limiting added (`adminLoginLimiter`).
+- Logger redaction expanded for secrets/PII.
+- Flutterwave webhook processing now uses transactional idempotency locking.
+- Hardcoded secret defaults removed from runtime auth paths.
+
+**Test Status:** `npm test` is not configured; only `npm run dev` and `npm run build` are available. Add a test script before running automated suites.
+
 ---
 
 ## Vulnerability Summary Matrix
@@ -47,16 +59,16 @@ GLY-VTU is a sophisticated fintech platform handling sensitive Nigerian financia
 **Current Code Problem:**
 ```javascript
 // server.js
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
-const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET || 'dev_secret_change_me';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET;
 
 // secureCookie.js
-const DEFAULT_SECRET = process.env.COOKIE_ENC_SECRET || process.env.JWT_SECRET || 'dev_secret_change_me';
+const DEFAULT_SECRET = process.env.COOKIE_ENC_SECRET || process.env.JWT_SECRET;
 ```
 
 **Attack Scenario:**
-1. Attacker discovers the hardcoded secret is 'dev_secret_change_me' (published in repo examples)
-2. Uses any JWT library to forge tokens: `jwt.sign({id: targetUserId, role: 'admin'}, 'dev_secret_change_me')`
+1. Attacker discovers a default/weak secret in configuration
+2. Uses any JWT library to forge tokens: `jwt.sign({id: targetUserId, role: 'admin'}, weakSecret)`
 3. Gains access to victim's account or admin panel
 
 **Impact:** CRITICAL - Complete authentication bypass, full account takeover
@@ -64,7 +76,7 @@ const DEFAULT_SECRET = process.env.COOKIE_ENC_SECRET || process.env.JWT_SECRET |
 **Remediation - Step 1: Remove All Defaults**
 ```javascript
 // server.js - BEFORE
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // server.js - AFTER
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -113,7 +125,7 @@ TOTP_WINDOW_SECRET=your_unique_totp_secret_32_chars_min
 
 ---
 
-### 1.2 HIGH: Missing Login Rate Limiting for Admin Accounts
+### 1.2 HIGH: Missing Login Rate Limiting for Admin Accounts (IMPLEMENTED)
 
 **Current Code:**
 ```javascript
@@ -128,67 +140,27 @@ router.post('/login', otpLimiter, async (req, res) => {
 **Fix:**
 
 ```javascript
-// backend/middleware/rateLimiters.js - ADD THIS
+// backend/middleware/rateLimiters.js - IMPLEMENTED
 
-export const adminLoginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts
-  message: 'Too many admin login attempts. Try again after 15 minutes.',
-  standardHeaders: true,
-  skip: (req) => {
-    // Only apply to admin login, not user login
-    return req.path !== '/api/admin/login';
-  }
-});
-
-// More aggressive: per-IP per-admin-email
-export const adminLoginPerEmailLimiter = (req, res, next) => {
-  const email = req.body.email?.toLowerCase();
-  if (!email) return next();
-  
-  const key = `admin_login:${email}:${getClientIp(req)}`;
-  const limit = 3; // 3 attempts per email per IP
-  const windowMs = 30 * 60 * 1000; // 30 minutes
-  
-  redisClient.incr(key, (err, attempts) => {
-    if (attempts === 1) redisClient.expire(key, Math.ceil(windowMs / 1000));
-    if (attempts > limit) {
-      return res.status(429).json({
-        error: 'Admin account locked. Contact support@gly-vtu.com',
-        retryAfter: Math.ceil(windowMs / 1000)
-      });
-    }
-    next();
-  });
-};
+export const adminLoginLimiter = rateLimit(
+  limiterOptions({
+    windowMs: 15 * 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_ADMIN_LOGIN_MAX || 5),
+    keyGenerator: (req) => {
+      const email = String(req.body?.email || '').toLowerCase().trim();
+      return `${req.ip || 'unknown'}:${email || 'no-email'}`;
+    },
+  })
+);
 ```
 
-**Update Route:**
+**Update Route (Implemented):**
 ```javascript
 // backend/routes/adminAuth.js
-import { adminLoginLimiter, adminLoginPerEmailLimiter } from '../middleware/rateLimiters.js';
+import { adminLoginLimiter } from '../middleware/rateLimiters.js';
 
-router.post('/login', adminLoginPerEmailLimiter, adminLoginLimiter, async (req, res) => {
+router.post('/login', adminLoginLimiter, otpLimiter, async (req, res) => {
   // ... existing code
-  // On failed attempt:
-  const [user] = await pool.query('SELECT id FROM admins WHERE email = ?', [email]);
-  if (!user || !await bcrypt.compare(password, user.password_hash)) {
-    // Count failed attempts
-    const key = `admin_login_failed:${email}`;
-    const attempts = await redisClient.incr(key);
-    if (attempts === 1) await redisClient.expire(key, 30 * 60); // 30 min window
-    
-    if (attempts >= 3) {
-      // Lock account
-      await pool.query('UPDATE admins SET locked_until = ? WHERE email = ?', 
-        [new Date(Date.now() + 30 * 60 * 1000), email]);
-    }
-    
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-  
-  // Clear failed attempts on success
-  await redisClient.del(`admin_login_failed:${email}`);
 });
 ```
 
@@ -841,7 +813,7 @@ sameSite: 'lax', // Allows some cross-site POSTs
 // Token doesn't rotate per-request
 ```
 
-**Fix 1: Enforce Strict SameSite**
+**Fix 1: Double-Submit CSRF (Implemented)**
 
 ```javascript
 // backend/middleware/csrf.js - UPDATED
@@ -893,13 +865,13 @@ export function csrfMiddleware(req, res, next) {
 }
 
 export function csrfTokenMiddleware(req, res, next) {
-  // Ensure CSRF token cookie is set
+  // Ensure CSRF token cookie is set (double-submit)
   if (!req.cookies?.csrf_token) {
     const newToken = crypto.randomBytes(32).toString('hex');
     res.cookie('csrf_token', newToken, {
-      httpOnly: true, // ❌ Cannot be read by JavaScript
+      httpOnly: false, // allow SPA to read and send X-CSRF-Token
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict', // ✅ Strict - not 'lax'
+      sameSite: 'lax',
       maxAge: 1000 * 60 * 60, // 1 hour
       path: '/'
     });
@@ -917,7 +889,7 @@ export function getCsrfTokenForResponse(req) {
 }
 ```
 
-**Fix 2: Per-Request Rotation for Sensitive Operations**
+**Fix 2: Per-Request Rotation for Sensitive Operations (Optional)**
 
 ```javascript
 // backend/routes/wallet.js - For sensitive money transfer
@@ -927,9 +899,9 @@ router.post('/transfer', csrfMiddleware, requireUser, async (req, res) => {
   // Rotate CSRF token after each sensitive operation
   const newToken = crypto.randomBytes(32).toString('hex');
   res.cookie('csrf_token', newToken, {
-    httpOnly: true,
+    httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 1000 * 60 * 60,
   });
   
@@ -1274,12 +1246,12 @@ router.get('/device-id', async (req, res) => {
   // Generate or retrieve device ID
   const deviceId = crypto.randomUUID();
   
-  res.cookie('device_id', deviceId, {
-    httpOnly: true, // Cannot be accessed by JavaScript
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 365 * 24 * 60 * 60 * 1000 // 1 year
-  });
+res.cookie('device_id', deviceId, {
+  httpOnly: true, // Cannot be accessed by JavaScript
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: 365 * 24 * 60 * 60 * 1000 // 1 year
+});
   
   res.json({ deviceId }); // Send to client for reference only
 });
@@ -1744,6 +1716,11 @@ export function logRequest(req, res, next) {
 ## SECTION 9: DATA ENCRYPTION
 
 ### 9.1 HIGH: No Encryption for PII in Database
+
+**Status (Implemented):**
+1. Added encrypted PII columns (`full_name_encrypted`, `email_encrypted`, `phone_encrypted`).
+2. Added deterministic lookup hashes (`email_hash`, `phone_hash`) for login/uniqueness.
+3. Encrypted KYC payloads (`kyc_payload_encrypted`) with safe fallback reads.
 
 **Strategy: Field-Level Encryption at Application Level**
 

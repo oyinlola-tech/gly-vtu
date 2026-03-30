@@ -3,6 +3,12 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { ensureAdminTotpColumns } from '../docs/migrations/2026-03-30_admin_totp.js';
+import {
+  encryptPII,
+  encryptJson,
+  hashEmail,
+  hashPhone,
+} from '../utils/encryption.js';
 
 dotenv.config();
 
@@ -21,7 +27,7 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   decimalNumbers: true,
-  multipleStatements: true,
+  multipleStatements: false,
 });
 
 function hashToken(token) {
@@ -106,7 +112,7 @@ export async function initDatabase() {
 
   const conn = await pool.getConnection();
   try {
-    await conn.query(`
+    await runStatements(conn, `
       CREATE TABLE IF NOT EXISTS schema_meta (
         id INT PRIMARY KEY,
         seeded TINYINT NOT NULL DEFAULT 0,
@@ -115,8 +121,8 @@ export async function initDatabase() {
 
       CREATE TABLE IF NOT EXISTS users (
         id CHAR(36) PRIMARY KEY,
-        full_name VARCHAR(120) NOT NULL,
-        email VARCHAR(120) NOT NULL UNIQUE,
+        full_name VARCHAR(120) NULL,
+        email VARCHAR(120) NULL UNIQUE,
         phone VARCHAR(20) NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
         login_failed_attempts INT NOT NULL DEFAULT 0,
@@ -134,6 +140,12 @@ export async function initDatabase() {
         kyc_level TINYINT NOT NULL DEFAULT 1,
         kyc_status ENUM('pending','verified','rejected') NOT NULL DEFAULT 'pending',
         kyc_payload JSON NULL,
+        full_name_encrypted VARCHAR(500) NULL,
+        email_encrypted VARCHAR(500) NULL,
+        phone_encrypted VARCHAR(500) NULL,
+        email_hash CHAR(64) NULL,
+        phone_hash CHAR(64) NULL,
+        kyc_payload_encrypted LONGTEXT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       );
@@ -461,6 +473,11 @@ export async function initDatabase() {
     await ensureUserSecurityColumns(conn);
     await ensureUserLoginLockColumns(conn);
     await ensureUserPhoneNullable(conn);
+    await ensureUserEmailNullable(conn);
+    await ensureUserFullNameNullable(conn);
+    await ensureUserPiiColumns(conn);
+    await ensureUserPiiIndexes(conn);
+    await migrateUserPii(conn);
     await ensureRefreshTokenFamilyColumns(conn);
     await ensureIdempotencyTable(conn);
     await ensureTransactionReferenceUnique(conn);
@@ -473,6 +490,16 @@ export async function initDatabase() {
     await ensureUserTotpColumns(conn);
   } finally {
     conn.release();
+  }
+}
+
+async function runStatements(conn, sql) {
+  const statements = String(sql)
+    .split(';')
+    .map((stmt) => stmt.trim())
+    .filter(Boolean);
+  for (const statement of statements) {
+    await conn.query(statement);
   }
 }
 
@@ -508,6 +535,112 @@ async function ensureUserPhoneNullable(conn) {
   );
   if (cols.length && cols[0].IS_NULLABLE === 'NO') {
     await conn.query('ALTER TABLE users MODIFY COLUMN phone VARCHAR(20) NULL');
+  }
+}
+
+async function ensureUserEmailNullable(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'email'`,
+    [DB_NAME]
+  );
+  if (cols.length && cols[0].IS_NULLABLE === 'NO') {
+    await conn.query('ALTER TABLE users MODIFY COLUMN email VARCHAR(120) NULL');
+  }
+}
+
+async function ensureUserFullNameNullable(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'full_name'`,
+    [DB_NAME]
+  );
+  if (cols.length && cols[0].IS_NULLABLE === 'NO') {
+    await conn.query('ALTER TABLE users MODIFY COLUMN full_name VARCHAR(120) NULL');
+  }
+}
+
+async function ensureUserPiiColumns(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'`,
+    [DB_NAME]
+  );
+  const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+  const alters = [];
+  if (!existing.has('full_name_encrypted')) {
+    alters.push('ADD COLUMN full_name_encrypted VARCHAR(500) NULL');
+  }
+  if (!existing.has('email_encrypted')) {
+    alters.push('ADD COLUMN email_encrypted VARCHAR(500) NULL');
+  }
+  if (!existing.has('phone_encrypted')) {
+    alters.push('ADD COLUMN phone_encrypted VARCHAR(500) NULL');
+  }
+  if (!existing.has('email_hash')) {
+    alters.push('ADD COLUMN email_hash CHAR(64) NULL');
+  }
+  if (!existing.has('phone_hash')) {
+    alters.push('ADD COLUMN phone_hash CHAR(64) NULL');
+  }
+  if (!existing.has('kyc_payload_encrypted')) {
+    alters.push('ADD COLUMN kyc_payload_encrypted LONGTEXT NULL');
+  }
+  if (alters.length) {
+    await conn.query(`ALTER TABLE users ${alters.join(', ')}`);
+  }
+}
+
+async function ensureUserPiiIndexes(conn) {
+  const [rows] = await conn.query(
+    `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'`,
+    [DB_NAME]
+  );
+  const existing = new Set(rows.map((r) => r.INDEX_NAME));
+  if (!existing.has('uniq_email_hash')) {
+    await conn.query('CREATE UNIQUE INDEX uniq_email_hash ON users (email_hash)');
+  }
+  if (!existing.has('uniq_phone_hash')) {
+    await conn.query('CREATE UNIQUE INDEX uniq_phone_hash ON users (phone_hash)');
+  }
+}
+
+async function migrateUserPii(conn) {
+  const [rows] = await conn.query(
+    `SELECT id, full_name, email, phone, kyc_payload,
+            full_name_encrypted, email_encrypted, phone_encrypted,
+            email_hash, phone_hash, kyc_payload_encrypted
+     FROM users`
+  );
+  for (const row of rows) {
+    const updates = [];
+    const values = [];
+    if (!row.full_name_encrypted && row.full_name) {
+      updates.push('full_name_encrypted = ?');
+      values.push(encryptPII(row.full_name, row.id));
+    }
+    if (!row.email_encrypted && row.email) {
+      updates.push('email_encrypted = ?');
+      values.push(encryptPII(row.email, row.id));
+    }
+    if (!row.phone_encrypted && row.phone) {
+      updates.push('phone_encrypted = ?');
+      values.push(encryptPII(row.phone, row.id));
+    }
+    if (!row.email_hash && row.email) {
+      updates.push('email_hash = ?');
+      values.push(hashEmail(row.email));
+    }
+    if (!row.phone_hash && row.phone) {
+      updates.push('phone_hash = ?');
+      values.push(hashPhone(row.phone));
+    }
+    if (!row.kyc_payload_encrypted && row.kyc_payload) {
+      updates.push('kyc_payload_encrypted = ?');
+      values.push(encryptJson(JSON.parse(row.kyc_payload), row.id));
+    }
+    if (updates.length) {
+      values.push(row.id);
+      await conn.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
+    }
   }
 }
 

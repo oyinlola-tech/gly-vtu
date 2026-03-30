@@ -56,6 +56,17 @@ export const adminAuthLimiter = rateLimit(
   })
 );
 
+export const adminLoginLimiter = rateLimit(
+  limiterOptions({
+    windowMs: 15 * 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_ADMIN_LOGIN_MAX || 5),
+    keyGenerator: (req) => {
+      const email = String(req.body?.email || '').toLowerCase().trim();
+      return `${req.ip || 'unknown'}:${email || 'no-email'}`;
+    },
+  })
+);
+
 export const billsLimiter = rateLimit(
   limiterOptions({
     windowMs: 5 * 60 * 1000,

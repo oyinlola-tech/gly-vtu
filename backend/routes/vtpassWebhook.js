@@ -5,6 +5,7 @@ import { sendReceiptEmail } from '../utils/email.js';
 import { sanitizeVtpassPayload } from '../utils/sanitize.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { webhookLimiter } from '../middleware/rateLimiters.js';
+import { applyUserPII } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -124,9 +125,11 @@ router.post('/', webhookLimiter, async (req, res) => {
   }
 
   if (status === 'success' && tx.status !== 'success') {
-    const [[user]] = await pool.query('SELECT full_name, email FROM users WHERE id = ?', [
-      tx.user_id,
-    ]);
+    const [[userRaw]] = await pool.query(
+      'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
+      [tx.user_id]
+    );
+    const user = applyUserPII(userRaw);
     if (user?.email) {
       sendReceiptEmail({
         to: user.email,

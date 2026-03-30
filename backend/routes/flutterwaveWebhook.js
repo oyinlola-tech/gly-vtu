@@ -6,6 +6,7 @@ import { enforceKycLimits } from '../utils/kycLimits.js';
 import { sendReceiptEmail } from '../utils/email.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { webhookLimiter } from '../middleware/rateLimiters.js';
+import { applyUserPII } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -109,11 +110,6 @@ router.post('/', webhookLimiter, async (req, res) => {
   if (!amount || amount <= 0) return res.json({ message: 'Invalid amount' });
 
   const reference = `FLW-${data.flw_ref || data.id || txRef}`;
-  const [existing] = await pool.query(
-    'SELECT id FROM transactions WHERE reference = ? LIMIT 1',
-    [reference]
-  );
-  if (existing.length) return res.json({ message: 'Already processed' });
 
   const [[userRow]] = await pool.query('SELECT kyc_level FROM users WHERE id = ?', [
     account.user_id,
@@ -155,6 +151,14 @@ router.post('/', webhookLimiter, async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const [existing] = await conn.query(
+      'SELECT id FROM transactions WHERE reference = ? FOR UPDATE',
+      [reference]
+    );
+    if (existing.length) {
+      await conn.commit();
+      return res.json({ message: 'Already processed' });
+    }
     await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
       amount,
       account.user_id,
@@ -185,9 +189,11 @@ router.post('/', webhookLimiter, async (req, res) => {
     conn.release();
   }
 
-  const [[user]] = await pool.query('SELECT full_name, email FROM users WHERE id = ?', [
-    account.user_id,
-  ]);
+  const [[userRaw]] = await pool.query(
+    'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
+    [account.user_id]
+  );
+  const user = applyUserPII(userRaw);
   if (user?.email) {
     sendReceiptEmail({
       to: user.email,

@@ -14,7 +14,7 @@ import { logAudit } from '../utils/audit.js';
 import { createOtp, verifyOtp } from '../utils/otp.js';
 import { sendOtpEmail, sendSecurityEmail } from '../utils/email.js';
 import { generateCsrfToken } from '../middleware/csrf.js';
-import { otpLimiter } from '../middleware/rateLimiters.js';
+import { otpLimiter, adminLoginLimiter } from '../middleware/rateLimiters.js';
 import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js';
 import zxcvbn from 'zxcvbn';
 import { checkFailedLoginAnomaly } from '../utils/anomalies.js';
@@ -29,7 +29,10 @@ import {
 
 const router = express.Router();
 
-const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET || 'dev_secret_change_me';
+const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET;
+if (!JWT_ADMIN_SECRET) {
+  throw new Error('JWT_ADMIN_SECRET is required');
+}
 const USE_COOKIE_REFRESH = (process.env.COOKIE_REFRESH || 'true') === 'true';
 const isProd = process.env.NODE_ENV === 'production';
 const MIN_PASSWORD_LENGTH = 10;
@@ -70,7 +73,7 @@ function setRefreshCookie(res, token, expiresAt) {
 
 function setCsrfCookie(res, token) {
   res.cookie('csrf_token', token, {
-    httpOnly: true,
+    httpOnly: false,
     sameSite: 'lax',
     secure: isProd,
     maxAge: 1000 * 60 * 60 * 6,
@@ -93,7 +96,7 @@ function requireCsrfForCookieRefresh(req) {
   return Boolean(csrfCookie && csrfHeader && csrfCookie === csrfHeader);
 }
 
-router.post('/login', otpLimiter, async (req, res) => {
+router.post('/login', adminLoginLimiter, otpLimiter, async (req, res) => {
   /*
     #swagger.tags = ['Admin Auth']
     #swagger.summary = 'Admin login'

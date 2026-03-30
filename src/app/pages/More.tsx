@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { 
   ChevronRight, User, Lock, Bell, Moon, Sun, HelpCircle, 
-  MessageCircle, FileText, Shield, LogOut, ChevronLeft 
+  MessageCircle, FileText, Shield, LogOut, ChevronLeft, Eye, Wallet, History
 } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 import SupportChat from '../components/SupportChat';
@@ -34,8 +34,13 @@ export default function More() {
       title: 'Account',
       items: [
         { icon: User, label: 'Profile Settings', path: '/profile', badge: null },
+        { icon: Shield, label: 'Security Dashboard', path: '/security/dashboard', badge: null },
         { icon: Shield, label: 'Security Center', path: '/security-center', badge: null },
         { icon: Lock, label: 'Security & PIN', path: '/security', badge: null },
+        { icon: Lock, label: 'Change Password', path: '/security/password', badge: null },
+        { icon: Eye, label: 'Security Activity', path: '/security/activity', badge: null },
+        { icon: Wallet, label: 'Wallet Management', path: '/wallet', badge: null },
+        { icon: History, label: 'Transaction History', path: '/transactions/history', badge: null },
         { icon: Shield, label: 'KYC Verification', path: '/kyc', badge: null },
         { icon: Shield, label: 'KYC Status & Limits', path: '/kyc-status', badge: null },
         { icon: Bell, label: 'Notifications', path: '/notifications', badge: null },

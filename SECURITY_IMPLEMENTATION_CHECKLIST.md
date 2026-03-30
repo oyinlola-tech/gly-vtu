@@ -81,12 +81,12 @@
   ```sql
   -- file: backend/docs/migrations/2026-03-30_pii_encryption.sql
   
-  -- Add encrypted field versions
+  -- Add encrypted field versions + deterministic hashes for lookup
   ALTER TABLE users ADD COLUMN email_encrypted VARCHAR(500);
   ALTER TABLE users ADD COLUMN phone_encrypted VARCHAR(500);
   ALTER TABLE users ADD COLUMN full_name_encrypted VARCHAR(500);
-  
-  ALTER TABLE users ADD COLUMN address_encrypted VARCHAR(500);
+  ALTER TABLE users ADD COLUMN email_hash CHAR(64);
+  ALTER TABLE users ADD COLUMN phone_hash CHAR(64);
   ALTER TABLE users ADD COLUMN kyc_payload_encrypted LONGTEXT;
   
   -- Migration script to encrypt existing data
@@ -101,22 +101,25 @@
   router.post('/register', validateRequest(registrationSchema), async (req, res) => {
     const { email, phone, fullName, password } = req.validated;
     
-    // Encrypt PII
-    const encrypted = encryptMultiplePII({
-      email: email.toLowerCase(),
-      phone,
-      fullName
-    }, req.ip); // Use IP as context
+  // Encrypt PII + store lookup hashes
+  const encrypted = encryptMultiplePII({
+    email: email.toLowerCase(),
+    phone,
+    fullName
+  }, req.ip); // Use IP as context
+  const emailHash = hashEmail(email);
+  const phoneHash = phone ? hashPhone(phone) : null;
     
     // Store hashed password
     const hashedPassword = await bcrypt.hash(password, 12);
     
     // Insert with encrypted fields
-    await pool.query(
-      `INSERT INTO users (id, email_encrypted, phone_encrypted, full_name_encrypted, password_hash)
-       VALUES (UUID(), ?, ?, ?, ?)`,
-      [encrypted.email_encrypted, encrypted.phone_encrypted, encrypted.fullName_encrypted, hashedPassword]
-    );
+  await pool.query(
+    `INSERT INTO users
+     (id, email_encrypted, phone_encrypted, full_name_encrypted, email_hash, phone_hash, password_hash)
+     VALUES (UUID(), ?, ?, ?, ?, ?, ?)`,
+    [encrypted.email_encrypted, encrypted.phone_encrypted, encrypted.fullName_encrypted, emailHash, phoneHash, hashedPassword]
+  );
     
     // ... rest of handler
   });
@@ -276,16 +279,19 @@
 
 ### 6. CSRF Token Configuration
 
-- [ ] **Update CSRF Middleware to use 'strict' SameSite**
+- [ ] **Switch to Double-Submit CSRF (cookie + header)**
   ```javascript
-  // backend/middleware/csrf.js
-  
+  // backend/routes/auth.js + adminAuth.js
+  // Use a non-httpOnly cookie so the SPA can read and send X-CSRF-Token
   res.cookie('csrf_token', newToken, {
-    httpOnly: true,
+    httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict', // Changed from 'lax'
+    sameSite: 'lax',
     maxAge: 1000 * 60 * 60,
   });
+  
+  // src/services/api.ts
+  // Ensure every state-changing request sends X-CSRF-Token
   ```
 
 - [ ] **Implement Per-Request Token Rotation for Money Transfers**

@@ -5,9 +5,14 @@ import { pool } from '../config/db.js';
 import { logAudit } from './audit.js';
 import { AUTH_COOKIE_NAME, ADMIN_AUTH_COOKIE_NAME } from './tokens.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
-const JWT_ADMIN_SECRET =
-  process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET || 'dev_secret_change_me';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required');
+}
+if (!JWT_ADMIN_SECRET) {
+  throw new Error('JWT_ADMIN_SECRET is required');
+}
 
 const defaultOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
 const extraOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];

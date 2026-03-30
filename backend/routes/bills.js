@@ -25,6 +25,7 @@ import { sanitizeVtpassPayload } from '../utils/sanitize.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { applyUserPII } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -260,11 +261,12 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
     return respond(400, { error: err.message });
   }
 
-  const [[userMeta]] = await pool.query(
-    'SELECT full_name, email, phone, kyc_level, kyc_status FROM users WHERE id = ?',
+  const [[userRaw]] = await pool.query(
+    'SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted, kyc_level, kyc_status FROM users WHERE id = ?',
     [req.user.sub]
   );
-  if (!userMeta) return respond(404, { error: 'User not found' });
+  if (!userRaw) return respond(404, { error: 'User not found' });
+  const userMeta = applyUserPII(userRaw);
 
   const limitCheck = await enforceKycLimits({
     userId: req.user.sub,

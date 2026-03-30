@@ -1,6 +1,9 @@
 import crypto from 'crypto';
 
-const DEFAULT_SECRET = process.env.COOKIE_ENC_SECRET || process.env.JWT_SECRET || 'dev_secret_change_me';
+const DEFAULT_SECRET = process.env.COOKIE_ENC_SECRET || process.env.JWT_SECRET;
+if (!DEFAULT_SECRET) {
+  throw new Error('COOKIE_ENC_SECRET or JWT_SECRET is required');
+}
 
 function getKey() {
   // Derive a 32-byte key from the configured secret.

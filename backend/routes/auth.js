@@ -30,12 +30,15 @@ import {
   changePasswordSchema,
   validateRequest 
 } from '../middleware/requestValidation.js';
-import { encryptSensitiveData, decryptSensitiveData } from '../utils/encryption.js';
+import { encryptPII, encryptJson, hashEmail, hashPhone, applyUserPII } from '../utils/encryption.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required');
+}
 const USE_COOKIE_REFRESH = (process.env.COOKIE_REFRESH || 'true') === 'true';
 const isProd = process.env.NODE_ENV === 'production';
 const MIN_PASSWORD_LENGTH = 10;
@@ -70,7 +73,7 @@ function setRefreshCookie(res, token, expiresAt) {
 
 function setCsrfCookie(res, token) {
   res.cookie('csrf_token', token, {
-    httpOnly: true,
+    httpOnly: false,
     sameSite: 'lax',
     secure: isProd,
     maxAge: 1000 * 60 * 60 * 6,
@@ -119,9 +122,14 @@ router.post('/register', validateRequest(registrationSchema), async (req, res) =
     return res.status(400).json({ error: passwordError });
   }
 
-  const [existing] = phone
-    ? await pool.query('SELECT id FROM users WHERE email = ? OR phone = ?', [email, phone])
-    : await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+  const emailHash = hashEmail(email);
+  const phoneHash = phone ? hashPhone(phone) : null;
+  const [existing] = phoneHash
+    ? await pool.query('SELECT id FROM users WHERE email_hash = ? OR phone_hash = ?', [
+        emailHash,
+        phoneHash,
+      ])
+    : await pool.query('SELECT id FROM users WHERE email_hash = ?', [emailHash]);
   if (existing.length) {
     return res.status(409).json({ error: 'User already exists' });
   }
@@ -131,13 +139,33 @@ router.post('/register', validateRequest(registrationSchema), async (req, res) =
   
   try {
     // Encrypt PII before storing
-    const encryptedEmail = encryptSensitiveData(email, process.env.COOKIE_ENC_SECRET);
-    const encryptedPhone = phone ? encryptSensitiveData(phone, process.env.COOKIE_ENC_SECRET) : null;
-    const encryptedFullName = encryptSensitiveData(fullName, process.env.COOKIE_ENC_SECRET);
+    const encryptedEmail = encryptPII(email, userId);
+    const encryptedPhone = phone ? encryptPII(phone, userId) : null;
+    const encryptedFullName = encryptPII(fullName, userId);
+    const encryptedKyc = encryptJson({}, userId);
     
     await pool.query(
-      'INSERT INTO users (id, full_name, email, phone, password_hash, kyc_level, kyc_status, kyc_payload, date_of_birth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, encryptedFullName, encryptedEmail, encryptedPhone, passwordHash, 1, 'pending', JSON.stringify({}), dateOfBirth]
+      `INSERT INTO users
+       (id, full_name, email, phone, password_hash, kyc_level, kyc_status, kyc_payload, date_of_birth,
+        full_name_encrypted, email_encrypted, phone_encrypted, email_hash, phone_hash, kyc_payload_encrypted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        null,
+        null,
+        null,
+        passwordHash,
+        1,
+        'pending',
+        JSON.stringify({}),
+        dateOfBirth,
+        encryptedFullName,
+        encryptedEmail,
+        encryptedPhone,
+        emailHash,
+        phoneHash,
+        encryptedKyc,
+      ]
     );
     await pool.query('INSERT INTO wallets (id, user_id, balance, currency) VALUES (UUID(), ?, 0, ?)', [
       userId,
@@ -155,8 +183,9 @@ router.post('/register', validateRequest(registrationSchema), async (req, res) =
       flutterwaveCustomerId =
         customerData.id || customerData.customer_id || customerData.customerId || null;
       if (flutterwaveCustomerId) {
-        await pool.query('UPDATE users SET kyc_payload = ? WHERE id = ?', [
+        await pool.query('UPDATE users SET kyc_payload = ?, kyc_payload_encrypted = ? WHERE id = ?', [
           JSON.stringify({ flutterwave_customer_id: flutterwaveCustomerId }),
+          encryptJson({ flutterwave_customer_id: flutterwaveCustomerId }, userId),
           userId,
         ]);
       }
@@ -235,10 +264,12 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
   // Use validated request data
   const { email, password, deviceId, totp } = req.validated || req.body || {};
 
-  const [rows] = await pool.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
+  const [rows] = await pool.query('SELECT * FROM users WHERE email_hash = ? LIMIT 1', [
+    hashEmail(email),
+  ]);
   if (!rows.length) return res.status(401).json({ error: 'Invalid credentials' });
 
-  const user = rows[0];
+  const user = applyUserPII(rows[0]);
   if (user.login_locked_until && new Date(user.login_locked_until) > new Date()) {
     return res.status(403).json({ error: 'Account temporarily locked. Try later.' });
   }
@@ -277,7 +308,7 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
       return res.status(403).json({ error: 'Account locked due to failed attempts. Try later.' });
     }
     sendLoginFailedEmail({
-      to: user.email,
+      to: user.email || email,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     }).catch(console.error);
@@ -306,10 +337,10 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
     try {
       const { code } = await createOtp({
         userId: user.id,
-        email,
+        email: user.email || email,
         purpose: 'device_login',
       });
-      await sendOtpEmail({ to: email, code, purpose: 'device_login' });
+      await sendOtpEmail({ to: user.email || email, code, purpose: 'device_login' });
       logAudit({
         actorType: 'user',
         actorId: user.id,
@@ -405,15 +436,19 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
     const [rows] = await pool.query(
-      'SELECT id, full_name, email, phone, totp_enabled, totp_secret, totp_backup_codes, backup_codes_used FROM users WHERE id = ?',
+      `SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted,
+              totp_enabled, totp_secret, totp_backup_codes, backup_codes_used
+       FROM users WHERE id = ?`,
       [otp.user_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    user = rows[0];
+    user = applyUserPII(rows[0]);
   } else {
     const [rows] = await pool.query(
-      'SELECT id, full_name, email, phone, totp_enabled, totp_secret, totp_backup_codes, backup_codes_used FROM users WHERE email = ? LIMIT 1',
-      [email]
+      `SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted,
+              totp_enabled, totp_secret, totp_backup_codes, backup_codes_used
+       FROM users WHERE email_hash = ? LIMIT 1`,
+      [hashEmail(email)]
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     const enforcement = await enforceSecurityQuestion({
@@ -424,7 +459,7 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
     if (!enforcement.ok) {
       return res.status(enforcement.status).json({ error: enforcement.message });
     }
-    user = rows[0];
+    user = applyUserPII(rows[0]);
   }
 
   if (user?.totp_enabled) {
@@ -478,7 +513,7 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
   const csrfToken = issueCsrf(res);
 
   sendSecurityEmail({
-    to: user.email,
+    to: user.email || email,
     title: 'New Device Verified',
     message: `A new device was verified for your account. If this wasn't you, reset your password immediately.`,
   }).catch(console.error);
@@ -512,7 +547,9 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
   */
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: 'Email required' });
-  const [rows] = await pool.query('SELECT id FROM users WHERE email = ? LIMIT 1', [email]);
+  const [rows] = await pool.query('SELECT id FROM users WHERE email_hash = ? LIMIT 1', [
+    hashEmail(email),
+  ]);
   if (!rows.length) return res.json({ message: 'OTP sent if account exists' });
 
   try {
@@ -686,8 +723,8 @@ router.post('/security-question', async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.json({ enabled: false, question: null });
   const [rows] = await pool.query(
-    'SELECT security_question, security_question_enabled FROM users WHERE email = ? LIMIT 1',
-    [email]
+    'SELECT security_question, security_question_enabled FROM users WHERE email_hash = ? LIMIT 1',
+    [hashEmail(email)]
   );
   if (!rows.length || !rows[0].security_question_enabled) {
     return res.json({ enabled: false, question: null });
@@ -704,11 +741,13 @@ router.get('/me', requireUser, async (req, res) => {
     #swagger.responses[404] = { description: 'Not found', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const [rows] = await pool.query(
-    'SELECT id, full_name, email, phone, kyc_level, kyc_status FROM users WHERE id = ?',
+    `SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted,
+            kyc_level, kyc_status
+     FROM users WHERE id = ?`,
     [req.user.sub]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
-  return res.json(rows[0]);
+  return res.json(applyUserPII(rows[0]));
 });
 
 export default router;

@@ -26,6 +26,7 @@ import { getKycLimitConfig } from '../utils/kycLimits.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { changePasswordSchema, validateRequest } from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
+import { applyUserPII, decryptJson, encryptJson, hashPhone, encryptPII } from '../utils/encryption.js';
 
 const router = express.Router();
 const MIN_PASSWORD_LENGTH = 10;
@@ -51,7 +52,8 @@ router.get('/profile', requireUser, async (req, res) => {
     #swagger.responses[404] = { description: 'Not found', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const [rows] = await pool.query(
-    `SELECT u.id, u.full_name, u.email, u.phone, u.kyc_level, u.kyc_status, u.kyc_payload,
+    `SELECT u.id, u.full_name, u.email, u.phone, u.full_name_encrypted, u.email_encrypted, u.phone_encrypted,
+            u.kyc_level, u.kyc_status, u.kyc_payload, u.kyc_payload_encrypted,
             r.account_number, r.bank_name, r.account_name
      FROM users u
      LEFT JOIN reserved_accounts r ON r.user_id = u.id
@@ -59,7 +61,11 @@ router.get('/profile', requireUser, async (req, res) => {
     [req.user.sub]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
-  return res.json(rows[0]);
+  const row = applyUserPII(rows[0]);
+  const kycPayload = decryptJson(row.kyc_payload_encrypted, row.id) || row.kyc_payload || null;
+  const safeRow = { ...row };
+  delete safeRow.kyc_payload_encrypted;
+  return res.json({ ...safeRow, kyc_payload: kycPayload });
 });
 
 router.put('/profile', requireUser, async (req, res) => {
@@ -79,9 +85,10 @@ router.put('/profile', requireUser, async (req, res) => {
   if (!fullName && !phone) return res.status(400).json({ error: 'Missing fields' });
 
   if (phone) {
+    const phoneHash = hashPhone(phone);
     const [existing] = await pool.query(
-      'SELECT id FROM users WHERE phone = ? AND id <> ? LIMIT 1',
-      [phone, req.user.sub]
+      'SELECT id FROM users WHERE phone_hash = ? AND id <> ? LIMIT 1',
+      [phoneHash, req.user.sub]
     );
     if (existing.length) return res.status(409).json({ error: 'Phone already in use' });
   }
@@ -90,11 +97,17 @@ router.put('/profile', requireUser, async (req, res) => {
   const values = [];
   if (fullName) {
     updates.push('full_name = ?');
-    values.push(fullName);
+    updates.push('full_name_encrypted = ?');
+    values.push(null);
+    values.push(encryptPII(fullName, req.user.sub));
   }
   if (phone) {
     updates.push('phone = ?');
-    values.push(phone);
+    updates.push('phone_encrypted = ?');
+    updates.push('phone_hash = ?');
+    values.push(null);
+    values.push(encryptPII(phone, req.user.sub));
+    values.push(hashPhone(phone));
   }
   values.push(req.user.sub);
   await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
@@ -119,10 +132,13 @@ router.put('/kyc', requireUser, async (req, res) => {
   const targetLevel = Number(level);
   if (![2, 3].includes(targetLevel)) return res.status(400).json({ error: 'Invalid level' });
 
-  const [[user]] = await pool.query(
-    'SELECT full_name, email, phone, kyc_level, kyc_payload FROM users WHERE id = ?',
+  const [[userRaw]] = await pool.query(
+    `SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted,
+            kyc_level, kyc_payload, kyc_payload_encrypted
+     FROM users WHERE id = ?`,
     [req.user.sub]
   );
+  const user = applyUserPII(userRaw);
   if (!user) return res.status(404).json({ error: 'Not found' });
 
   if (targetLevel === 2) {
@@ -170,20 +186,32 @@ router.put('/kyc', requireUser, async (req, res) => {
   }
 
   if (payload.phone && payload.phone !== user.phone) {
+    const phoneHash = hashPhone(payload.phone);
     const [existing] = await pool.query(
-      'SELECT id FROM users WHERE phone = ? AND id <> ? LIMIT 1',
-      [payload.phone, req.user.sub]
+      'SELECT id FROM users WHERE phone_hash = ? AND id <> ? LIMIT 1',
+      [phoneHash, req.user.sub]
     );
     if (existing.length) return res.status(409).json({ error: 'Phone already in use' });
-    await pool.query('UPDATE users SET phone = ? WHERE id = ?', [payload.phone, req.user.sub]);
+    await pool.query(
+      'UPDATE users SET phone = ?, phone_encrypted = ?, phone_hash = ? WHERE id = ?',
+      [null, encryptPII(payload.phone, req.user.sub), phoneHash, req.user.sub]
+    );
   }
 
-  const existingPayload = user.kyc_payload ? JSON.parse(user.kyc_payload) : {};
+  const existingPayload =
+    decryptJson(user?.kyc_payload_encrypted, req.user.sub) ||
+    (user?.kyc_payload ? JSON.parse(user.kyc_payload) : {});
   const mergedPayload = { ...existingPayload, ...payload };
 
   await pool.query(
-    'UPDATE users SET kyc_level = ?, kyc_status = ?, kyc_payload = ? WHERE id = ?',
-    [targetLevel, 'pending', JSON.stringify(mergedPayload), req.user.sub]
+    'UPDATE users SET kyc_level = ?, kyc_status = ?, kyc_payload = ?, kyc_payload_encrypted = ? WHERE id = ?',
+    [
+      targetLevel,
+      'pending',
+      JSON.stringify({ flutterwave_customer_id: existingPayload.flutterwave_customer_id || null }),
+      encryptJson(mergedPayload, req.user.sub),
+      req.user.sub,
+    ]
   );
 
   if (targetLevel === 2) {
@@ -396,10 +424,11 @@ router.post('/password/change', requireUser, validateRequest(changePasswordSchem
   
   const passwordError = validatePasswordStrength(newPassword);
   if (passwordError) return res.status(400).json({ error: passwordError });
-  const [[user]] = await pool.query(
-    'SELECT id, password_hash, email FROM users WHERE id = ? LIMIT 1',
+  const [[userRaw]] = await pool.query(
+    'SELECT id, password_hash, email, email_encrypted FROM users WHERE id = ? LIMIT 1',
     [req.user.sub]
   );
+  const user = applyUserPII(userRaw);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const ok = await bcrypt.compare(currentPassword, user.password_hash);
   if (!ok) {
@@ -641,10 +670,11 @@ router.post('/security-question/verify', requireUser, async (req, res) => {
 });
 
 router.post('/totp/setup', requireUser, async (req, res) => {
-  const [[user]] = await pool.query(
-    'SELECT email, totp_enabled FROM users WHERE id = ?',
+  const [[userRaw]] = await pool.query(
+    'SELECT id, email, email_encrypted, totp_enabled FROM users WHERE id = ?',
     [req.user.sub]
   );
+  const user = applyUserPII(userRaw);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const secret = generateTotpSecret(user.email || 'user');

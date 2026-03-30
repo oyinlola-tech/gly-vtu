@@ -35,6 +35,9 @@ const AddMoney = lazy(() => import('./pages/AddMoney'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Security = lazy(() => import('./pages/Security'));
 const SecurityCenter = lazy(() => import('./pages/SecurityCenter'));
+const SecurityDashboard = lazy(() => import('./pages/SecurityDashboard'));
+const PasswordChangePage = lazy(() => import('./pages/PasswordChangePage'));
+const SecurityActivityPage = lazy(() => import('./pages/SecurityActivityPage'));
 const TwoFactorSetup = lazy(() => import('./pages/TwoFactorSetup'));
 const DeviceManagement = lazy(() => import('./pages/DeviceManagement'));
 const Notifications = lazy(() => import('./pages/Notifications'));
@@ -45,6 +48,9 @@ const KYC = lazy(() => import('./pages/KYC'));
 const KycStatusLimits = lazy(() => import('./pages/KycStatusLimits'));
 const CompliancePolicies = lazy(() => import('./pages/CompliancePolicies'));
 const Disputes = lazy(() => import('./pages/Disputes'));
+const WalletManagementPage = lazy(() => import('./pages/WalletManagementPage'));
+const TransactionHistoryPage = lazy(() => import('./pages/TransactionHistoryPage'));
+const TransactionDetailsPage = lazy(() => import('./pages/TransactionDetailsPage'));
 
 // Admin Pages (code-split)
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -216,6 +222,30 @@ function AppContent() {
             }
           />
           <Route
+            path="/security/dashboard"
+            element={
+              <PrivateRoute>
+                <SecurityDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/security/password"
+            element={
+              <PrivateRoute>
+                <PasswordChangePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/security/activity"
+            element={
+              <PrivateRoute>
+                <SecurityActivityPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/security-center"
             element={
               <PrivateRoute>
@@ -236,6 +266,30 @@ function AppContent() {
             element={
               <PrivateRoute>
                 <DeviceManagement />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/wallet"
+            element={
+              <PrivateRoute>
+                <WalletManagementPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/transactions/history"
+            element={
+              <PrivateRoute>
+                <TransactionHistoryPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/transactions/:id"
+            element={
+              <PrivateRoute>
+                <TransactionDetailsPage />
               </PrivateRoute>
             }
           />

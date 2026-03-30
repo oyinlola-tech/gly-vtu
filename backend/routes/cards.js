@@ -8,6 +8,7 @@ import { logAudit } from '../utils/audit.js';
 import { isValidAmount, isNonEmptyString } from '../utils/validation.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { applyUserPII, decryptJson } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -46,11 +47,12 @@ router.post('/', requireUser, async (req, res) => {
     return respond(400, { error: 'Invalid amount' });
   }
 
-  const [[user]] = await pool.query(
-    'SELECT full_name, email, kyc_level, kyc_status, kyc_payload FROM users WHERE id = ?',
+  const [[userRaw]] = await pool.query(
+    'SELECT id, full_name, email, full_name_encrypted, email_encrypted, kyc_level, kyc_status, kyc_payload, kyc_payload_encrypted FROM users WHERE id = ?',
     [req.user.sub]
   );
-  if (!user) return respond(404, { error: 'User not found' });
+  if (!userRaw) return respond(404, { error: 'User not found' });
+  const user = applyUserPII(userRaw);
   if (Number(user.kyc_level || 1) < 3) {
     logSecurityEvent({
       type: 'kyc.insufficient.card',
@@ -75,7 +77,7 @@ router.post('/', requireUser, async (req, res) => {
     }).catch(() => null);
     return respond(403, { error: 'KYC must be verified to create a virtual card' });
   }
-  const payload = user?.kyc_payload ? JSON.parse(user.kyc_payload) : {};
+  const payload = decryptJson(user?.kyc_payload_encrypted, req.user.sub) || (user?.kyc_payload ? JSON.parse(user.kyc_payload) : {});
   if (!payload?.bvn && !payload?.nin) {
     return respond(400, { error: 'BVN or NIN required to create a virtual card' });
   }

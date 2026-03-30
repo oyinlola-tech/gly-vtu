@@ -7,6 +7,7 @@ import { sendKycStatusEmail } from '../utils/email.js';
 import { createVirtualAccountForCustomer } from '../utils/flutterwave.js';
 import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
 import { sendReservedAccountEmail } from '../utils/email.js';
+import { applyUserPII, decryptJson } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -18,9 +19,9 @@ router.get('/', requireAdmin, requirePermission('users:read'), async (req, res) 
     #swagger.responses[200] = { description: 'Users', schema: { type: 'array', items: { $ref: '#/definitions/AdminUserListItem' } } }
   */
   const [rows] = await pool.query(
-    'SELECT id, full_name, email, phone, kyc_level, kyc_status, created_at FROM users ORDER BY created_at DESC LIMIT 200'
+    'SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted, kyc_level, kyc_status, created_at FROM users ORDER BY created_at DESC LIMIT 200'
   );
-  return res.json(rows);
+  return res.json(rows.map((row) => applyUserPII(row)));
 });
 
 router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req, res) => {
@@ -44,9 +45,11 @@ router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req,
     nextLevel,
     req.params.id,
   ]);
-  const [[user]] = await pool.query('SELECT full_name, email FROM users WHERE id = ?', [
-    req.params.id,
-  ]);
+  const [[userRaw]] = await pool.query(
+    'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
+    [req.params.id]
+  );
+  const user = applyUserPII(userRaw);
   if (user?.email) {
     sendKycStatusEmail({
       to: user.email,
@@ -82,12 +85,15 @@ router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:w
   );
   if (existing.length) return res.status(409).json({ error: 'Account already exists' });
 
-  const [[user]] = await pool.query(
-    'SELECT full_name, email, kyc_payload FROM users WHERE id = ?',
+  const [[userRaw]] = await pool.query(
+    'SELECT id, full_name, email, full_name_encrypted, email_encrypted, kyc_payload, kyc_payload_encrypted FROM users WHERE id = ?',
     [userId]
   );
+  const user = applyUserPII(userRaw);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const payload = user.kyc_payload ? JSON.parse(user.kyc_payload) : {};
+  const payload =
+    decryptJson(user.kyc_payload_encrypted, userId) ||
+    (user.kyc_payload ? JSON.parse(user.kyc_payload) : {});
   const customerId = payload.flutterwave_customer_id;
 
   const accountReference = `GLY-${userId}`;

@@ -9,6 +9,7 @@ import { enforceKycLimits } from '../utils/kycLimits.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { checkWithdrawalAnomaly } from '../utils/anomalies.js';
+import { applyUserPII, hashEmail, hashPhone } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -132,8 +133,8 @@ router.post('/send', requireUser, async (req, res) => {
   } else {
     if (!to) return respond(400, { error: 'Recipient required' });
     const [targets] = await pool.query(
-      'SELECT id FROM users WHERE email = ? OR phone = ? LIMIT 1',
-      [to, to]
+      'SELECT id FROM users WHERE email_hash = ? OR phone_hash = ? LIMIT 1',
+      [hashEmail(to), hashPhone(to)]
     );
     if (!targets.length) return respond(404, { error: 'Recipient not found' });
     recipientId = targets[0].id;
@@ -211,10 +212,11 @@ router.post('/send', requireUser, async (req, res) => {
       );
     }
     await conn.commit();
-    const [[sender]] = await pool.query(
-      'SELECT full_name, email FROM users WHERE id = ?',
+    const [[senderRaw]] = await pool.query(
+      'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
       [req.user.sub]
     );
+    const sender = applyUserPII(senderRaw);
     sendReceiptEmail({
       to: sender.email,
       name: sender.full_name,
@@ -226,10 +228,11 @@ router.post('/send', requireUser, async (req, res) => {
       ],
     }).catch(console.error);
     if (!isBank) {
-      const [[recipient]] = await pool.query(
-        'SELECT full_name, email FROM users WHERE id = ?',
+      const [[recipientRaw]] = await pool.query(
+        'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
         [recipientId]
       );
+      const recipient = applyUserPII(recipientRaw);
       sendReceiptEmail({
         to: recipient.email,
         name: recipient.full_name,

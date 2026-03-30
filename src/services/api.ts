@@ -16,6 +16,7 @@ const API_BASE_URL = (import.meta.env as any).VITE_API_URL || '/app/api';
 const ADMIN_API_BASE_URL = (import.meta.env as any).VITE_ADMIN_API_URL || '/app/admin/api';
 
 const DEVICE_ID_KEY = 'gly_device_id';
+let csrfToken: string | null = null;
 
 function getDeviceId() {
   let deviceId = localStorage.getItem(DEVICE_ID_KEY);
@@ -34,18 +35,29 @@ function createIdempotencyKey() {
   return crypto.randomUUID();
 }
 
-// CSRF Token is now handled via httpOnly cookies by the server
-// No longer stored in localStorage for XSS protection
+// CSRF Token is issued by the server and stored in-memory (double-submit)
 async function ensureCsrfToken() {
-  // CSRF token is automatically sent as httpOnly cookie
-  // This function kept for compatibility but no longer stores token
-  return null; // CSRF token is handled server-side via cookies
+  if (csrfToken) return csrfToken;
+  const res = await fetch(`${API_BASE_URL}/auth/csrf`, {
+    credentials: 'include',
+  });
+  const data = await parseResponse(res);
+  if (res.ok && data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
+  return csrfToken;
 }
 
 async function ensureAdminCsrfToken() {
-  // CSRF token is automatically sent as httpOnly cookie
-  // This function kept for compatibility but no longer stores token
-  return null; // CSRF token is handled server-side via cookies
+  if (csrfToken) return csrfToken;
+  const res = await fetch(`${ADMIN_API_BASE_URL}/auth/csrf`, {
+    credentials: 'include',
+  });
+  const data = await parseResponse(res);
+  if (res.ok && data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
+  return csrfToken;
 }
 
 async function parseResponse(res: Response) {
@@ -57,32 +69,40 @@ async function parseResponse(res: Response) {
 }
 
 async function refreshAccessToken() {
+  const token = await ensureCsrfToken();
   const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { 'X-CSRF-Token': token } : {}),
     },
     credentials: 'include',
     body: JSON.stringify({ deviceId: getDeviceId() }),
   });
   const data = await parseResponse(res);
   if (!res.ok) throw new Error(data?.error || 'Session expired');
-  // CSRF token is now httpOnly cookie, no need to store
+  if (data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
   return true;
 }
 
 async function refreshAdminAccessToken() {
+  const token = await ensureAdminCsrfToken();
   const res = await fetch(`${ADMIN_API_BASE_URL}/auth/refresh`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { 'X-CSRF-Token': token } : {}),
     },
     credentials: 'include',
     body: JSON.stringify({ deviceId: getDeviceId() }),
   });
   const data = await parseResponse(res);
   if (!res.ok) throw new Error(data?.error || 'Session expired');
-  // CSRF token is now httpOnly cookie, no need to store
+  if (data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
   return true;
 }
 
@@ -98,6 +118,14 @@ async function request<T>(
   };
   if (options.body && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
+  }
+
+  const method = (options.method || 'GET').toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const token = csrfToken || (admin ? await ensureAdminCsrfToken() : await ensureCsrfToken());
+    if (token) {
+      headers['X-CSRF-Token'] = token;
+    }
   }
 
   const response = await fetch(`${base}${path}`, {
@@ -140,6 +168,9 @@ async function request<T>(
   }
 
   const data = await parseResponse(response);
+  if (data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
   if (!response.ok) {
     throw new Error(data?.error || data?.message || 'Request failed');
   }
@@ -191,7 +222,7 @@ export const authAPI = {
       },
       { auth: false }
     );
-    // CSRF token is now httpOnly cookie, automatically sent by browser
+    // CSRF token is managed via double-submit (cookie + header)
   },
 
   verifyDevice: async (data: {
@@ -220,7 +251,7 @@ export const authAPI = {
       },
       { auth: false }
     );
-    // CSRF token is now httpOnly cookie, automatically sent by browser
+    // CSRF token is managed via double-submit (cookie + header)
   },
 
   forgotPassword: async (data: { email: string }) => {
@@ -248,7 +279,7 @@ export const authAPI = {
       { method: 'POST' },
       { auth: false }
     );
-    // CSRF token cleared server-side via httpOnly cookie
+    // CSRF token cleared server-side
   },
 
   me: async () => {
@@ -520,10 +551,12 @@ export const walletAPI = {
   },
 
   downloadStatement: async (data: { startDate: string; endDate: string }) => {
+    const token = await ensureCsrfToken();
     const res = await fetch(`${API_BASE_URL}/transactions/statement/download`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { 'X-CSRF-Token': token } : {}),
       },
       body: JSON.stringify(data),
       credentials: 'include',
@@ -693,7 +726,7 @@ export const adminAPI = {
       },
       { auth: false, admin: true }
     );
-    // CSRF token is now httpOnly cookie, automatically sent by browser
+    // CSRF token is managed via double-submit (cookie + header)
     return response;
   },
   me: async () => {
@@ -712,7 +745,7 @@ export const adminAPI = {
       },
       { auth: false, admin: true }
     );
-    // CSRF token is now httpOnly cookie, automatically sent by browser
+    // CSRF token is managed via double-submit (cookie + header)
     return response;
   },
 
@@ -723,7 +756,7 @@ export const adminAPI = {
       { method: 'POST' },
       { auth: false, admin: true }
     );
-    // CSRF token cleared via httpOnly cookie
+    // CSRF token cleared server-side
   },
 
   getFinanceOverview: async () => {
@@ -935,7 +968,7 @@ export const adminAPI = {
 
 export const tokenStore = {
   clear: () => {
-    // CSRF tokens cleared via httpOnly cookies
+    // CSRF tokens cleared server-side
   },
   getDeviceId,
 };

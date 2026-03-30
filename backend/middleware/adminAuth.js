@@ -1,7 +1,10 @@
 import jwt from 'jsonwebtoken';
 import { ADMIN_AUTH_COOKIE_NAME } from '../utils/tokens.js';
 
-const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET || 'dev_secret_change_me';
+const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET;
+if (!JWT_ADMIN_SECRET) {
+  throw new Error('JWT_ADMIN_SECRET is required');
+}
 
 export function requireAdmin(req, res, next) {
   const header = req.headers.authorization || '';

@@ -4,6 +4,7 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { requeryService } from '../utils/vtpass.js';
 import { sendReceiptEmail } from '../utils/email.js';
+import { applyUserPII } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -61,9 +62,11 @@ router.post('/requery', requireAdmin, requirePermission('bills:read'), async (re
       await pool.query('UPDATE bill_orders SET status = ? WHERE reference = ?', [status, reference]);
     }
     if (status === 'success' && tx.status !== 'success') {
-      const [[user]] = await pool.query('SELECT full_name, email FROM users WHERE id = ?', [
-        tx.user_id,
-      ]);
+      const [[userRaw]] = await pool.query(
+        'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
+        [tx.user_id]
+      );
+      const user = applyUserPII(userRaw);
       if (user?.email) {
         sendReceiptEmail({
           to: user.email,
