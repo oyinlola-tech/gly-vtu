@@ -27,7 +27,7 @@ export default function BuyAirtime() {
   const loadProviders = async () => {
     try {
       const response = await billsAPI.getProviders('airtime');
-      setProviders(response.providers);
+      setProviders(response || []);
     } catch (err) {
       console.error('Failed to load providers');
     }
@@ -52,16 +52,17 @@ export default function BuyAirtime() {
     }
 
     try {
-      const response = await billsAPI.buyAirtime({
-        network: formData.network,
-        phone: formData.phone,
+      const response = await billsAPI.pay({
+        providerCode: formData.network,
         amount: parseFloat(formData.amount),
+        account: formData.phone,
         pin,
       });
 
       navigate('/transaction-success', {
         state: {
-          transaction: response.transaction,
+          transaction: response,
+          amount: parseFloat(formData.amount),
           recipientName: formData.phone,
           recipientBank: `${formData.network} Airtime`,
         },
@@ -110,9 +111,11 @@ export default function BuyAirtime() {
                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    <span className="text-3xl">{provider.logo}</span>
+                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
+                      {provider.name?.slice(0, 3).toUpperCase()}
+                    </span>
                     <span className="text-xs font-medium text-gray-900 dark:text-white">
-                      {provider.code}
+                      {provider.name}
                     </span>
                   </button>
                 ))}

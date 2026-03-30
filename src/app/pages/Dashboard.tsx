@@ -13,12 +13,60 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [showBalance, setShowBalance] = useState(true);
-  const [balance, setBalance] = useState('20,000,000.00');
-  const [recentTransactions, setRecentTransactions] = useState([
-    { id: 1, name: 'Ngozi Uche', amount: '+₦2,500.00', time: '12:35 PM', type: 'credit' },
-    { id: 2, name: 'Oluwaseun Adeyemi', amount: '-₦76,543.00', time: '11:27 AM', type: 'debit' },
-    { id: 3, name: 'Ahmed Ibrahim', amount: '-₦20,480.00', time: '11:22 AM', type: 'debit' },
-  ]);
+  const [balance, setBalance] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const loadDashboard = async () => {
+    try {
+      const [balanceRes, txns] = await Promise.all([
+        walletAPI.getBalance(),
+        walletAPI.getTransactions(),
+      ]);
+      setBalance(Number(balanceRes?.balance || 0));
+      setLastUpdated(new Date().toISOString());
+      setRecentTransactions(
+        (txns || []).slice(0, 5).map((txn: any) => {
+          let metadata: any = txn.metadata;
+          if (typeof metadata === 'string') {
+            try {
+              metadata = JSON.parse(metadata);
+            } catch {
+              metadata = {};
+            }
+          }
+          const type =
+            txn.type === 'receive' || txn.type === 'topup' ? 'credit' : 'debit';
+          const label =
+            metadata?.provider ||
+            metadata?.accountName ||
+            metadata?.to ||
+            metadata?.accountNumber ||
+            'Transaction';
+          return {
+            id: txn.id,
+            name: label,
+            amount: `${type === 'credit' ? '+' : '-'}₦${Number(txn.total || txn.amount || 0).toLocaleString('en-NG', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`,
+            time: new Date(txn.created_at).toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true,
+            }),
+            type,
+          };
+        })
+      );
+    } catch (err) {
+      console.error('Failed to load dashboard data');
+    }
+  };
 
   const quickActions = [
     { icon: Phone, label: 'Airtime', color: 'bg-orange-500', path: '/bills/airtime' },
@@ -33,7 +81,7 @@ export default function Dashboard() {
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] rounded-b-[24px] p-6 pb-24">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-white/80 text-sm">Hi, {user?.name?.split(' ')[0]}</p>
+            <p className="text-white/80 text-sm">Hi, {user?.fullName?.split(' ')[0]}</p>
             <p className="text-white text-lg font-semibold">Welcome, let's start making payments</p>
           </div>
           <div className="flex gap-3">
@@ -63,13 +111,26 @@ export default function Dashboard() {
               </button>
             </div>
             <h2 className="text-white text-3xl font-bold mb-2">
-              {showBalance ? `₦${balance}` : '₦****'}
+              {showBalance
+                ? `₦${balance.toLocaleString('en-NG', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`
+                : '₦****'}
             </h2>
-            <p className="text-white/60 text-xs">Last updated 2 mins ago</p>
+            <p className="text-white/60 text-xs">
+              {lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+              })}` : 'Last updated just now'}
+            </p>
 
             <div className="mt-6 flex items-center gap-2">
               <div className="bg-white/20 rounded-full px-3 py-1">
-                <p className="text-white text-xs">Swift Pay Bank</p>
+                <p className="text-white text-xs">
+                  {user?.bankName ? user.bankName : 'Wallet Account'}
+                </p>
               </div>
               <div className="ml-auto bg-white/20 rounded-full p-2">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">

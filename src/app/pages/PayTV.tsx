@@ -1,60 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronLeft, ChevronDown } from 'lucide-react';
-import { TransactionLoader } from '../components/LoadingSpinner';
+import { ChevronLeft } from 'lucide-react';
+import { billsAPI } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import PINInput from '../components/PINInput';
+import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
-
-const providers = [
-  { id: 'dstv', name: 'DSTV', logo: '📺' },
-  { id: 'gotv', name: 'GOtv', logo: '📺' },
-  { id: 'startimes', name: 'Startimes', logo: '📺' },
-  { id: 'showmax', name: 'Showmax', logo: '🎬' },
-];
-
-const packages: any = {
-  dstv: [
-    { id: '1', name: 'DStv Premium', price: '24,500' },
-    { id: '2', name: 'DStv Compact Plus', price: '16,600' },
-    { id: '3', name: 'DStv Compact', price: '10,500' },
-    { id: '4', name: 'DStv Confam', price: '6,200' },
-  ],
-  gotv: [
-    { id: '1', name: 'GOtv Supa', price: '6,400' },
-    { id: '2', name: 'GOtv Max', price: '4,850' },
-    { id: '3', name: 'GOtv Jolli', price: '3,300' },
-  ],
-};
 
 export default function PayTV() {
   const navigate = useNavigate();
+  const { verifyPin } = useAuth();
+  const [providers, setProviders] = useState<any[]>([]);
   const [selectedProvider, setSelectedProvider] = useState('');
   const [smartCardNumber, setSmartCardNumber] = useState('');
-  const [selectedPackage, setSelectedPackage] = useState('');
+  const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPackages, setShowPackages] = useState(false);
+  const [showPINInput, setShowPINInput] = useState(false);
+  const [error, setError] = useState('');
 
-  const currentPackages = selectedProvider ? packages[selectedProvider] || packages.dstv : packages.dstv;
-  const selectedPackageData = currentPackages.find((p: any) => p.id === selectedPackage);
+  useEffect(() => {
+    billsAPI
+      .getProviders('tv')
+      .then((data) => setProviders(data || []))
+      .catch(() => null);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setLoading(false);
-    navigate('/transaction-success', {
-      state: {
-        type: 'TV Subscription',
-        amount: selectedPackageData?.price,
-        recipient: smartCardNumber,
-        plan: selectedPackageData?.name,
-      },
-    });
+    setShowPINInput(true);
   };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
-      {loading && <TransactionLoader />}
-
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] rounded-b-[24px] p-6">
         <div className="flex items-center gap-4 mb-4">
           <button onClick={() => navigate(-1)} className="text-white">
@@ -66,6 +43,11 @@ export default function PayTV() {
 
       <div className="px-6 mt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-xl text-sm">
+              {error}
+            </div>
+          )}
           <div>
             <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-3">
               Select Provider
@@ -73,19 +55,20 @@ export default function PayTV() {
             <div className="grid grid-cols-4 gap-3">
               {providers.map((provider) => (
                 <button
-                  key={provider.id}
+                  key={provider.code}
                   type="button"
                   onClick={() => {
-                    setSelectedProvider(provider.id);
-                    setSelectedPackage('');
+                    setSelectedProvider(provider.code);
                   }}
                   className={`p-4 rounded-2xl flex flex-col items-center gap-2 transition-all ${
-                    selectedProvider === provider.id
+                    selectedProvider === provider.code
                       ? 'bg-[#235697] text-white shadow-lg'
                       : 'bg-white dark:bg-gray-900 text-[#3a3c4c] dark:text-white'
                   }`}
                 >
-                  <span className="text-2xl">{provider.logo}</span>
+                  <span className="text-xs font-semibold bg-white/80 text-[#235697] px-2 py-1 rounded-lg">
+                    {provider.name?.slice(0, 3).toUpperCase()}
+                  </span>
                   <span className="text-xs font-semibold">{provider.name}</span>
                 </button>
               ))}
@@ -108,57 +91,68 @@ export default function PayTV() {
 
           <div>
             <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
-              Select Package
+              Amount
             </label>
-            <button
-              type="button"
-              onClick={() => setShowPackages(!showPackages)}
-              className="w-full px-4 py-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[#373f46] dark:text-white flex items-center justify-between"
-            >
-              <span>{selectedPackageData?.name || 'Choose a package'}</span>
-              <ChevronDown className={`transition-transform ${showPackages ? 'rotate-180' : ''}`} size={20} />
-            </button>
-
-            {showPackages && (
-              <div className="mt-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                {currentPackages.map((pkg: any) => (
-                  <button
-                    key={pkg.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPackage(pkg.id);
-                      setShowPackages(false);
-                    }}
-                    className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-200 dark:border-gray-700 last:border-0"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[#3a3c4c] dark:text-white font-medium">{pkg.name}</span>
-                      <span className="text-[#235697] font-semibold">₦{pkg.price}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {selectedPackageData && (
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[#7d7c93] dark:text-gray-400">Amount to pay</span>
-                <span className="text-2xl font-bold text-[#235697]">₦{selectedPackageData.price}</span>
-              </div>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[#373f46] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                placeholder="Enter amount"
+                required
+              />
             </div>
-          )}
+          </div>
 
           <button
             type="submit"
-            disabled={!selectedProvider || !smartCardNumber || !selectedPackage}
+            disabled={!selectedProvider || !smartCardNumber || !amount || loading}
             className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-4 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            Continue
+            {loading ? <LoadingSpinner size="sm" /> : 'Continue'}
           </button>
         </form>
       </div>
+
+      {showPINInput && (
+        <PINInput
+          onComplete={async (pin) => {
+            setLoading(true);
+            const valid = await verifyPin(pin);
+            if (!valid) {
+              setError('Invalid PIN');
+              setLoading(false);
+              setShowPINInput(false);
+              return;
+            }
+            try {
+              const response = await billsAPI.pay({
+                providerCode: selectedProvider,
+                amount: parseFloat(amount),
+                account: smartCardNumber,
+                pin,
+              });
+              navigate('/transaction-success', {
+                state: {
+                  transaction: response,
+                  amount: parseFloat(amount),
+                  recipientName: smartCardNumber,
+                  recipientBank: 'TV Subscription',
+                },
+              });
+            } catch (err) {
+              setError('Transaction failed');
+            } finally {
+              setLoading(false);
+              setShowPINInput(false);
+            }
+          }}
+          onCancel={() => setShowPINInput(false)}
+          error={error}
+        />
+      )}
 
       <BottomNav />
     </div>

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft, User, Building2, Smartphone } from 'lucide-react';
 import BottomNav from '../components/BottomNav';

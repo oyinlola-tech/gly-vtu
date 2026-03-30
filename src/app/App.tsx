@@ -3,11 +3,16 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import SplashScreen from './components/SplashScreen';
+import { tokenStore } from '../services/api';
+import NotificationListener from './components/NotificationListener';
 
 // Auth Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
 import SetPIN from './pages/SetPIN';
+import VerifyDevice from './pages/VerifyDevice';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 // User Pages
 import Dashboard from './pages/Dashboard';
@@ -16,17 +21,33 @@ import SendToBank from './pages/SendToBank';
 import Transactions from './pages/Transactions';
 import BuyAirtime from './pages/BuyAirtime';
 import BuyData from './pages/BuyData';
+import PayTV from './pages/PayTV';
+import PayElectricity from './pages/PayElectricity';
 import TransactionSuccess from './pages/TransactionSuccess';
 import Bills from './pages/Bills';
 import Cards from './pages/Cards';
 import More from './pages/More';
+import AddMoney from './pages/AddMoney';
+import Profile from './pages/Profile';
+import Security from './pages/Security';
+import Notifications from './pages/Notifications';
+import HelpCenter from './pages/HelpCenter';
+import TermsPrivacy from './pages/TermsPrivacy';
+import SecurityTips from './pages/SecurityTips';
+import KYC from './pages/KYC';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminLogin from './pages/admin/AdminLogin';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const isAdmin = !!tokenStore.getAdminToken();
+  return isAdmin ? <>{children}</> : <Navigate to="/admin/login" />;
 }
 
 function AppContent() {
@@ -42,6 +63,9 @@ function AppContent() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/set-pin" element={<SetPIN />} />
+          <Route path="/verify-device" element={<VerifyDevice />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* User Routes - Dashboard */}
           <Route
@@ -123,13 +147,85 @@ function AppContent() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/bills/tv"
+            element={
+              <PrivateRoute>
+                <PayTV />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/bills/electricity"
+            element={
+              <PrivateRoute>
+                <PayElectricity />
+              </PrivateRoute>
+            }
+          />
 
           {/* User Routes - Other */}
           <Route
             path="/add-money"
             element={
               <PrivateRoute>
-                <Dashboard />
+                <AddMoney />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <PrivateRoute>
+                <Profile />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/security"
+            element={
+              <PrivateRoute>
+                <Security />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <PrivateRoute>
+                <Notifications />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/help"
+            element={
+              <PrivateRoute>
+                <HelpCenter />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/terms"
+            element={
+              <PrivateRoute>
+                <TermsPrivacy />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/security-tips"
+            element={
+              <PrivateRoute>
+                <SecurityTips />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/kyc"
+            element={
+              <PrivateRoute>
+                <KYC />
               </PrivateRoute>
             }
           />
@@ -162,11 +258,12 @@ function AppContent() {
           <Route
             path="/admin"
             element={
-              <PrivateRoute>
+              <AdminRoute>
                 <AdminDashboard />
-              </PrivateRoute>
+              </AdminRoute>
             }
           />
+          <Route path="/admin/login" element={<AdminLogin />} />
 
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/dashboard" />} />
@@ -183,6 +280,7 @@ export default function App() {
         <BrowserRouter>
           <div className="size-full bg-white dark:bg-gray-950">
             <AppContent />
+            <NotificationListener />
           </div>
         </BrowserRouter>
       </AuthProvider>

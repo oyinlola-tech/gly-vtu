@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useLocation } from 'react-router';
 import { motion } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -7,11 +7,13 @@ import { Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const registered = location.state?.registered;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,7 +21,11 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(formData.email, formData.password);
+      const result = await login(formData.email, formData.password);
+      if (result?.otpRequired) {
+        navigate('/verify-device', { state: { email: formData.email } });
+        return;
+      }
       navigate('/dashboard');
     } catch (err) {
       setError('Invalid email or password');
@@ -45,6 +51,15 @@ export default function Login() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {registered && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 p-4 rounded-xl text-sm"
+              >
+                Account created. Please sign in to continue.
+              </motion.div>
+            )}
             {error && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}

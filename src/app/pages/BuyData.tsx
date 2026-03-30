@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ChevronLeft, ChevronDown } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { billsAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
@@ -11,15 +11,11 @@ export default function BuyData() {
   const navigate = useNavigate();
   const { verifyPin } = useAuth();
   const [providers, setProviders] = useState<any[]>([]);
-  const [plans, setPlans] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     network: '',
     phone: '',
-    plan: '',
-    planName: '',
-    amount: 0,
+    amount: '',
   });
-  const [showPlanSelect, setShowPlanSelect] = useState(false);
   const [showPINInput, setShowPINInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -28,27 +24,12 @@ export default function BuyData() {
     loadProviders();
   }, []);
 
-  useEffect(() => {
-    if (formData.network) {
-      loadPlans(formData.network);
-    }
-  }, [formData.network]);
-
   const loadProviders = async () => {
     try {
       const response = await billsAPI.getProviders('data');
-      setProviders(response.providers);
+      setProviders(response || []);
     } catch (err) {
       console.error('Failed to load providers');
-    }
-  };
-
-  const loadPlans = async (provider: string) => {
-    try {
-      const response = await billsAPI.getDataPlans(provider);
-      setPlans(response.plans);
-    } catch (err) {
-      console.error('Failed to load plans');
     }
   };
 
@@ -69,19 +50,19 @@ export default function BuyData() {
     }
 
     try {
-      const response = await billsAPI.buyData({
-        network: formData.network,
-        phone: formData.phone,
-        plan: formData.plan,
-        amount: formData.amount,
+      const response = await billsAPI.pay({
+        providerCode: formData.network,
+        amount: parseFloat(formData.amount),
+        account: formData.phone,
         pin,
       });
 
       navigate('/transaction-success', {
         state: {
-          transaction: response.transaction,
+          transaction: response,
+          amount: parseFloat(formData.amount),
           recipientName: formData.phone,
-          recipientBank: `${formData.network} Data - ${formData.planName}`,
+          recipientBank: `${formData.network} Data`,
         },
       });
     } catch (err) {
@@ -122,7 +103,7 @@ export default function BuyData() {
                     key={provider.code}
                     type="button"
                     onClick={() =>
-                      setFormData({ ...formData, network: provider.code, plan: '', planName: '' })
+                      setFormData({ ...formData, network: provider.code })
                     }
                     className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
                       formData.network === provider.code
@@ -130,9 +111,11 @@ export default function BuyData() {
                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    <span className="text-3xl">{provider.logo}</span>
+                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
+                      {provider.name?.slice(0, 3).toUpperCase()}
+                    </span>
                     <span className="text-xs font-medium text-gray-900 dark:text-white">
-                      {provider.code}
+                      {provider.name}
                     </span>
                   </button>
                 ))}
@@ -155,29 +138,24 @@ export default function BuyData() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Data Plan
+                Amount
               </label>
-              <button
-                type="button"
-                onClick={() => setShowPlanSelect(true)}
-                disabled={!formData.network}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697] flex items-center justify-between disabled:opacity-50"
-              >
-                <span>{formData.planName || 'Select data plan'}</span>
-                <ChevronDown size={20} />
-              </button>
-            </div>
-
-            {formData.amount > 0 && (
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Amount to pay</p>
-                <p className="text-2xl font-bold text-[#235697]">₦{formData.amount}</p>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
+                <input
+                  type="number"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                  placeholder="Enter amount"
+                  required
+                />
               </div>
-            )}
+            </div>
 
             <button
               type="submit"
-              disabled={loading || !formData.plan}
+              disabled={loading || !formData.network}
               className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-4 rounded-xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {loading ? <LoadingSpinner size="sm" /> : 'Continue'}
@@ -185,45 +163,6 @@ export default function BuyData() {
           </form>
         </div>
       </div>
-
-      {/* Plan Selection Modal */}
-      {showPlanSelect && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[80vh] flex flex-col">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Select Plan</h3>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {plans.map((plan) => (
-                <button
-                  key={plan.code}
-                  onClick={() => {
-                    setFormData({
-                      ...formData,
-                      plan: plan.code,
-                      planName: plan.name,
-                      amount: plan.amount,
-                    });
-                    setShowPlanSelect(false);
-                  }}
-                  className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
-                >
-                  <span className="font-medium text-gray-900 dark:text-white">{plan.name}</span>
-                  <span className="text-[#235697] font-bold">₦{plan.amount}</span>
-                </button>
-              ))}
-            </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => setShowPlanSelect(false)}
-                className="w-full py-3 text-gray-600 dark:text-gray-400"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showPINInput && (
         <PINInput

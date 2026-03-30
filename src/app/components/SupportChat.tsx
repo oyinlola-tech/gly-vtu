@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, User, Bot } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { conversationsAPI, tokenStore } from '../../services/api';
 
 interface Message {
   id: string;
@@ -16,16 +17,10 @@ interface SupportChatProps {
 
 export default function SupportChat({ onClose }: SupportChatProps) {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: `Hi ${user?.name?.split(' ')[0] || 'there'}! 👋 Welcome to GLY VTU support. How can I help you today?`,
-      sender: 'admin',
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,29 +30,72 @@ export default function SupportChat({ onClose }: SupportChatProps) {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    let mounted = true;
+    conversationsAPI
+      .getMine()
+      .then((data) => {
+        if (!mounted) return;
+        const incoming = (data?.messages || []).map((msg: any) => ({
+          id: msg.id,
+          text: msg.body,
+          sender: msg.sender_type === 'admin' ? 'admin' : 'user',
+          timestamp: new Date(msg.created_at),
+        }));
+        setMessages(incoming);
+      })
+      .catch(() => null);
+
+    const token = tokenStore.getAccessToken();
+    const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
+    if (token) {
+      const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}&role=user`);
+      wsRef.current = ws;
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.type === 'chat.message') {
+            const msg = payload.message;
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: msg.id,
+                text: msg.body,
+                sender: msg.senderType === 'admin' ? 'admin' : 'user',
+                timestamp: new Date(msg.createdAt || Date.now()),
+              },
+            ]);
+          }
+        } catch {
+          // ignore
+        }
+      };
+    }
+
+    return () => {
+      mounted = false;
+      wsRef.current?.close();
+    };
+  }, []);
+
   const handleSend = () => {
     if (!inputText.trim()) return;
 
-    const newMessage: Message = {
+    const optimistic: Message = {
       id: Date.now().toString(),
       text: inputText,
       sender: 'user',
       timestamp: new Date(),
     };
-
-    setMessages([...messages, newMessage]);
+    setMessages((prev) => [...prev, optimistic]);
     setInputText('');
 
-    // Simulate admin response
-    setTimeout(() => {
-      const adminResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: "Thank you for your message. Our support team will get back to you shortly.",
-        sender: 'admin',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, adminResponse]);
-    }, 1000);
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'chat.send', text: inputText }));
+    } else {
+      conversationsAPI.send(inputText).catch(() => null);
+    }
   };
 
   return (
@@ -95,6 +133,11 @@ export default function SupportChat({ onClose }: SupportChatProps) {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <AnimatePresence>
+            {messages.length === 0 && (
+              <div className="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
+                Start a conversation with our support team.
+              </div>
+            )}
             {messages.map((message) => (
               <motion.div
                 key={message.id}

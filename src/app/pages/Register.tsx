@@ -39,7 +39,7 @@ export default function Register() {
 
     try {
       await register(formData);
-      navigate('/set-pin');
+      navigate('/login', { state: { registered: true } });
     } catch (err) {
       setError('Registration failed. Please try again.');
     } finally {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { authAPI } from '../../services/api';
+import { userAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function SetPIN() {
@@ -45,7 +45,7 @@ export default function SetPIN() {
       }
 
       try {
-        await authAPI.setPin({ pin: completedPin });
+        await userAPI.setPin(completedPin);
         if (user) {
           setUser({ ...user, hasPin: true });
         }

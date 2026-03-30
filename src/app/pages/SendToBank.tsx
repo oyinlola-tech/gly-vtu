@@ -8,7 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function SendToBank() {
   const navigate = useNavigate();
-  const { user, verifyPin } = useAuth();
+  const { verifyPin } = useAuth();
   const [banks, setBanks] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     accountNumber: '',
@@ -18,6 +18,7 @@ export default function SendToBank() {
     narration: '',
   });
   const [accountName, setAccountName] = useState('');
+  const [balance, setBalance] = useState(0);
   const [showBankSelect, setShowBankSelect] = useState(false);
   const [showPINInput, setShowPINInput] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,14 +27,24 @@ export default function SendToBank() {
 
   useEffect(() => {
     loadBanks();
+    loadBalance();
   }, []);
 
   const loadBanks = async () => {
     try {
       const response = await banksAPI.getBanks();
-      setBanks(response.banks);
+      setBanks(response || []);
     } catch (err) {
       console.error('Failed to load banks');
+    }
+  };
+
+  const loadBalance = async () => {
+    try {
+      const response = await walletAPI.getBalance();
+      setBalance(Number(response?.balance || 0));
+    } catch (err) {
+      console.error('Failed to load balance');
     }
   };
 
@@ -48,7 +59,12 @@ export default function SendToBank() {
         accountNumber: formData.accountNumber,
         bankCode: formData.bankCode,
       });
-      setAccountName(response.accountName);
+      if (!response.found) {
+        setError('Account not found');
+        setAccountName('');
+        return;
+      }
+      setAccountName(response.accountName || '');
     } catch (err) {
       setError('Unable to verify account');
       setAccountName('');
@@ -85,17 +101,18 @@ export default function SendToBank() {
 
     try {
       const response = await walletAPI.sendMoney({
-        recipientType: 'bank',
         amount: parseFloat(formData.amount),
-        recipient: formData.accountNumber,
+        accountNumber: formData.accountNumber,
         bankCode: formData.bankCode,
-        narration: formData.narration,
+        accountName,
         pin,
+        channel: 'bank',
       });
 
       navigate('/transaction-success', {
         state: {
-          transaction: response.transaction,
+          transaction: response,
+          amount: parseFloat(formData.amount),
           recipientName: accountName,
           recipientBank: formData.bankName,
         },
@@ -122,7 +139,10 @@ export default function SendToBank() {
         <div className="bg-[#235697] rounded-2xl p-6 shadow-lg">
           <p className="text-white/80 text-xs mb-2">Total Balance</p>
           <h2 className="text-white text-2xl font-bold">
-            ₦{user ? '20,000,000.00' : '0.00'}
+            ₦{balance.toLocaleString('en-NG', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </h2>
           <p className="text-white/60 text-xs mt-2">Last updated 2 mins ago</p>
         </div>
@@ -246,7 +266,9 @@ export default function SendToBank() {
                   }}
                   className="w-full flex items-center gap-3 p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
                 >
-                  <span className="text-2xl">{bank.logo}</span>
+                  <span className="text-sm font-semibold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
+                    {bank.name?.slice(0, 3).toUpperCase()}
+                  </span>
                   <span className="font-medium text-gray-900 dark:text-white">{bank.name}</span>
                 </button>
               ))}

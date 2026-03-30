@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { 
   ChevronRight, User, Lock, Bell, Moon, Sun, HelpCircle, 
@@ -8,12 +8,21 @@ import BottomNav from '../components/BottomNav';
 import SupportChat from '../components/SupportChat';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { notificationsAPI } from '../../services/api';
 
 export default function More() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const [showChat, setShowChat] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    notificationsAPI
+      .unreadCount()
+      .then((data) => setUnreadCount(data.unread || 0))
+      .catch(() => null);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -26,6 +35,7 @@ export default function More() {
       items: [
         { icon: User, label: 'Profile Settings', path: '/profile', badge: null },
         { icon: Lock, label: 'Security & PIN', path: '/security', badge: null },
+        { icon: Shield, label: 'KYC Verification', path: '/kyc', badge: null },
         { icon: Bell, label: 'Notifications', path: '/notifications', badge: '3' },
       ],
     },
@@ -75,7 +85,7 @@ export default function More() {
             <User size={32} className="text-white" />
           </div>
           <div className="flex-1">
-            <p className="text-white font-semibold text-lg">{user?.name || 'User'}</p>
+            <p className="text-white font-semibold text-lg">{user?.fullName || 'User'}</p>
             <p className="text-white/80 text-sm">{user?.email || 'user@glyvtu.ng'}</p>
           </div>
         </div>
@@ -119,9 +129,9 @@ export default function More() {
                         <span className="font-medium text-gray-900 dark:text-white">{item.label}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        {item.badge && (
+                        {(item.badge || (item.label === 'Notifications' && unreadCount > 0)) && (
                           <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                            {item.badge}
+                            {item.label === 'Notifications' ? unreadCount : item.badge}
                           </span>
                         )}
                         <ChevronRight size={20} className="text-gray-400" />

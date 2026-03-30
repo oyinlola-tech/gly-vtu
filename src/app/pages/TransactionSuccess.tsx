@@ -6,6 +6,7 @@ export default function TransactionSuccess() {
   const location = useLocation();
   const navigate = useNavigate();
   const { transaction, recipientName, recipientBank } = location.state || {};
+  const amountValue = transaction?.amount ?? transaction?.total ?? location.state?.amount ?? 0;
 
   if (!transaction) {
     navigate('/dashboard');
@@ -52,7 +53,10 @@ export default function TransactionSuccess() {
             className="text-white/80 mb-8"
           >
             You have successfully transferred{' '}
-            <span className="font-bold">₦{transaction.amount.toLocaleString()}</span>
+            <span className="font-bold">₦{Number(amountValue).toLocaleString('en-NG', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}</span>
             {recipientBank && (
               <>
                 <br />
@@ -94,7 +98,7 @@ export default function TransactionSuccess() {
             className="mt-8 bg-white/10 backdrop-blur-sm rounded-2xl p-4 text-left"
           >
             <p className="text-white/60 text-xs mb-2">Transaction Reference</p>
-            <p className="text-white text-sm font-mono">{transaction.reference}</p>
+            <p className="text-white text-sm font-mono">{transaction.reference || transaction?.reference}</p>
           </motion.div>
         </div>
       </motion.div>

@@ -19,7 +19,33 @@ export default function Transactions() {
   const loadTransactions = async () => {
     try {
       const response = await walletAPI.getTransactions();
-      setTransactions(response.transactions);
+      const normalized = (response || []).map((txn: any) => {
+        let metadata: any = txn.metadata;
+        if (typeof metadata === 'string') {
+          try {
+            metadata = JSON.parse(metadata);
+          } catch {
+            metadata = {};
+          }
+        }
+        const direction =
+          txn.type === 'receive' || txn.type === 'topup' ? 'credit' : 'debit';
+        const recipient =
+          metadata?.provider ||
+          metadata?.accountName ||
+          metadata?.accountNumber ||
+          metadata?.to ||
+          metadata?.from ||
+          txn.type;
+        return {
+          ...txn,
+          direction,
+          recipient,
+          description: metadata?.provider || metadata?.to || metadata?.accountNumber || txn.type,
+          timestamp: txn.created_at,
+        };
+      });
+      setTransactions(normalized);
     } catch (err) {
       console.error('Failed to load transactions');
     } finally {
@@ -28,11 +54,11 @@ export default function Transactions() {
   };
 
   const filteredTransactions = transactions.filter((txn) => {
-    const matchesFilter = filter === 'all' || txn.type === filter;
+    const matchesFilter = filter === 'all' || txn.direction === filter;
     const matchesSearch =
       searchQuery === '' ||
-      txn.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      txn.recipient.toLowerCase().includes(searchQuery.toLowerCase());
+      String(txn.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(txn.recipient || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
@@ -153,18 +179,18 @@ export default function Transactions() {
                     >
                       <div
                         className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                          txn.type === 'credit'
+                          txn.direction === 'credit'
                             ? 'bg-green-100 dark:bg-green-900/20'
                             : 'bg-red-100 dark:bg-red-900/20'
                         }`}
                       >
                         <span className="text-xl">
-                          {txn.type === 'credit' ? '↓' : '↑'}
+                          {txn.direction === 'credit' ? '↓' : '↑'}
                         </span>
                       </div>
                       <div className="flex-1 text-left">
                         <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                          {txn.recipient}
+                          {txn.recipient || 'Transaction'}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {new Date(txn.timestamp).toLocaleTimeString('en-US', {
@@ -176,10 +202,10 @@ export default function Transactions() {
                       </div>
                       <p
                         className={`font-bold ${
-                          txn.type === 'credit' ? 'text-green-600' : 'text-red-600'
+                          txn.direction === 'credit' ? 'text-green-600' : 'text-red-600'
                         }`}
                       >
-                        {formatAmount(txn.amount, txn.type)}
+                        {formatAmount(Number(txn.total || txn.amount || 0), txn.direction)}
                       </p>
                     </button>
                   ))}
