@@ -1,7 +1,8 @@
 import express from 'express';
 import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
-import { createVirtualAccount } from '../utils/flutterwave.js';
+import { createVirtualAccountForCustomer, updateCustomer } from '../utils/flutterwave.js';
+import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
 import { sendReservedAccountEmail } from '../utils/email.js';
 import { isValidPin, setTransactionPin, verifyTransactionPin, getPinStatus } from '../utils/pin.js';
 import { logAudit } from '../utils/audit.js';
@@ -44,13 +45,28 @@ router.put('/profile', requireUser, async (req, res) => {
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const { fullName, phone } = req.body || {};
-  if (!fullName || !phone) return res.status(400).json({ error: 'Missing fields' });
+  if (!fullName && !phone) return res.status(400).json({ error: 'Missing fields' });
 
-  await pool.query('UPDATE users SET full_name = ?, phone = ? WHERE id = ?', [
-    fullName,
-    phone,
-    req.user.sub,
-  ]);
+  if (phone) {
+    const [existing] = await pool.query(
+      'SELECT id FROM users WHERE phone = ? AND id <> ? LIMIT 1',
+      [phone, req.user.sub]
+    );
+    if (existing.length) return res.status(409).json({ error: 'Phone already in use' });
+  }
+
+  const updates = [];
+  const values = [];
+  if (fullName) {
+    updates.push('full_name = ?');
+    values.push(fullName);
+  }
+  if (phone) {
+    updates.push('phone = ?');
+    values.push(phone);
+  }
+  values.push(req.user.sub);
+  await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
   return res.json({ message: 'Profile updated' });
 });
 
@@ -69,78 +85,106 @@ router.put('/kyc', requireUser, async (req, res) => {
   */
   const { level, payload } = req.body || {};
   if (!level || !payload) return res.status(400).json({ error: 'Missing KYC data' });
-  if (![1, 2].includes(Number(level))) return res.status(400).json({ error: 'Invalid level' });
-  if (Number(level) === 1) {
+  const targetLevel = Number(level);
+  if (![2, 3].includes(targetLevel)) return res.status(400).json({ error: 'Invalid level' });
+
+  const [[user]] = await pool.query(
+    'SELECT full_name, email, phone, kyc_level, kyc_payload FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!user) return res.status(404).json({ error: 'Not found' });
+
+  if (targetLevel === 2) {
     if (!payload.bvn && !payload.nin) {
-      return res.status(400).json({ error: 'BVN or NIN is required for Level 1' });
+      return res.status(400).json({ error: 'BVN or NIN is required for Level 2' });
+    }
+    if (!payload.dob) {
+      return res.status(400).json({ error: 'Date of birth is required for Level 2' });
     }
   }
-  if (Number(level) === 2) {
-    if (!payload.dob || !payload.address) {
-      return res.status(400).json({ error: 'DOB and address required for Level 2' });
+  if (targetLevel === 3) {
+    if (!payload.address) {
+      return res.status(400).json({ error: 'Address is required for Level 3' });
+    }
+    if (Number(user.kyc_level || 1) < 2) {
+      return res.status(400).json({ error: 'Complete Level 2 verification first' });
     }
   }
+
+  if (payload.phone && payload.phone !== user.phone) {
+    const [existing] = await pool.query(
+      'SELECT id FROM users WHERE phone = ? AND id <> ? LIMIT 1',
+      [payload.phone, req.user.sub]
+    );
+    if (existing.length) return res.status(409).json({ error: 'Phone already in use' });
+    await pool.query('UPDATE users SET phone = ? WHERE id = ?', [payload.phone, req.user.sub]);
+  }
+
+  const existingPayload = user.kyc_payload ? JSON.parse(user.kyc_payload) : {};
+  const mergedPayload = { ...existingPayload, ...payload };
 
   await pool.query(
     'UPDATE users SET kyc_level = ?, kyc_status = ?, kyc_payload = ? WHERE id = ?',
-    [Number(level), 'pending', JSON.stringify(payload), req.user.sub]
+    [targetLevel, 'pending', JSON.stringify(mergedPayload), req.user.sub]
   );
 
-  if (Number(level) === 1) {
-    const bvn = payload.bvn;
-    const nin = payload.nin;
-    if (bvn || nin) {
-      const [existing] = await pool.query(
-        'SELECT id FROM reserved_accounts WHERE user_id = ? LIMIT 1',
-        [req.user.sub]
-      );
-      if (!existing.length) {
-        const [[user]] = await pool.query(
-          'SELECT full_name, email FROM users WHERE id = ?',
-          [req.user.sub]
+  if (targetLevel === 2) {
+    const customerId = existingPayload.flutterwave_customer_id || mergedPayload.flutterwave_customer_id;
+    if (customerId) {
+      updateCustomer(customerId, {
+        bvn: mergedPayload.bvn || undefined,
+        nin: mergedPayload.nin || undefined,
+        dob: mergedPayload.dob || undefined,
+      }).catch(() => null);
+    }
+    const [existing] = await pool.query(
+      'SELECT id FROM reserved_accounts WHERE user_id = ? LIMIT 1',
+      [req.user.sub]
+    );
+    if (!existing.length) {
+      try {
+        const accountReference = `GLY-${req.user.sub}`;
+        const reserved = await createVirtualAccountForCustomer({
+          email: user.email,
+          bvn: mergedPayload.bvn || null,
+          tx_ref: accountReference,
+          firstName: user.full_name?.split(' ')[0] || user.full_name,
+          lastName: user.full_name?.split(' ').slice(1).join(' ') || user.full_name,
+          customerId: customerId || undefined,
+        });
+        const account = reserved?.data || reserved?.response || {};
+        await pool.query(
+          `INSERT INTO reserved_accounts
+           (id, user_id, provider, account_reference, reservation_reference, account_name, account_number, bank_name, bank_code, status, raw_response)
+           VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE account_number = VALUES(account_number), bank_name = VALUES(bank_name), raw_response = VALUES(raw_response)`,
+          [
+            req.user.sub,
+            'flutterwave',
+            accountReference,
+            account.order_ref || account.reference || null,
+            account.account_name || user.full_name,
+            account.account_number || '',
+            account.bank_name || '',
+            account.bank_code || null,
+            account.status || 'ACTIVE',
+            JSON.stringify(sanitizeFlutterwaveAccount(account)),
+          ]
         );
-        try {
-          const accountReference = `GLY-${req.user.sub}`;
-          const reserved = await createVirtualAccount({
-            email: user.email,
-            bvn: bvn || null,
-            tx_ref: accountReference,
-            firstName: user.full_name?.split(' ')[0] || user.full_name,
-            lastName: user.full_name?.split(' ').slice(1).join(' ') || user.full_name,
-          });
-          const account = reserved?.data || reserved?.response || {};
-          await pool.query(
-            `INSERT INTO reserved_accounts
-             (id, user_id, provider, account_reference, reservation_reference, account_name, account_number, bank_name, bank_code, status, raw_response)
-             VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE account_number = VALUES(account_number), bank_name = VALUES(bank_name), raw_response = VALUES(raw_response)`,
-            [
-              req.user.sub,
-              'flutterwave',
-              accountReference,
-              account.order_ref || account.reference || null,
-              account.account_name || user.full_name,
-              account.account_number || '',
-              account.bank_name || '',
-              account.bank_code || null,
-              account.status || 'ACTIVE',
-              JSON.stringify(reserved || {}),
-            ]
-          );
-          if (user?.email) {
-            sendReservedAccountEmail({
-              to: user.email,
-              name: user.full_name,
-              accountNumber: account.account_number,
-              bankName: account.bank_name,
-            }).catch(console.error);
-          }
-        } catch (err) {
-          // Keep KYC submission; reserved account can be retried later.
+        if (user?.email) {
+          sendReservedAccountEmail({
+            to: user.email,
+            name: user.full_name,
+            accountNumber: account.account_number,
+            bankName: account.bank_name,
+          }).catch(console.error);
         }
+      } catch (err) {
+        // Keep KYC submission; reserved account can be retried later.
       }
     }
   }
+
   return res.json({ message: 'KYC submitted' });
 });
 

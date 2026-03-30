@@ -9,12 +9,26 @@ import { sendOtpEmail, sendSecurityEmail } from '../utils/email.js';
 import { generateCsrfToken } from '../middleware/csrf.js';
 import { otpLimiter } from '../middleware/rateLimiters.js';
 import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js';
+import zxcvbn from 'zxcvbn';
 
 const router = express.Router();
 
 const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET || 'dev_secret_change_me';
 const USE_COOKIE_REFRESH = (process.env.COOKIE_REFRESH || 'true') === 'true';
 const isProd = process.env.NODE_ENV === 'production';
+const MIN_PASSWORD_LENGTH = 10;
+const MIN_ZXCVBN_SCORE = 3;
+
+function validatePasswordStrength(password) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+  }
+  const score = zxcvbn(password).score;
+  if (score < MIN_ZXCVBN_SCORE) {
+    return 'Password is too weak';
+  }
+  return null;
+}
 
 function setRefreshCookie(res, token, expiresAt) {
   if (!USE_COOKIE_REFRESH) return;
@@ -42,6 +56,14 @@ function issueCsrf(res) {
   return token;
 }
 
+function requireCsrfForCookieRefresh(req) {
+  const cookieToken = req.cookies?.admin_refresh_token;
+  if (!cookieToken) return true;
+  const csrfCookie = req.cookies?.csrf_token;
+  const csrfHeader = req.headers['x-csrf-token'];
+  return Boolean(csrfCookie && csrfHeader && csrfCookie === csrfHeader);
+}
+
 router.post('/login', otpLimiter, async (req, res) => {
   /*
     #swagger.tags = ['Admin Auth']
@@ -61,7 +83,11 @@ router.post('/login', otpLimiter, async (req, res) => {
   if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
   const accessToken = signAccessToken({ type: 'admin', sub: admin.id }, JWT_ADMIN_SECRET);
-  const refresh = await issueRefreshToken({ adminId: admin.id });
+  const refresh = await issueRefreshToken({
+    adminId: admin.id,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'] || null,
+  });
   setRefreshCookie(res, refresh.raw, refresh.expiresAt);
   const csrfToken = issueCsrf(res);
   logAudit({
@@ -90,17 +116,25 @@ router.post('/refresh', async (req, res) => {
     #swagger.responses[200] = { description: 'Tokens refreshed', schema: { $ref: '#/definitions/AuthTokensResponse' } }
   */
   const cookieToken = req.cookies?.admin_refresh_token;
+  if (!requireCsrfForCookieRefresh(req)) {
+    return res.status(403).json({ error: 'CSRF validation failed' });
+  }
   const incoming = cookieToken ? decryptCookieValue(cookieToken) : req.body?.refreshToken;
   if (!incoming) return res.status(400).json({ error: 'Refresh token required' });
 
   const [tokenRow] = await pool.query(
-    'SELECT admin_id FROM refresh_tokens WHERE token_hash = SHA2(?, 256) LIMIT 1',
+    'SELECT admin_id, refresh_family_id, device_id FROM refresh_tokens WHERE token_hash = SHA2(?, 256) LIMIT 1',
     [incoming]
   );
   if (!tokenRow.length) return res.status(401).json({ error: 'Invalid token' });
 
   const rotated = await rotateRefreshToken(incoming, { adminId: tokenRow[0].admin_id });
-  if (!rotated) return res.status(401).json({ error: 'Expired token' });
+  if (!rotated) {
+    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE admin_id = ?', [
+      tokenRow[0].admin_id,
+    ]);
+    return res.status(401).json({ error: 'Expired token' });
+  }
 
   const accessToken = signAccessToken({ type: 'admin', sub: tokenRow[0].admin_id }, JWT_ADMIN_SECRET);
   setRefreshCookie(res, rotated.raw, rotated.expiresAt);
@@ -203,8 +237,9 @@ router.post('/reset-password', async (req, res) => {
   if (!email || !code || !newPassword) {
     return res.status(400).json({ error: 'Missing fields' });
   }
-  if (newPassword.length < 8) {
-    return res.status(400).json({ error: 'Password too short' });
+  const passwordError = validatePasswordStrength(newPassword);
+  if (passwordError) {
+    return res.status(400).json({ error: passwordError });
   }
   const otp = await verifyOtp({ email, purpose: 'admin_password_reset', code });
   if (!otp) return res.status(400).json({ error: 'Invalid or expired OTP' });

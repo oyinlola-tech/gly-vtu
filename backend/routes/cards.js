@@ -2,6 +2,8 @@ import express from 'express';
 import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
 import { createVirtualCard, blockVirtualCard, unblockVirtualCard } from '../utils/flutterwave.js';
+import { sanitizeFlutterwaveCard } from '../utils/sanitize.js';
+import { enforceKycLimits } from '../utils/kycLimits.js';
 import { logAudit } from '../utils/audit.js';
 import { isValidAmount, isNonEmptyString } from '../utils/validation.js';
 
@@ -24,15 +26,31 @@ router.post('/', requireUser, async (req, res) => {
   }
 
   const [[user]] = await pool.query(
-    'SELECT full_name, email, kyc_level, kyc_payload FROM users WHERE id = ?',
+    'SELECT full_name, email, kyc_level, kyc_status, kyc_payload FROM users WHERE id = ?',
     [req.user.sub]
   );
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (Number(user.kyc_level || 1) < 3) {
+    return res.status(403).json({ error: 'Level 3 KYC required to create a virtual card' });
+  }
+  if (String(user.kyc_status || 'pending') !== 'verified') {
+    return res.status(403).json({ error: 'KYC must be verified to create a virtual card' });
+  }
   const payload = user?.kyc_payload ? JSON.parse(user.kyc_payload) : {};
   if (!payload?.bvn && !payload?.nin) {
     return res.status(400).json({ error: 'BVN or NIN required to create a virtual card' });
   }
   if (!payload?.address) {
     return res.status(400).json({ error: 'KYC address required to create a virtual card' });
+  }
+  const limitCheck = await enforceKycLimits({
+    userId: req.user.sub,
+    level: user.kyc_level || 1,
+    amount: numericAmount,
+    types: ['send'],
+  });
+  if (!limitCheck.ok) {
+    return res.status(403).json({ error: limitCheck.message });
   }
 
   const conn = await pool.getConnection();
@@ -76,7 +94,7 @@ router.post('/', requireUser, async (req, res) => {
         currency,
         card.is_active === false ? 'frozen' : 'active',
         Number(card.amount || numericAmount),
-        JSON.stringify(created || {}),
+        JSON.stringify(sanitizeFlutterwaveCard(card)),
       ]
     );
     await conn.query(

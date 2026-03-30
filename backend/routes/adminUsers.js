@@ -4,7 +4,8 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
 import { sendKycStatusEmail } from '../utils/email.js';
-import { createVirtualAccount } from '../utils/flutterwave.js';
+import { createVirtualAccountForCustomer } from '../utils/flutterwave.js';
+import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
 import { sendReservedAccountEmail } from '../utils/email.js';
 
 const router = express.Router();
@@ -34,9 +35,13 @@ router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req,
   if (!['verified', 'rejected', 'pending'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
+  const nextLevel = Number(level || 1);
+  if (![1, 2, 3].includes(nextLevel)) {
+    return res.status(400).json({ error: 'Invalid level' });
+  }
   await pool.query('UPDATE users SET kyc_status = ?, kyc_level = ? WHERE id = ?', [
     status,
-    Number(level || 1),
+    nextLevel,
     req.params.id,
   ]);
   const [[user]] = await pool.query('SELECT full_name, email FROM users WHERE id = ?', [
@@ -83,17 +88,15 @@ router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:w
   );
   if (!user) return res.status(404).json({ error: 'User not found' });
   const payload = user.kyc_payload ? JSON.parse(user.kyc_payload) : {};
-  const bvn = payload.bvn;
-  const nin = payload.nin;
-  if (!bvn && !nin) return res.status(400).json({ error: 'BVN or NIN required' });
+  const customerId = payload.flutterwave_customer_id;
 
   const accountReference = `GLY-${userId}`;
-  const reserved = await createVirtualAccount({
+  const reserved = await createVirtualAccountForCustomer({
     email: user.email,
-    bvn: bvn || null,
     tx_ref: accountReference,
     firstName: user.full_name?.split(' ')[0] || user.full_name,
     lastName: user.full_name?.split(' ').slice(1).join(' ') || user.full_name,
+    customerId: customerId || undefined,
   });
   const account = reserved?.data || reserved?.response || {};
   await pool.query(
@@ -110,7 +113,7 @@ router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:w
       account.bank_name || '',
       account.bank_code || null,
       account.status || 'ACTIVE',
-      JSON.stringify(reserved || {}),
+      JSON.stringify(sanitizeFlutterwaveAccount(account)),
     ]
   );
   sendReservedAccountEmail({

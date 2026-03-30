@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 import { sendReceiptEmail } from '../utils/email.js';
 import { logAudit } from '../utils/audit.js';
 import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
+import { enforceKycLimits } from '../utils/kycLimits.js';
 
 const router = express.Router();
 
@@ -39,6 +40,11 @@ router.post('/send', requireUser, async (req, res) => {
   if (!numericAmount || numericAmount <= 0) {
     return res.status(400).json({ error: 'Invalid payload' });
   }
+
+  const [[user]] = await pool.query('SELECT kyc_level, kyc_status FROM users WHERE id = ?', [
+    req.user.sub,
+  ]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
   if (!isValidPin(pin)) return res.status(400).json({ error: 'Invalid transaction PIN' });
   try {
     await verifyTransactionPin(req.user.sub, pin);
@@ -46,6 +52,23 @@ router.post('/send', requireUser, async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
   const isBank = channel === 'bank' || accountNumber || bankCode;
+  if (isBank) {
+    if (Number(user.kyc_level || 1) < 2) {
+      return res.status(403).json({ error: 'Level 2 KYC required for bank transfers' });
+    }
+    if (String(user.kyc_status || 'pending') !== 'verified') {
+      return res.status(403).json({ error: 'KYC must be verified for bank transfers' });
+    }
+  }
+  const limitCheck = await enforceKycLimits({
+    userId: req.user.sub,
+    level: user.kyc_level || 1,
+    amount: numericAmount,
+    types: ['send'],
+  });
+  if (!limitCheck.ok) {
+    return res.status(403).json({ error: limitCheck.message });
+  }
   let recipientId = null;
   let bankName = null;
   if (isBank) {

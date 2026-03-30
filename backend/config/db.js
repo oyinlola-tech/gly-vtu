@@ -116,8 +116,11 @@ export async function initDatabase() {
         id CHAR(36) PRIMARY KEY,
         full_name VARCHAR(120) NOT NULL,
         email VARCHAR(120) NOT NULL UNIQUE,
-        phone VARCHAR(20) NOT NULL UNIQUE,
+        phone VARCHAR(20) NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
+        login_failed_attempts INT NOT NULL DEFAULT 0,
+        login_locked_until TIMESTAMP NULL,
+        last_login_failed_at TIMESTAMP NULL,
         transaction_pin_hash VARCHAR(255) NULL,
         pin_failed_attempts INT NOT NULL DEFAULT 0,
         pin_locked_until TIMESTAMP NULL,
@@ -173,12 +176,29 @@ export async function initDatabase() {
         id CHAR(36) PRIMARY KEY,
         user_id CHAR(36) NULL,
         admin_id CHAR(36) NULL,
+        refresh_family_id CHAR(36) NOT NULL,
+        device_id VARCHAR(120) NULL,
+        ip_address VARCHAR(60) NULL,
+        user_agent VARCHAR(255) NULL,
         token_hash CHAR(64) NOT NULL,
         expires_at TIMESTAMP NOT NULL,
         revoked_at TIMESTAMP NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_refresh_user (user_id),
         INDEX idx_refresh_admin (admin_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS idempotency_keys (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        idem_key VARCHAR(120) NOT NULL,
+        route VARCHAR(80) NOT NULL,
+        request_hash CHAR(64) NOT NULL,
+        status ENUM('processing','complete') NOT NULL DEFAULT 'processing',
+        response_json JSON NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_idem (user_id, idem_key, route),
+        INDEX idx_idem_user (user_id)
       );
 
       CREATE TABLE IF NOT EXISTS email_otps (
@@ -237,6 +257,7 @@ export async function initDatabase() {
         metadata JSON NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_tx_user (user_id),
+        UNIQUE KEY uniq_reference (reference),
         FOREIGN KEY (user_id) REFERENCES users(id)
       );
 
@@ -279,6 +300,7 @@ export async function initDatabase() {
         status ENUM('pending','success','failed') NOT NULL DEFAULT 'pending',
         reference VARCHAR(80) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_bill_reference (reference),
         FOREIGN KEY (user_id) REFERENCES users(id),
         FOREIGN KEY (provider_id) REFERENCES bill_providers(id)
       );
@@ -403,6 +425,12 @@ export async function initDatabase() {
     await seedDefaults(conn);
     await seedAdmin(conn);
     await ensureUserSecurityColumns(conn);
+    await ensureUserLoginLockColumns(conn);
+    await ensureUserPhoneNullable(conn);
+    await ensureRefreshTokenFamilyColumns(conn);
+    await ensureIdempotencyTable(conn);
+    await ensureTransactionReferenceUnique(conn);
+    await ensureBillOrderReferenceUnique(conn);
     await ensureBillProviderLogoColumn(conn);
     await ensureBillOrderProviderNullable(conn);
   } finally {
@@ -432,6 +460,100 @@ async function ensureUserSecurityColumns(conn) {
   }
   if (alters.length) {
     await conn.query(`ALTER TABLE users ${alters.join(', ')}`);
+  }
+}
+
+async function ensureUserPhoneNullable(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'phone'`,
+    [DB_NAME]
+  );
+  if (cols.length && cols[0].IS_NULLABLE === 'NO') {
+    await conn.query('ALTER TABLE users MODIFY COLUMN phone VARCHAR(20) NULL');
+  }
+}
+
+async function ensureUserLoginLockColumns(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'`,
+    [DB_NAME]
+  );
+  const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+  const alters = [];
+  if (!existing.has('login_failed_attempts')) {
+    alters.push('ADD COLUMN login_failed_attempts INT NOT NULL DEFAULT 0');
+  }
+  if (!existing.has('login_locked_until')) {
+    alters.push('ADD COLUMN login_locked_until TIMESTAMP NULL');
+  }
+  if (!existing.has('last_login_failed_at')) {
+    alters.push('ADD COLUMN last_login_failed_at TIMESTAMP NULL');
+  }
+  if (alters.length) {
+    await conn.query(`ALTER TABLE users ${alters.join(', ')}`);
+  }
+}
+
+async function ensureRefreshTokenFamilyColumns(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'refresh_tokens'`,
+    [DB_NAME]
+  );
+  const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+  const alters = [];
+  if (!existing.has('refresh_family_id')) {
+    alters.push('ADD COLUMN refresh_family_id CHAR(36) NOT NULL');
+  }
+  if (!existing.has('device_id')) {
+    alters.push('ADD COLUMN device_id VARCHAR(120) NULL');
+  }
+  if (!existing.has('ip_address')) {
+    alters.push('ADD COLUMN ip_address VARCHAR(60) NULL');
+  }
+  if (!existing.has('user_agent')) {
+    alters.push('ADD COLUMN user_agent VARCHAR(255) NULL');
+  }
+  if (alters.length) {
+    await conn.query(`ALTER TABLE refresh_tokens ${alters.join(', ')}`);
+  }
+}
+
+async function ensureIdempotencyTable(conn) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      id CHAR(36) PRIMARY KEY,
+      user_id CHAR(36) NOT NULL,
+      idem_key VARCHAR(120) NOT NULL,
+      route VARCHAR(80) NOT NULL,
+      request_hash CHAR(64) NOT NULL,
+      status ENUM('processing','complete') NOT NULL DEFAULT 'processing',
+      response_json JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_idem (user_id, idem_key, route),
+      INDEX idx_idem_user (user_id)
+    )
+  `);
+}
+
+async function ensureTransactionReferenceUnique(conn) {
+  const [rows] = await conn.query(
+    `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'transactions' AND INDEX_NAME = 'uniq_reference'`,
+    [DB_NAME]
+  );
+  if (!rows[0]?.c) {
+    await conn.query('ALTER TABLE transactions ADD UNIQUE KEY uniq_reference (reference)');
+  }
+}
+
+async function ensureBillOrderReferenceUnique(conn) {
+  const [rows] = await conn.query(
+    `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'bill_orders' AND INDEX_NAME = 'uniq_bill_reference'`,
+    [DB_NAME]
+  );
+  if (!rows[0]?.c) {
+    await conn.query('ALTER TABLE bill_orders ADD UNIQUE KEY uniq_bill_reference (reference)');
   }
 }
 

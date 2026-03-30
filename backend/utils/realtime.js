@@ -8,6 +8,19 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
 const JWT_ADMIN_SECRET =
   process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET || 'dev_secret_change_me';
 
+const defaultOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+const extraOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',')
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0)
+  : [...defaultOrigins, ...extraOrigins];
+
+function originAllowed(origin) {
+  if (!origin) return true;
+  return allowedOrigins.includes(origin);
+}
+
 const userClients = new Map();
 const adminClients = new Map();
 
@@ -83,10 +96,11 @@ async function insertMessage({ conversationId, senderType, senderId, body }) {
   };
 }
 
-function parseAuth(reqUrl) {
+function parseAuth(reqUrl, req) {
   const url = new URL(reqUrl, 'http://localhost');
-  const token = url.searchParams.get('token');
   const role = url.searchParams.get('role') || 'user';
+  const protocol = req.headers['sec-websocket-protocol'] || '';
+  const token = String(protocol).split(',')[0]?.trim();
   if (!token) return null;
   try {
     const secret = role === 'admin' ? JWT_ADMIN_SECRET : JWT_SECRET;
@@ -100,10 +114,18 @@ function parseAuth(reqUrl) {
 }
 
 export function attachRealtime(server) {
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    handleProtocols: (protocols) => protocols.values().next().value || false,
+  });
 
   wss.on('connection', (ws, req) => {
-    const auth = parseAuth(req.url);
+    if (!originAllowed(req.headers.origin)) {
+      ws.close(1008, 'Origin not allowed');
+      return;
+    }
+    const auth = parseAuth(req.url, req);
     if (!auth) {
       ws.close(1008, 'Unauthorized');
       return;

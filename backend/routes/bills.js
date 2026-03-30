@@ -21,6 +21,8 @@ import {
   normalizeAccount,
 } from '../utils/validation.js';
 import { billsLimiter } from '../middleware/rateLimiters.js';
+import { sanitizeVtpassPayload } from '../utils/sanitize.js';
+import { enforceKycLimits } from '../utils/kycLimits.js';
 
 const router = express.Router();
 
@@ -237,6 +239,22 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
+  const [[userMeta]] = await pool.query(
+    'SELECT full_name, email, phone, kyc_level, kyc_status FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!userMeta) return res.status(404).json({ error: 'User not found' });
+
+  const limitCheck = await enforceKycLimits({
+    userId: req.user.sub,
+    level: userMeta.kyc_level || 1,
+    amount: numericAmount,
+    types: ['bill'],
+  });
+  if (!limitCheck.ok) {
+    return res.status(403).json({ error: limitCheck.message });
+  }
+
   if (vtpassEnabled) {
     try {
       let resolvedAmount = numericAmount;
@@ -248,26 +266,9 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         resolvedAmount = Number(match.variation_amount || match.amount || numericAmount || 0);
       }
       const requestId = generateRequestId();
-      const [[user]] = await pool.query('SELECT full_name, email, phone FROM users WHERE id = ?', [
-        req.user.sub,
-      ]);
-      const payload = {
-        request_id: requestId,
-        serviceID: providerCode,
-        billersCode: safeAccount,
-        amount: resolvedAmount,
-        phone: phone || user?.phone || '',
-        variation_code: variationCode || undefined,
-        subscription_type: subscriptionType || undefined,
-      };
-
-      const vtpassRes = await buyService(payload);
-      const responseCode = vtpassRes?.response_description || vtpassRes?.code || '';
-      const status =
-        responseCode === '000' || responseCode === 'SUCCESS' ? 'success' : 'pending';
-
       const reference = `BILL-${requestId}`;
-      const userMeta = user;
+      const user = userMeta;
+
       const conn = await pool.getConnection();
       try {
         await conn.beginTransaction();
@@ -299,7 +300,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
 
         await conn.query(
           'INSERT INTO bill_orders (id, user_id, provider_id, amount, fee, total, status, reference) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)',
-          [req.user.sub, null, resolvedAmount, 0, resolvedAmount, status, reference]
+          [req.user.sub, null, resolvedAmount, 0, resolvedAmount, 'pending', reference]
         );
         await conn.query(
           'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -309,44 +310,100 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
             resolvedAmount,
             0,
             resolvedAmount,
-            status,
+            'pending',
             reference,
-            JSON.stringify({ provider: providerCode, account: safeAccount, vtpass: vtpassRes }),
+            JSON.stringify({ provider: providerCode, account: safeAccount }),
           ]
         );
         await conn.commit();
-        if (userMeta?.email && status === 'success') {
-          sendReceiptEmail({
-            to: userMeta.email,
-            name: userMeta.full_name,
-            title: 'Bill Payment Successful',
-            details: [
-              `Service: ${providerCode}`,
-              `Amount: NGN ${resolvedAmount.toFixed(2)}`,
-              `Reference: ${reference}`,
-            ],
-          }).catch(console.error);
-        }
-        logAudit({
-          actorType: 'user',
-          actorId: req.user.sub,
-          action: 'bill.paid',
-          entityType: 'bill_order',
-          entityId: reference,
-          ip: req.ip,
-          userAgent: req.headers['user-agent'],
-          metadata: { provider: providerCode, account: safeAccount },
-        }).catch(console.error);
-        return res.json({
-          message: status === 'success' ? 'Bill paid' : 'Payment pending',
-          reference,
-          total: resolvedAmount,
-          status,
-          vtpass: vtpassRes,
-        });
       } finally {
         conn.release();
       }
+
+      let vtpassRes = null;
+      let status = 'pending';
+      try {
+        const payload = {
+          request_id: requestId,
+          serviceID: providerCode,
+          billersCode: safeAccount,
+          amount: resolvedAmount,
+          phone: phone || user?.phone || '',
+          variation_code: variationCode || undefined,
+          subscription_type: subscriptionType || undefined,
+        };
+        vtpassRes = await buyService(payload);
+        const responseCode = vtpassRes?.response_description || vtpassRes?.code || '';
+        status = responseCode === '000' || responseCode === 'SUCCESS' ? 'success' : 'pending';
+      } catch (err) {
+        status = 'failed';
+      }
+
+      await pool.query('UPDATE bill_orders SET status = ? WHERE reference = ?', [
+        status,
+        reference,
+      ]);
+      await pool.query(
+        'UPDATE transactions SET status = ?, metadata = ? WHERE reference = ?',
+        [
+          status,
+          JSON.stringify({
+            provider: providerCode,
+            account: safeAccount,
+            vtpass: vtpassRes ? sanitizeVtpassPayload(vtpassRes) : null,
+          }),
+          reference,
+        ]
+      );
+
+      if (status === 'failed') {
+        await pool.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
+          resolvedAmount,
+          req.user.sub,
+        ]);
+        if (userMeta?.email) {
+          sendBillFailedEmail({
+            to: userMeta.email,
+            name: userMeta.full_name,
+            details: [
+              `Service: ${providerCode}`,
+              `Amount: NGN ${resolvedAmount.toFixed(2)}`,
+              `Reason: Provider failed`,
+            ],
+          }).catch(console.error);
+        }
+        return res.status(502).json({ error: 'VTpass payment failed' });
+      }
+
+      if (userMeta?.email && status === 'success') {
+        sendReceiptEmail({
+          to: userMeta.email,
+          name: userMeta.full_name,
+          title: 'Bill Payment Successful',
+          details: [
+            `Service: ${providerCode}`,
+            `Amount: NGN ${resolvedAmount.toFixed(2)}`,
+            `Reference: ${reference}`,
+          ],
+        }).catch(console.error);
+      }
+      logAudit({
+        actorType: 'user',
+        actorId: req.user.sub,
+        action: 'bill.paid',
+        entityType: 'bill_order',
+        entityId: reference,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { provider: providerCode, account: safeAccount },
+      }).catch(console.error);
+      return res.json({
+        message: status === 'success' ? 'Bill paid' : 'Payment pending',
+        reference,
+        total: resolvedAmount,
+        status,
+        vtpass: vtpassRes ? sanitizeVtpassPayload(vtpassRes) : null,
+      });
     } catch (err) {
       return res.status(502).json({ error: 'VTpass payment failed' });
     }
@@ -369,9 +426,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
   const fee = Number(pricing.base_fee) + markup;
   const total = numericAmount + fee;
 
-  const [[user]] = await pool.query('SELECT full_name, email FROM users WHERE id = ?', [
-    req.user.sub,
-  ]);
+      const user = userMeta;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();

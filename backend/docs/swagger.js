@@ -67,21 +67,17 @@ const doc = {
     },
     AuthRegisterRequest: {
       type: 'object',
-      required: ['fullName', 'email', 'phone', 'password'],
+      required: ['fullName', 'email', 'password'],
       properties: {
         fullName: { type: 'string', description: 'Full legal name' },
         email: { type: 'string', description: 'Email address' },
         phone: { type: 'string', description: 'Phone number (international format recommended)' },
         password: { type: 'string', description: 'Password (min 8 chars recommended)' },
-        bvn: { type: 'string', description: 'Optional BVN for KYC level 1' },
-        nin: { type: 'string', description: 'Optional NIN for KYC level 1' },
       },
       example: {
         fullName: 'Ada Lovelace',
         email: 'ada@example.com',
-        phone: '+2348012345678',
         password: 'StrongPassword1!',
-        bvn: '12345678901',
       },
     },
     AuthLoginRequest: {
@@ -222,7 +218,7 @@ const doc = {
     },
     UpdateProfileRequest: {
       type: 'object',
-      required: ['fullName', 'phone'],
+      required: [],
       properties: {
         fullName: { type: 'string', description: 'Full name' },
         phone: { type: 'string', description: 'Phone number' },
@@ -233,10 +229,10 @@ const doc = {
       type: 'object',
       required: ['level', 'payload'],
       properties: {
-        level: { type: 'number', description: 'KYC level', enum: [1, 2] },
+        level: { type: 'number', description: 'KYC level', enum: [2, 3] },
         payload: { type: 'object', description: 'KYC payload object' },
       },
-      example: { level: 1, payload: { bvn: '12345678901' } },
+      example: { level: 2, payload: { bvn: '12345678901', dob: '1990-01-01' } },
     },
     PinSetupRequest: {
       type: 'object',

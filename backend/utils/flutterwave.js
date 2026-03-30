@@ -42,6 +42,41 @@ export async function createVirtualAccount({ email, bvn, tx_ref, firstName, last
   return flwRequest('POST', '/v3/virtual-account-numbers', payload);
 }
 
+export async function createCustomer({ name, email, phone }) {
+  const payload = {
+    name,
+    email,
+    phone: phone || undefined,
+    phone_number: phone || undefined,
+  };
+  return flwRequest('POST', '/v3/customers', payload);
+}
+
+export async function updateCustomer(customerId, payload = {}) {
+  if (!customerId) throw new Error('customerId required');
+  return flwRequest('PUT', `/v3/customers/${customerId}`, payload);
+}
+
+export async function createVirtualAccountForCustomer({
+  email,
+  bvn,
+  tx_ref,
+  firstName,
+  lastName,
+  customerId,
+}) {
+  const payload = {
+    email,
+    bvn: bvn || undefined,
+    tx_ref: tx_ref || `GLY-${crypto.randomUUID()}`,
+    is_permanent: true,
+    first_name: firstName,
+    last_name: lastName,
+    customer_id: customerId || undefined,
+  };
+  return flwRequest('POST', '/v3/virtual-account-numbers', payload);
+}
+
 export async function fetchVirtualAccount(orderRef) {
   if (!orderRef) throw new Error('order_ref required');
   return flwRequest('GET', `/v3/virtual-account-numbers/${orderRef}`);

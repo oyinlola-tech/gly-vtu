@@ -52,6 +52,9 @@ This project reads environment variables from `.env`. Use `.env.example` as a te
 - `OTP_MAX_PER_HOUR`
 - `PIN_MAX_ATTEMPTS`
 - `PIN_LOCK_MINUTES`
+- `LOGIN_LOCK_MAX`
+- `LOGIN_LOCK_MINUTES`
+- `LOGIN_LOCK_WINDOW_MINUTES`
 - `SECURITY_QUESTION_REQUIRE_PIN_CHANGE`
 - `SECURITY_QUESTION_REQUIRE_DEVICE_VERIFY`
 - `SECURITY_QUESTION_REQUIRE_PASSWORD_RESET`
@@ -64,12 +67,22 @@ This project reads environment variables from `.env`. Use `.env.example` as a te
 - `VTPASS_PUBLIC_KEY`
 - `VTPASS_SECRET_KEY`
 - `VTPASS_ENV`
+- `VTPASS_WEBHOOK_SECRET`
+- `VTPASS_WEBHOOK_IPS`
 
 ### Flutterwave
 - `FLW_PUBLIC_KEY`
 - `FLW_SECRET_KEY`
 - `FLW_BASE_URL`
 - `FLW_WEBHOOK_HASH`
+
+## KYC Limits
+- `KYC_L1_DAILY_LIMIT`
+- `KYC_L1_MONTHLY_LIMIT`
+- `KYC_L2_DAILY_LIMIT`
+- `KYC_L2_MONTHLY_LIMIT`
+- `KYC_L3_DAILY_LIMIT`
+- `KYC_L3_MONTHLY_LIMIT`
 
 
 ## Banking Cache

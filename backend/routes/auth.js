@@ -5,19 +5,37 @@ import { pool } from '../config/db.js';
 import { signAccessToken, issueRefreshToken, rotateRefreshToken, revokeRefreshToken } from '../utils/tokens.js';
 import { createOtp, verifyOtp } from '../utils/otp.js';
 import { sendOtpEmail, sendWelcomeEmail, sendSecurityEmail, sendLoginFailedEmail } from '../utils/email.js';
-import { createVirtualAccount } from '../utils/flutterwave.js';
+import { createVirtualAccountForCustomer, createCustomer } from '../utils/flutterwave.js';
+import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
 import { logAudit } from '../utils/audit.js';
 import { requireUser } from '../middleware/auth.js';
 import { generateCsrfToken } from '../middleware/csrf.js';
 import { otpLimiter } from '../middleware/rateLimiters.js';
 import { enforceSecurityQuestion } from '../utils/securityQuestionGuard.js';
 import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js';
+import zxcvbn from 'zxcvbn';
 
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
 const USE_COOKIE_REFRESH = (process.env.COOKIE_REFRESH || 'true') === 'true';
 const isProd = process.env.NODE_ENV === 'production';
+const MIN_PASSWORD_LENGTH = 10;
+const MIN_ZXCVBN_SCORE = 3;
+const LOGIN_LOCK_MAX = Number(process.env.LOGIN_LOCK_MAX || 5);
+const LOGIN_LOCK_MINUTES = Number(process.env.LOGIN_LOCK_MINUTES || 15);
+const LOGIN_LOCK_WINDOW_MINUTES = Number(process.env.LOGIN_LOCK_WINDOW_MINUTES || 15);
+
+function validatePasswordStrength(password) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+  }
+  const score = zxcvbn(password).score;
+  if (score < MIN_ZXCVBN_SCORE) {
+    return 'Password is too weak';
+  }
+  return null;
+}
 
 function setRefreshCookie(res, token, expiresAt) {
   if (!USE_COOKIE_REFRESH) return;
@@ -45,6 +63,14 @@ function issueCsrf(res) {
   return token;
 }
 
+function requireCsrfForCookieRefresh(req) {
+  const cookieToken = req.cookies?.refresh_token;
+  if (!cookieToken) return true;
+  const csrfCookie = req.cookies?.csrf_token;
+  const csrfHeader = req.headers['x-csrf-token'];
+  return Boolean(csrfCookie && csrfHeader && csrfCookie === csrfHeader);
+}
+
 router.post('/register', async (req, res) => {
   /*
     #swagger.tags = ['Auth']
@@ -58,15 +84,18 @@ router.post('/register', async (req, res) => {
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
     #swagger.responses[409] = { description: 'User exists', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { fullName, email, phone, password, bvn, nin } = req.body || {};
-  if (!fullName || !email || !phone || !password) {
+  const { fullName, email, phone, password } = req.body || {};
+  if (!fullName || !email || !password) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
+  const passwordError = validatePasswordStrength(password);
+  if (passwordError) {
+    return res.status(400).json({ error: passwordError });
+  }
 
-  const [existing] = await pool.query('SELECT id FROM users WHERE email = ? OR phone = ?', [
-    email,
-    phone,
-  ]);
+  const [existing] = phone
+    ? await pool.query('SELECT id FROM users WHERE email = ? OR phone = ?', [email, phone])
+    : await pool.query('SELECT id FROM users WHERE email = ?', [email]);
   if (existing.length) {
     return res.status(409).json({ error: 'User already exists' });
   }
@@ -75,22 +104,42 @@ router.post('/register', async (req, res) => {
   const userId = crypto.randomUUID();
   try {
     await pool.query(
-      'INSERT INTO users (id, full_name, email, phone, password_hash) VALUES (?, ?, ?, ?, ?)',
-      [userId, fullName, email, phone, passwordHash]
+      'INSERT INTO users (id, full_name, email, phone, password_hash, kyc_level, kyc_status, kyc_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [userId, fullName, email, phone || null, passwordHash, 1, 'pending', JSON.stringify({})]
     );
     await pool.query('INSERT INTO wallets (id, user_id, balance, currency) VALUES (UUID(), ?, 0, ?)', [
       userId,
       'NGN',
     ]);
 
+    let flutterwaveCustomerId = null;
+    try {
+      const customer = await createCustomer({
+        name: fullName,
+        email,
+        phone: phone || undefined,
+      });
+      const customerData = customer?.data || {};
+      flutterwaveCustomerId =
+        customerData.id || customerData.customer_id || customerData.customerId || null;
+      if (flutterwaveCustomerId) {
+        await pool.query('UPDATE users SET kyc_payload = ? WHERE id = ?', [
+          JSON.stringify({ flutterwave_customer_id: flutterwaveCustomerId }),
+          userId,
+        ]);
+      }
+    } catch (err) {
+      // Customer creation can be retried later
+    }
+
     const accountReference = `GLY-${userId}`;
     try {
-      const reserved = await createVirtualAccount({
+      const reserved = await createVirtualAccountForCustomer({
         email,
-        bvn: bvn || null,
         tx_ref: accountReference,
         firstName: fullName?.split(' ')[0] || fullName,
         lastName: fullName?.split(' ').slice(1).join(' ') || fullName,
+        customerId: flutterwaveCustomerId || undefined,
       });
       const account = reserved?.data || reserved?.response || {};
       await pool.query(
@@ -107,7 +156,7 @@ router.post('/register', async (req, res) => {
           account.bank_name || '',
           account.bank_code || null,
           account.status || 'ACTIVE',
-          JSON.stringify(reserved || {}),
+          JSON.stringify(sanitizeFlutterwaveAccount(account)),
         ]
       );
 
@@ -156,8 +205,27 @@ router.post('/login', otpLimiter, async (req, res) => {
   if (!rows.length) return res.status(401).json({ error: 'Invalid credentials' });
 
   const user = rows[0];
+  if (user.login_locked_until && new Date(user.login_locked_until) > new Date()) {
+    return res.status(403).json({ error: 'Account temporarily locked. Try later.' });
+  }
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) {
+    const lastFailedAt = user.last_login_failed_at ? new Date(user.last_login_failed_at) : null;
+    const withinWindow =
+      lastFailedAt &&
+      Date.now() - lastFailedAt.getTime() <= LOGIN_LOCK_WINDOW_MINUTES * 60 * 1000;
+    const nextAttempts = withinWindow ? Number(user.login_failed_attempts || 0) + 1 : 1;
+    const lockedUntil =
+      nextAttempts >= LOGIN_LOCK_MAX
+        ? new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000)
+        : null;
+    await pool.query(
+      'UPDATE users SET login_failed_attempts = ?, login_locked_until = ?, last_login_failed_at = NOW() WHERE id = ?',
+      [nextAttempts, lockedUntil, user.id]
+    );
+    if (lockedUntil) {
+      return res.status(403).json({ error: 'Account locked due to failed attempts. Try later.' });
+    }
     sendLoginFailedEmail({
       to: user.email,
       ip: req.ip,
@@ -174,6 +242,11 @@ router.post('/login', otpLimiter, async (req, res) => {
     }).catch(console.error);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+
+  await pool.query(
+    'UPDATE users SET login_failed_attempts = 0, login_locked_until = NULL, last_login_failed_at = NULL WHERE id = ?',
+    [user.id]
+  );
 
   const [devices] = await pool.query(
     'SELECT id FROM user_devices WHERE user_id = ? AND device_id = ? LIMIT 1',
@@ -211,7 +284,12 @@ router.post('/login', otpLimiter, async (req, res) => {
   );
 
   const accessToken = signAccessToken({ type: 'user', sub: user.id }, JWT_SECRET);
-  const refresh = await issueRefreshToken({ userId: user.id });
+  const refresh = await issueRefreshToken({
+    userId: user.id,
+    deviceId: deviceId || null,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'] || null,
+  });
   setRefreshCookie(res, refresh.raw, refresh.expiresAt);
   const csrfToken = issueCsrf(res);
 
@@ -280,7 +358,12 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
   );
 
   const accessToken = signAccessToken({ type: 'user', sub: user.id }, JWT_SECRET);
-  const refresh = await issueRefreshToken({ userId: user.id });
+  const refresh = await issueRefreshToken({
+    userId: user.id,
+    deviceId: deviceId || null,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'] || null,
+  });
   setRefreshCookie(res, refresh.raw, refresh.expiresAt);
   const csrfToken = issueCsrf(res);
 
@@ -365,6 +448,10 @@ router.post('/reset-password', async (req, res) => {
   if (!email || !code || !newPassword) {
     return res.status(400).json({ error: 'Missing fields' });
   }
+  const passwordError = validatePasswordStrength(newPassword);
+  if (passwordError) {
+    return res.status(400).json({ error: passwordError });
+  }
   const otp = await verifyOtp({ email, purpose: 'password_reset', code });
   if (!otp) return res.status(400).json({ error: 'Invalid or expired OTP' });
   const passwordHash = await bcrypt.hash(newPassword, 12);
@@ -398,17 +485,32 @@ router.post('/refresh', async (req, res) => {
     #swagger.responses[401] = { description: 'Invalid token', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const cookieToken = req.cookies?.refresh_token;
+  if (!requireCsrfForCookieRefresh(req)) {
+    return res.status(403).json({ error: 'CSRF validation failed' });
+  }
   const incoming = cookieToken ? decryptCookieValue(cookieToken) : req.body?.refreshToken;
   if (!incoming) return res.status(400).json({ error: 'Refresh token required' });
 
+  const deviceId = req.body?.deviceId || null;
   const [tokenRow] = await pool.query(
-    'SELECT user_id FROM refresh_tokens WHERE token_hash = SHA2(?, 256) LIMIT 1',
+    'SELECT user_id, refresh_family_id, device_id FROM refresh_tokens WHERE token_hash = SHA2(?, 256) LIMIT 1',
     [incoming]
   );
   if (!tokenRow.length) return res.status(401).json({ error: 'Invalid token' });
+  if (deviceId && tokenRow[0].device_id && tokenRow[0].device_id !== deviceId) {
+    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE refresh_family_id = ?', [
+      tokenRow[0].refresh_family_id,
+    ]);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
 
   const rotated = await rotateRefreshToken(incoming, { userId: tokenRow[0].user_id });
-  if (!rotated) return res.status(401).json({ error: 'Expired token' });
+  if (!rotated) {
+    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ?', [
+      tokenRow[0].user_id,
+    ]);
+    return res.status(401).json({ error: 'Expired token' });
+  }
 
   const accessToken = signAccessToken({ type: 'user', sub: tokenRow[0].user_id }, JWT_SECRET);
   setRefreshCookie(res, rotated.raw, rotated.expiresAt);

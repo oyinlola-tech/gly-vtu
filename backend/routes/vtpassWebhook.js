@@ -1,10 +1,43 @@
 import express from 'express';
+import crypto from 'crypto';
 import { pool } from '../config/db.js';
 import { sendReceiptEmail } from '../utils/email.js';
+import { sanitizeVtpassPayload } from '../utils/sanitize.js';
 
 const router = express.Router();
 
+function getRequestIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return String(forwarded).split(',')[0].trim();
+  }
+  return req.ip;
+}
+
+function verifyVtpassWebhook(req) {
+  const secret = (process.env.VTPASS_WEBHOOK_SECRET || '').trim();
+  const signature = (req.headers['x-vtpass-signature'] || '').toString();
+  if (!secret || !signature) return false;
+  const raw = req.rawBody || '';
+  const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+  if (expected.length !== signature.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
+function ipAllowed(req) {
+  const list = (process.env.VTPASS_WEBHOOK_IPS || '')
+    .split(',')
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+  if (!list.length) return process.env.NODE_ENV !== 'production';
+  const ip = getRequestIp(req);
+  return list.includes(ip);
+}
+
 router.post('/', async (req, res) => {
+  if (!verifyVtpassWebhook(req) || !ipAllowed(req)) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
   const payload = req.body || {};
   const type = payload.type || '';
   if (type !== 'transaction-update') {
@@ -28,7 +61,7 @@ router.post('/', async (req, res) => {
     `INSERT INTO vtpass_events (id, request_id, transaction_id, status, raw_payload)
      VALUES (UUID(), ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE transaction_id = VALUES(transaction_id), status = VALUES(status), raw_payload = VALUES(raw_payload)`,
-    [requestId, transactionId || null, status, JSON.stringify(payload)]
+    [requestId, transactionId || null, status, JSON.stringify(sanitizeVtpassPayload(payload))]
   );
 
   const reference = `BILL-${requestId}`;

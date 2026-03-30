@@ -1,6 +1,7 @@
 import express from 'express';
 import { pool } from '../config/db.js';
 import { verifyFlutterwaveWebhook } from '../utils/flutterwave.js';
+import { sanitizeFlutterwaveWebhook } from '../utils/sanitize.js';
 import { sendReceiptEmail } from '../utils/email.js';
 
 const router = express.Router();
@@ -18,13 +19,22 @@ router.post('/', async (req, res) => {
   await pool.query(
     `INSERT INTO flutterwave_events (id, event_id, tx_ref, flw_ref, status, raw_payload)
      VALUES (UUID(), ?, ?, ?, ?, ?)`,
-    [data.id || null, data.tx_ref || null, data.flw_ref || null, status || 'unknown', JSON.stringify(payload)]
+    [
+      data.id || null,
+      data.tx_ref || null,
+      data.flw_ref || null,
+      status || 'unknown',
+      JSON.stringify(sanitizeFlutterwaveWebhook(payload)),
+    ]
   );
 
   if (event !== 'charge.completed') {
     return res.json({ message: 'Ignored' });
   }
   if (status !== 'successful') {
+    return res.json({ message: 'Ignored' });
+  }
+  if (String(data.currency || '').toUpperCase() !== 'NGN') {
     return res.json({ message: 'Ignored' });
   }
 

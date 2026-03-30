@@ -27,10 +27,6 @@ import vtpassWebhookRoutes from './backend/routes/vtpassWebhook.js';
 import adminVtpassRoutes from './backend/routes/adminVtpass.js';
 import adminFlutterwaveRoutes from './backend/routes/adminFlutterwave.js';
 import cardsRoutes from './backend/routes/cards.js';
-import flutterwaveWebhookRoutes from './backend/routes/flutterwaveWebhook.js';
-import vtpassWebhookRoutes from './backend/routes/vtpassWebhook.js';
-import adminVtpassRoutes from './backend/routes/adminVtpass.js';
-import cardsRoutes from './backend/routes/cards.js';
 import banksRoutes from './backend/routes/banks.js';
 import notificationsRoutes from './backend/routes/notifications.js';
 import adminNotificationsRoutes from './backend/routes/adminNotifications.js';
@@ -100,7 +96,27 @@ const corsOptions = {
   maxAge: 600,
 };
 
-app.use(helmet());
+const cspOrigins = normalizedOrigins.length ? normalizedOrigins : defaultOrigins;
+const wsOrigins = cspOrigins.map((o) =>
+  o.startsWith('https://') ? o.replace('https://', 'wss://') : o.replace('http://', 'ws://')
+);
+const helmetConfig = isProd
+  ? {
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:'],
+          fontSrc: ["'self'", 'data:'],
+          connectSrc: ["'self'", ...cspOrigins, ...wsOrigins],
+        },
+      },
+      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    }
+  : undefined;
+
+app.use(helmet(helmetConfig));
 app.use(cors(corsOptions));
 app.use(
   express.json({
@@ -219,7 +235,6 @@ app.use('/api/banks', banksRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/cards', cardsRoutes);
-app.use('/api/cards', cardsRoutes);
 
 app.use('/api/admin/auth', adminAuthLimiter, adminAuthRoutes);
 app.use('/api/admin/users', adminUsersRoutes);
@@ -244,7 +259,6 @@ app.use('/app/api/transactions', transactionsRoutes);
 app.use('/app/api/banks', banksRoutes);
 app.use('/app/api/notifications', notificationsRoutes);
 app.use('/app/api/conversations', conversationsRoutes);
-app.use('/app/api/cards', cardsRoutes);
 app.use('/app/api/cards', cardsRoutes);
 
 app.use('/app/admin/api/auth', adminAuthLimiter, adminAuthRoutes);
