@@ -18,6 +18,7 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import SendMoney from './pages/SendMoney';
 import SendToBank from './pages/SendToBank';
+import SendToUser from './pages/SendToUser';
 import Transactions from './pages/Transactions';
 import BuyAirtime from './pages/BuyAirtime';
 import BuyData from './pages/BuyData';
@@ -98,7 +99,7 @@ function AppContent() {
             path="/send/swift-pay"
             element={
               <PrivateRoute>
-                <SendToBank />
+                <SendToUser />
               </PrivateRoute>
             }
           />
@@ -106,7 +107,7 @@ function AppContent() {
             path="/send/enaira"
             element={
               <PrivateRoute>
-                <SendToBank />
+                <SendToUser />
               </PrivateRoute>
             }
           />

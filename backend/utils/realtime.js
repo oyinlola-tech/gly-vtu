@@ -27,7 +27,7 @@ function emitToSet(set, payload) {
   if (!set) return;
   const message = JSON.stringify(payload);
   for (const ws of set) {
-    if (ws.readyState === ws.OPEN) {
+    if (ws.readyState === 1) {
       ws.send(message);
     }
   }

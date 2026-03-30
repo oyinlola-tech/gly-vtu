@@ -91,7 +91,7 @@ export default function Dashboard() {
             >
               {theme === 'dark' ? <Sun size={20} className="text-white" /> : <Moon size={20} className="text-white" />}
             </button>
-            <Link to="/more" className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">
+            <Link to="/notifications" className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">
               <Bell size={20} className="text-white" />
             </Link>
           </div>

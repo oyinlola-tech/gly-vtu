@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { authAPI } from '../../services/api';
+import { authAPI, userAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -34,6 +34,11 @@ export default function VerifyDevice() {
         securityAnswer: answer || undefined,
       });
       await refreshProfile();
+      const security = await userAPI.getSecurityStatus().catch(() => null);
+      if (security && !security.pinSet) {
+        navigate('/set-pin');
+        return;
+      }
       navigate('/dashboard');
     } catch (err) {
       setError('Verification failed. Please try again.');

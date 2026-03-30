@@ -16,7 +16,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ otpRequired?: boolean; email?: string }>;
+  login: (email: string, password: string) => Promise<{ otpRequired?: boolean; email?: string; needsPin?: boolean }>;
   register: (data: any) => Promise<void>;
   logout: () => void;
   verifyPin: (pin: string) => Promise<boolean>;
@@ -107,7 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    localStorage.clear();
     tokenStore.clear();
     authAPI.logout().catch(() => null);
   };

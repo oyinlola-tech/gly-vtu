@@ -262,6 +262,7 @@ export default function SendToBank() {
                       bankCode: bank.code,
                       bankName: bank.name,
                     });
+                    setAccountName('');
                     setShowBankSelect(false);
                   }}
                   className="w-full flex items-center gap-3 p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"

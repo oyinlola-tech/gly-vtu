@@ -26,6 +26,10 @@ export default function Login() {
         navigate('/verify-device', { state: { email: formData.email } });
         return;
       }
+      if (result?.needsPin) {
+        navigate('/set-pin');
+        return;
+      }
       navigate('/dashboard');
     } catch (err) {
       setError('Invalid email or password');
@@ -72,14 +76,14 @@ export default function Login() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Email or Phone
+                Email
               </label>
               <input
                 type="text"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                placeholder="Enter your email or phone"
+                placeholder="Enter your email"
                 required
               />
             </div>

@@ -56,15 +56,25 @@ export default function SupportChat({ onClose }: SupportChatProps) {
           const payload = JSON.parse(event.data);
           if (payload?.type === 'chat.message') {
             const msg = payload.message;
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: msg.id,
-                text: msg.body,
-                sender: msg.senderType === 'admin' ? 'admin' : 'user',
-                timestamp: new Date(msg.createdAt || Date.now()),
-              },
-            ]);
+            setMessages((prev) => {
+              const sender = msg.senderType === 'admin' ? 'admin' : 'user';
+              const timestamp = new Date(msg.createdAt || Date.now());
+              if (sender === 'user') {
+                const last = prev[prev.length - 1];
+                if (last && last.sender === 'user' && last.text === msg.body) {
+                  return prev;
+                }
+              }
+              return [
+                ...prev,
+                {
+                  id: msg.id,
+                  text: msg.body,
+                  sender,
+                  timestamp,
+                },
+              ];
+            });
           }
         } catch {
           // ignore

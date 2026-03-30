@@ -36,7 +36,7 @@ export default function More() {
         { icon: User, label: 'Profile Settings', path: '/profile', badge: null },
         { icon: Lock, label: 'Security & PIN', path: '/security', badge: null },
         { icon: Shield, label: 'KYC Verification', path: '/kyc', badge: null },
-        { icon: Bell, label: 'Notifications', path: '/notifications', badge: '3' },
+        { icon: Bell, label: 'Notifications', path: '/notifications', badge: null },
       ],
     },
     {

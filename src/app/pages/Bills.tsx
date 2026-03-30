@@ -61,7 +61,7 @@ export default function Bills() {
             const comingSoon = !pathMap[category.code];
             return (
             <Link
-              key={category.title}
+              key={category.code}
               to={comingSoon ? '#' : path}
               className={`bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-lg flex items-center gap-4 ${
                 comingSoon
