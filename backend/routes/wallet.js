@@ -67,7 +67,7 @@ router.post('/send', requireUser, async (req, res) => {
     req.user.sub,
   ]);
   if (!user) return respond(404, { error: 'User not found' });
-  if (!isValidPin(pin)) return respond(400, { error: 'Invalid transaction PIN' });
+  if (!isValidPin(pin)) return respond(400, { error: 'PIN must be exactly 6 digits' });
   try {
     await verifyTransactionPin(req.user.sub, pin);
   } catch (err) {

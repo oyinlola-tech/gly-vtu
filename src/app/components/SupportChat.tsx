@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, User, Bot } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { conversationsAPI, tokenStore } from '../../services/api';
+import { conversationsAPI } from '../../services/api';
 
 interface Message {
   id: string;
@@ -46,10 +46,9 @@ export default function SupportChat({ onClose }: SupportChatProps) {
       })
       .catch(() => null);
 
-    const token = tokenStore.getAccessToken();
     const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
-    if (token) {
-      const ws = new WebSocket(`${wsUrl}?role=user`, [token]);
+    if (user?.id) {
+      const ws = new WebSocket(`${wsUrl}?role=user`);
       wsRef.current = ws;
       ws.onmessage = (event) => {
         try {

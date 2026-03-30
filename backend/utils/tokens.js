@@ -4,6 +4,21 @@ import { hashToken, pool } from '../config/db.js';
 
 const ACCESS_TTL = process.env.JWT_ACCESS_TTL || '15m';
 const REFRESH_TTL_DAYS = Number(process.env.JWT_REFRESH_DAYS || 14);
+const ACCESS_COOKIE_MINUTES = Number(process.env.JWT_ACCESS_COOKIE_MINUTES || 15);
+const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'auth_token';
+const ADMIN_AUTH_COOKIE_NAME = process.env.ADMIN_AUTH_COOKIE_NAME || 'admin_auth_token';
+const isProd = process.env.NODE_ENV === 'production';
+const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+
+function baseCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProd,
+    path: '/',
+    domain: cookieDomain,
+  };
+}
 
 function addDays(days) {
   const expires = new Date();
@@ -13,6 +28,19 @@ function addDays(days) {
 
 export function signAccessToken(payload, secret) {
   return jwt.sign(payload, secret, { expiresIn: ACCESS_TTL });
+}
+
+export function setAccessCookie(res, token, type = 'user') {
+  const name = type === 'admin' ? ADMIN_AUTH_COOKIE_NAME : AUTH_COOKIE_NAME;
+  res.cookie(name, token, {
+    ...baseCookieOptions(),
+    maxAge: ACCESS_COOKIE_MINUTES * 60 * 1000,
+  });
+}
+
+export function clearAccessCookie(res, type = 'user') {
+  const name = type === 'admin' ? ADMIN_AUTH_COOKIE_NAME : AUTH_COOKIE_NAME;
+  res.clearCookie(name, baseCookieOptions());
 }
 
 export async function issueRefreshToken({

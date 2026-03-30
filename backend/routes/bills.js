@@ -250,7 +250,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
   if (!variationCode && !isValidAmount(numericAmount)) {
     return respond(400, { error: 'Invalid amount' });
   }
-  if (!isValidPin(pin)) return respond(400, { error: 'Invalid transaction PIN' });
+  if (!isValidPin(pin)) return respond(400, { error: 'PIN must be exactly 6 digits' });
   if (phone && !isValidPhone(phone)) return respond(400, { error: 'Invalid phone number' });
   const safeAccount = normalizeAccount(account);
   if (!safeAccount) return respond(400, { error: 'Invalid account' });

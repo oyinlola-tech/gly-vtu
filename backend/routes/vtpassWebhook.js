@@ -17,12 +17,19 @@ function getRequestIp(req) {
 
 function verifyVtpassWebhook(req) {
   const secret = (process.env.VTPASS_WEBHOOK_SECRET || '').trim();
+  if (!secret) {
+    throw new Error('VTPASS_WEBHOOK_SECRET not configured');
+  }
   const signature = (req.headers['x-vtpass-signature'] || '').toString();
-  if (!secret || !signature) return false;
-  const raw = req.rawBody || '';
-  const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
-  if (expected.length !== signature.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  if (!signature) return false;
+  const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody : Buffer.from(req.rawBody || '');
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  try {
+    if (expected.length !== signature.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
 }
 
 function ipAllowed(req) {
@@ -36,7 +43,22 @@ function ipAllowed(req) {
 }
 
 router.post('/', async (req, res) => {
-  if (!verifyVtpassWebhook(req) || !ipAllowed(req)) {
+  let signatureValid = false;
+  try {
+    signatureValid = verifyVtpassWebhook(req);
+  } catch (err) {
+    logSecurityEvent({
+      type: 'webhook.vtpass.signature_error',
+      severity: 'high',
+      actorType: 'system',
+      ip: getRequestIp(req),
+      userAgent: req.headers['user-agent'],
+      metadata: { error: err.message },
+    }).catch(() => null);
+    return res.status(401).json({ error: 'Signature verification failed' });
+  }
+
+  if (!signatureValid) {
     logSecurityEvent({
       type: 'webhook.vtpass.invalid',
       severity: 'high',
@@ -49,6 +71,17 @@ router.post('/', async (req, res) => {
       },
     }).catch(() => null);
     return res.status(401).json({ error: 'Invalid signature' });
+  }
+  if (!ipAllowed(req)) {
+    logSecurityEvent({
+      type: 'webhook.vtpass.ip_rejected',
+      severity: 'high',
+      actorType: 'system',
+      ip: getRequestIp(req),
+      userAgent: req.headers['user-agent'],
+      metadata: { ip: getRequestIp(req) },
+    }).catch(() => null);
+    return res.status(403).json({ error: 'IP not whitelisted' });
   }
   const payload = req.body || {};
   const type = payload.type || '';

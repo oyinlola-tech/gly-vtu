@@ -4,10 +4,16 @@ import { requireUser } from '../middleware/auth.js';
 import { createVirtualAccountForCustomer, updateCustomer } from '../utils/flutterwave.js';
 import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
 import { sendReservedAccountEmail } from '../utils/email.js';
-import { isValidPin, setTransactionPin, verifyTransactionPin, getPinStatus } from '../utils/pin.js';
+import {
+  isValidPin,
+  setTransactionPin,
+  verifyTransactionPin,
+  getPinStatus,
+  validatePinComplexity,
+} from '../utils/pin.js';
 import { logAudit } from '../utils/audit.js';
 import bcrypt from 'bcryptjs';
-import { QUESTIONS, normalizeAnswer } from '../utils/securityQuestions.js';
+import { QUESTIONS, normalizeAnswer, isValidSecurityAnswer } from '../utils/securityQuestions.js';
 import zxcvbn from 'zxcvbn';
 import { getKycLimitConfig } from '../utils/kycLimits.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
@@ -357,7 +363,8 @@ router.post('/pin/setup', requireUser, async (req, res) => {
     #swagger.responses[200] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
   */
   const { pin } = req.body || {};
-  if (!isValidPin(pin)) return res.status(400).json({ error: 'PIN must be 4-6 digits' });
+  const pinError = validatePinComplexity(pin);
+  if (pinError) return res.status(400).json({ error: pinError });
   const [[row]] = await pool.query(
     'SELECT transaction_pin_hash FROM users WHERE id = ?',
     [req.user.sub]
@@ -388,7 +395,8 @@ router.post('/pin/change', requireUser, async (req, res) => {
     #swagger.responses[400] = { description: 'Invalid PIN', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const { currentPin, newPin } = req.body || {};
-  if (!isValidPin(newPin)) return res.status(400).json({ error: 'PIN must be 4-6 digits' });
+  const pinError = validatePinComplexity(newPin);
+  if (pinError) return res.status(400).json({ error: pinError });
   try {
     await verifyTransactionPin(req.user.sub, currentPin);
   } catch (err) {
@@ -420,7 +428,7 @@ router.post('/pin/verify', requireUser, async (req, res) => {
     #swagger.responses[400] = { description: 'Invalid PIN', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const { pin } = req.body || {};
-  if (!isValidPin(pin)) return res.status(400).json({ error: 'PIN must be 4-6 digits' });
+  if (!isValidPin(pin)) return res.status(400).json({ error: 'PIN must be exactly 6 digits' });
   try {
     await verifyTransactionPin(req.user.sub, pin);
     return res.json({ valid: true });
@@ -484,6 +492,9 @@ router.post('/security-question/set', requireUser, async (req, res) => {
   }
   if (!QUESTIONS.includes(question)) {
     return res.status(400).json({ error: 'Invalid security question' });
+  }
+  if (!isValidSecurityAnswer(answer)) {
+    return res.status(400).json({ error: 'Security answer is too weak' });
   }
   const answerHash = await bcrypt.hash(normalizeAnswer(answer), 12);
   await pool.query(

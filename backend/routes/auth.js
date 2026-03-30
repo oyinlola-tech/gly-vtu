@@ -2,7 +2,14 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { pool } from '../config/db.js';
-import { signAccessToken, issueRefreshToken, rotateRefreshToken, revokeRefreshToken } from '../utils/tokens.js';
+import {
+  signAccessToken,
+  issueRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  setAccessCookie,
+  clearAccessCookie,
+} from '../utils/tokens.js';
 import { createOtp, verifyOtp } from '../utils/otp.js';
 import { sendOtpEmail, sendWelcomeEmail, sendSecurityEmail, sendLoginFailedEmail } from '../utils/email.js';
 import { createVirtualAccountForCustomer, createCustomer } from '../utils/flutterwave.js';
@@ -47,6 +54,8 @@ function setRefreshCookie(res, token, expiresAt) {
     sameSite: 'lax',
     secure: isProd,
     expires: expiresAt,
+    path: '/app/api/auth',
+    domain: process.env.COOKIE_DOMAIN || undefined,
   });
 }
 
@@ -56,6 +65,8 @@ function setCsrfCookie(res, token) {
     sameSite: 'lax',
     secure: isProd,
     maxAge: 1000 * 60 * 60 * 6,
+    path: '/',
+    domain: process.env.COOKIE_DOMAIN || undefined,
   });
 }
 
@@ -302,6 +313,7 @@ router.post('/login', otpLimiter, async (req, res) => {
   );
 
   const accessToken = signAccessToken({ type: 'user', sub: user.id }, JWT_SECRET);
+  setAccessCookie(res, accessToken, 'user');
   const refresh = await issueRefreshToken({
     userId: user.id,
     deviceId: deviceId || null,
@@ -312,8 +324,6 @@ router.post('/login', otpLimiter, async (req, res) => {
   const csrfToken = issueCsrf(res);
 
   return res.json({
-    accessToken,
-    refreshToken: USE_COOKIE_REFRESH ? null : refresh.raw,
     csrfToken,
     user: { id: user.id, fullName: user.full_name, email: user.email, phone: user.phone },
   });
@@ -376,6 +386,7 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
   );
 
   const accessToken = signAccessToken({ type: 'user', sub: user.id }, JWT_SECRET);
+  setAccessCookie(res, accessToken, 'user');
   const refresh = await issueRefreshToken({
     userId: user.id,
     deviceId: deviceId || null,
@@ -402,8 +413,6 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
   }).catch(console.error);
 
   return res.json({
-    accessToken,
-    refreshToken: USE_COOKIE_REFRESH ? null : refresh.raw,
     csrfToken,
     user,
   });
@@ -551,12 +560,11 @@ router.post('/refresh', async (req, res) => {
   }
 
   const accessToken = signAccessToken({ type: 'user', sub: tokenRow[0].user_id }, JWT_SECRET);
+  setAccessCookie(res, accessToken, 'user');
   setRefreshCookie(res, rotated.raw, rotated.expiresAt);
   const csrfToken = issueCsrf(res);
 
   return res.json({
-    accessToken,
-    refreshToken: USE_COOKIE_REFRESH ? null : rotated.raw,
     csrfToken,
   });
 });
@@ -576,6 +584,7 @@ router.post('/logout', async (req, res) => {
   if (incoming) await revokeRefreshToken(incoming);
   res.clearCookie('refresh_token');
   res.clearCookie('csrf_token');
+  clearAccessCookie(res, 'user');
   return res.json({ message: 'Logged out' });
 });
 

@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { AdminAuthProvider, useAdminAuth } from '../contexts/AdminAuthContext';
 import SplashScreen from './components/SplashScreen';
-import { tokenStore } from '../services/api';
 import NotificationListener from './components/NotificationListener';
 
 // Auth Pages
@@ -55,7 +55,8 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const isAdmin = !!tokenStore.getAdminToken();
+  const { isAdmin, checking } = useAdminAuth();
+  if (checking) return null;
   return isAdmin ? <>{children}</> : <Navigate to="/admin/login" />;
 }
 
@@ -346,12 +347,14 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <div className="size-full bg-white dark:bg-gray-950">
-            <AppContent />
-            <NotificationListener />
-          </div>
-        </BrowserRouter>
+        <AdminAuthProvider>
+          <BrowserRouter>
+            <div className="size-full bg-white dark:bg-gray-950">
+              <AppContent />
+              <NotificationListener />
+            </div>
+          </BrowserRouter>
+        </AdminAuthProvider>
       </AuthProvider>
     </ThemeProvider>
   );

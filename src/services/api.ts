@@ -15,9 +15,6 @@ import type {
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/app/api';
 const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || '/app/admin/api';
 
-const ACCESS_TOKEN_KEY = 'gly_access_token';
-const REFRESH_TOKEN_KEY = 'gly_refresh_token';
-const ADMIN_TOKEN_KEY = 'gly_admin_token';
 const DEVICE_ID_KEY = 'gly_device_id';
 const CSRF_TOKEN_KEY = 'gly_csrf_token';
 const ADMIN_CSRF_TOKEN_KEY = 'gly_admin_csrf_token';
@@ -90,7 +87,6 @@ async function parseResponse(res: Response) {
 }
 
 async function refreshAccessToken() {
-  const refreshToken = getStoredToken(REFRESH_TOKEN_KEY);
   const csrfToken = await ensureCsrfToken();
   const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
     method: 'POST',
@@ -99,14 +95,12 @@ async function refreshAccessToken() {
       ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
     },
     credentials: 'include',
-    body: JSON.stringify({ refreshToken, deviceId: getDeviceId() }),
+    body: JSON.stringify({ deviceId: getDeviceId() }),
   });
   const data = await parseResponse(res);
   if (!res.ok) throw new Error(data?.error || 'Session expired');
-  if (data?.accessToken) setStoredToken(ACCESS_TOKEN_KEY, data.accessToken);
-  if (data?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, data.refreshToken);
   if (data?.csrfToken) setStoredToken(CSRF_TOKEN_KEY, data.csrfToken);
-  return data?.accessToken;
+  return true;
 }
 
 async function request<T>(
@@ -122,10 +116,6 @@ async function request<T>(
   if (options.body && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
-  if (auth) {
-    const token = admin ? getStoredToken(ADMIN_TOKEN_KEY) : getStoredToken(ACCESS_TOKEN_KEY);
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
 
   const response = await fetch(`${base}${path}`, {
     ...options,
@@ -135,8 +125,8 @@ async function request<T>(
 
   if (response.status === 401 && auth && !admin) {
     try {
-      const newToken = await refreshAccessToken();
-      const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
+      await refreshAccessToken();
+      const retryHeaders = { ...headers };
       const retry = await fetch(`${base}${path}`, {
         ...options,
         headers: retryHeaders,
@@ -200,8 +190,6 @@ export const authAPI = {
       },
       { auth: false }
     );
-    if (response?.accessToken) setStoredToken(ACCESS_TOKEN_KEY, response.accessToken);
-    if (response?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, response.refreshToken);
     if (response?.csrfToken) setStoredToken(CSRF_TOKEN_KEY, response.csrfToken);
     return response;
   },
@@ -228,8 +216,6 @@ export const authAPI = {
       },
       { auth: false }
     );
-    if (response?.accessToken) setStoredToken(ACCESS_TOKEN_KEY, response.accessToken);
-    if (response?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, response.refreshToken);
     if (response?.csrfToken) setStoredToken(CSRF_TOKEN_KEY, response.csrfToken);
     return response;
   },
@@ -253,15 +239,12 @@ export const authAPI = {
   },
 
   logout: async () => {
-    const refreshToken = getStoredToken(REFRESH_TOKEN_KEY);
     await request<{ message: string }>(
       API_BASE_URL,
       '/auth/logout',
-      { method: 'POST', body: JSON.stringify({ refreshToken }) },
+      { method: 'POST' },
       { auth: false }
     );
-    setStoredToken(ACCESS_TOKEN_KEY, null);
-    setStoredToken(REFRESH_TOKEN_KEY, null);
     setStoredToken(CSRF_TOKEN_KEY, null);
   },
 
@@ -427,12 +410,10 @@ export const walletAPI = {
   },
 
   downloadStatement: async (data: { startDate: string; endDate: string }) => {
-    const token = getStoredToken(ACCESS_TOKEN_KEY);
     const res = await fetch(`${API_BASE_URL}/transactions/statement/download`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(data),
       credentials: 'include',
@@ -576,21 +557,24 @@ export const cardsAPI = {
 
 // ============= ADMIN APIs =============
 export const adminAPI = {
-  login: async (data: { email: string; password: string }) => {
+  login: async (data: { email: string; password: string; totp?: string }) => {
     const response = await request<any>(
       ADMIN_API_BASE_URL,
       '/auth/login',
-      { method: 'POST', body: JSON.stringify({ ...data, deviceId: getDeviceId() }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...data, deviceId: getDeviceId() }),
+      },
       { auth: false, admin: true }
     );
-    if (response?.accessToken) setStoredToken(ADMIN_TOKEN_KEY, response.accessToken);
-    if (response?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, response.refreshToken);
     if (response?.csrfToken) setStoredToken(ADMIN_CSRF_TOKEN_KEY, response.csrfToken);
     return response;
   },
+  me: async () => {
+    return request<any>(ADMIN_API_BASE_URL, '/auth/me', {}, { admin: true });
+  },
 
   refresh: async () => {
-    const refreshToken = getStoredToken(REFRESH_TOKEN_KEY);
     const csrfToken = await ensureAdminCsrfToken();
     const response = await request<any>(
       ADMIN_API_BASE_URL,
@@ -598,25 +582,21 @@ export const adminAPI = {
       {
         method: 'POST',
         headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
-        body: JSON.stringify({ refreshToken, deviceId: getDeviceId() }),
+        body: JSON.stringify({ deviceId: getDeviceId() }),
       },
       { auth: false, admin: true }
     );
-    if (response?.accessToken) setStoredToken(ADMIN_TOKEN_KEY, response.accessToken);
-    if (response?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, response.refreshToken);
     if (response?.csrfToken) setStoredToken(ADMIN_CSRF_TOKEN_KEY, response.csrfToken);
     return response;
   },
 
   logout: async () => {
-    const refreshToken = getStoredToken(REFRESH_TOKEN_KEY);
     await request<any>(
       ADMIN_API_BASE_URL,
       '/auth/logout',
-      { method: 'POST', body: JSON.stringify({ refreshToken }) },
+      { method: 'POST' },
       { auth: false, admin: true }
     );
-    setStoredToken(ADMIN_TOKEN_KEY, null);
     setStoredToken(ADMIN_CSRF_TOKEN_KEY, null);
   },
 
@@ -828,12 +808,7 @@ export const adminAPI = {
 };
 
 export const tokenStore = {
-  getAccessToken: () => getStoredToken(ACCESS_TOKEN_KEY),
-  getAdminToken: () => getStoredToken(ADMIN_TOKEN_KEY),
   clear: () => {
-    setStoredToken(ACCESS_TOKEN_KEY, null);
-    setStoredToken(REFRESH_TOKEN_KEY, null);
-    setStoredToken(ADMIN_TOKEN_KEY, null);
     setStoredToken(CSRF_TOKEN_KEY, null);
     setStoredToken(ADMIN_CSRF_TOKEN_KEY, null);
   },

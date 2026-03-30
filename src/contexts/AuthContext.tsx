@@ -41,7 +41,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = !!user;
 
   const refreshProfile = async () => {
-    if (!tokenStore.getAccessToken()) return;
     try {
       const profile = await userAPI.getProfile();
       const security = await userAPI.getSecurityStatus();
@@ -57,7 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         hasPin: security?.pinSet,
       });
     } catch (error) {
-      // if token is invalid, clear
       tokenStore.clear();
       setUser(null);
     }
@@ -73,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    if (!user && tokenStore.getAccessToken()) {
+    if (!user) {
       refreshProfile();
     }
   }, []);

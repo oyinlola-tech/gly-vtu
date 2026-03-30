@@ -5,7 +5,32 @@ const MAX_ATTEMPTS = Number(process.env.PIN_MAX_ATTEMPTS || 5);
 const LOCK_MINUTES = Number(process.env.PIN_LOCK_MINUTES || 15);
 
 export function isValidPin(pin) {
-  return typeof pin === 'string' && /^\d{4,6}$/.test(pin);
+  return typeof pin === 'string' && /^\d{6}$/.test(pin);
+}
+
+export function validatePinComplexity(pin) {
+  if (!isValidPin(pin)) {
+    return 'PIN must be exactly 6 digits';
+  }
+  if (/^(\d)\1{5}$/.test(pin)) {
+    return 'PIN cannot be all the same digit (e.g., 111111)';
+  }
+  if (/(\d)\1{3,}/.test(pin)) {
+    return 'PIN cannot contain 4+ consecutive identical digits';
+  }
+  let sequential = true;
+  for (let i = 0; i < 5; i++) {
+    const curr = Number(pin[i]);
+    const next = Number(pin[i + 1]);
+    if (curr + 1 !== next && curr - 1 !== next) {
+      sequential = false;
+      break;
+    }
+  }
+  if (sequential) {
+    return 'PIN cannot be sequential';
+  }
+  return null;
 }
 
 export async function getPinStatus(userId) {
@@ -23,6 +48,12 @@ export async function getPinStatus(userId) {
 }
 
 export async function setTransactionPin(userId, pin) {
+  const complexityError = validatePinComplexity(pin);
+  if (complexityError) {
+    const err = new Error(complexityError);
+    err.code = 'PIN_WEAK';
+    throw err;
+  }
   const pinHash = await bcrypt.hash(pin, 12);
   await pool.query(
     `UPDATE users

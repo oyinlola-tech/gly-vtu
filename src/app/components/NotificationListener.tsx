@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { toast, Toaster } from 'sonner';
-import { tokenStore } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function NotificationListener() {
@@ -8,11 +7,10 @@ export default function NotificationListener() {
   const { user } = useAuth();
 
   useEffect(() => {
-    const token = tokenStore.getAccessToken();
     wsRef.current?.close();
-    if (!token) return;
+    if (!user?.id) return;
     const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
-    const ws = new WebSocket(`${wsUrl}?role=user`, [token]);
+    const ws = new WebSocket(`${wsUrl}?role=user`);
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {

@@ -5,12 +5,18 @@ function hashBody(body) {
   return crypto.createHash('sha256').update(JSON.stringify(body || {})).digest('hex');
 }
 
+const IDEMPOTENCY_KEY_TTL_HOURS = Number(process.env.IDEMPOTENCY_KEY_TTL_HOURS || 24);
+
 export async function checkIdempotency({ userId, key, route, body }) {
   if (!key) return { ok: true, hit: false };
   const bodyHash = hashBody(body);
   const [rows] = await pool.query(
-    'SELECT id, status, response_json, request_hash FROM idempotency_keys WHERE user_id = ? AND idem_key = ? AND route = ? LIMIT 1',
-    [userId, key, route]
+    `SELECT id, status, response_json, request_hash
+     FROM idempotency_keys
+     WHERE user_id = ? AND idem_key = ? AND route = ?
+       AND created_at > DATE_SUB(NOW(), INTERVAL ? HOUR)
+     LIMIT 1`,
+    [userId, key, route, IDEMPOTENCY_KEY_TTL_HOURS]
   );
   if (!rows.length) {
     await pool.query(
@@ -34,5 +40,9 @@ export async function completeIdempotency({ userId, key, route, response, status
   await pool.query(
     'UPDATE idempotency_keys SET status = ?, response_json = ? WHERE user_id = ? AND idem_key = ? AND route = ?',
     [status, JSON.stringify(response || {}), userId, key, route]
+  );
+  await pool.query(
+    'DELETE FROM idempotency_keys WHERE created_at < DATE_SUB(NOW(), INTERVAL ? HOUR)',
+    [IDEMPOTENCY_KEY_TTL_HOURS + 1]
   );
 }

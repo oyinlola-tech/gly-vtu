@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { WebSocketServer } from 'ws';
 import { pool } from '../config/db.js';
 import { logAudit } from './audit.js';
+import { AUTH_COOKIE_NAME, ADMIN_AUTH_COOKIE_NAME } from './tokens.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
 const JWT_ADMIN_SECRET =
@@ -101,7 +102,13 @@ function parseAuth(reqUrl, req) {
   const url = new URL(reqUrl, 'http://localhost');
   const role = url.searchParams.get('role') || 'user';
   const protocol = req.headers['sec-websocket-protocol'] || '';
-  const token = String(protocol).split(',')[0]?.trim();
+  const tokenFromProtocol = String(protocol).split(',')[0]?.trim();
+  const cookieHeader = req.headers.cookie || '';
+  const cookieToken = getCookieValue(
+    cookieHeader,
+    role === 'admin' ? ADMIN_AUTH_COOKIE_NAME : AUTH_COOKIE_NAME
+  );
+  const token = tokenFromProtocol || cookieToken;
   if (!token) return null;
   try {
     const secret = role === 'admin' ? JWT_ADMIN_SECRET : JWT_SECRET;
@@ -118,11 +125,23 @@ function parseAuth(reqUrl, req) {
   }
 }
 
+function getCookieValue(raw, name) {
+  if (!raw || !name) return null;
+  const parts = String(raw).split(';');
+  for (const part of parts) {
+    const [key, ...rest] = part.trim().split('=');
+    if (key === name) {
+      return decodeURIComponent(rest.join('=') || '');
+    }
+  }
+  return null;
+}
+
 export function attachRealtime(server) {
   const wss = new WebSocketServer({
     server,
     path: '/ws',
-    handleProtocols: (protocols) => protocols.values().next().value || false,
+    handleProtocols: (protocols) => protocols.values().next().value || undefined,
   });
 
   wss.on('connection', (ws, req) => {

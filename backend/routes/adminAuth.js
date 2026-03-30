@@ -1,7 +1,14 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { pool } from '../config/db.js';
-import { signAccessToken, issueRefreshToken, rotateRefreshToken, revokeRefreshToken } from '../utils/tokens.js';
+import {
+  signAccessToken,
+  issueRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  setAccessCookie,
+  clearAccessCookie,
+} from '../utils/tokens.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { logAudit } from '../utils/audit.js';
 import { createOtp, verifyOtp } from '../utils/otp.js';
@@ -40,6 +47,8 @@ function setRefreshCookie(res, token, expiresAt) {
     sameSite: 'lax',
     secure: isProd,
     expires: expiresAt,
+    path: '/app/admin/api/auth',
+    domain: process.env.COOKIE_DOMAIN || undefined,
   });
 }
 
@@ -49,6 +58,8 @@ function setCsrfCookie(res, token) {
     sameSite: 'lax',
     secure: isProd,
     maxAge: 1000 * 60 * 60 * 6,
+    path: '/',
+    domain: process.env.COOKIE_DOMAIN || undefined,
   });
 }
 
@@ -102,6 +113,7 @@ router.post('/login', otpLimiter, async (req, res) => {
   }
 
   const accessToken = signAccessToken({ type: 'admin', sub: admin.id }, JWT_ADMIN_SECRET);
+  setAccessCookie(res, accessToken, 'admin');
   const refresh = await issueRefreshToken({
     adminId: admin.id,
     deviceId: deviceId || null,
@@ -121,8 +133,6 @@ router.post('/login', otpLimiter, async (req, res) => {
   }).catch(console.error);
 
   return res.json({
-    accessToken,
-    refreshToken: USE_COOKIE_REFRESH ? null : refresh.raw,
     csrfToken,
     admin: { id: admin.id, name: admin.name, email: admin.email, role: admin.role },
   });
@@ -181,12 +191,11 @@ router.post('/refresh', async (req, res) => {
   }
 
   const accessToken = signAccessToken({ type: 'admin', sub: tokenRow[0].admin_id }, JWT_ADMIN_SECRET);
+  setAccessCookie(res, accessToken, 'admin');
   setRefreshCookie(res, rotated.raw, rotated.expiresAt);
   const csrfToken = issueCsrf(res);
 
   return res.json({
-    accessToken,
-    refreshToken: USE_COOKIE_REFRESH ? null : rotated.raw,
     csrfToken,
   });
 });
@@ -204,6 +213,7 @@ router.post('/logout', requireAdmin, async (req, res) => {
   if (incoming) await revokeRefreshToken(incoming);
   res.clearCookie('admin_refresh_token');
   res.clearCookie('csrf_token');
+  clearAccessCookie(res, 'admin');
   logAudit({
     actorType: 'admin',
     actorId: req.admin?.sub || null,

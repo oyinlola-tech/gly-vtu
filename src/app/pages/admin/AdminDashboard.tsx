@@ -9,7 +9,7 @@ import {
   BellRing,
   MessageCircle,
 } from 'lucide-react';
-import { adminAPI, tokenStore } from '../../../services/api';
+import { adminAPI } from '../../../services/api';
 import type { AdminBillPricing, AdminBillProvider } from '../../../types/bills';
 
 export default function AdminDashboard() {
@@ -47,10 +47,8 @@ export default function AdminDashboard() {
   }, []);
 
   const connectWs = () => {
-    const token = tokenStore.getAdminToken();
-    if (!token) return;
     const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
-    const ws = new WebSocket(`${wsUrl}?role=admin`, [token]);
+    const ws = new WebSocket(`${wsUrl}?role=admin`);
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {

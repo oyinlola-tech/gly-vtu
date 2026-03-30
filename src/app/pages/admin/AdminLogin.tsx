@@ -1,23 +1,36 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { adminAPI } from '../../../services/api';
+import { useAdminAuth } from '../../../contexts/AdminAuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const { login } = useAdminAuth();
+  const [formData, setFormData] = useState({ email: '', password: '', totp: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [totpRequired, setTotpRequired] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await adminAPI.login(formData);
+      const response = await login(formData.email, formData.password, formData.totp || undefined);
+      if (response?.totpRequired) {
+        setTotpRequired(true);
+        setError('Enter your authenticator code to continue.');
+        return;
+      }
       navigate('/admin');
     } catch (err) {
-      setError('Invalid admin credentials');
+      const message = (err as Error)?.message || 'Login failed';
+      if (message === 'TOTP_REQUIRED') {
+        setTotpRequired(true);
+        setError('Enter your authenticator code to continue.');
+      } else {
+        setError('Invalid admin credentials');
+      }
     } finally {
       setLoading(false);
     }
@@ -64,6 +77,21 @@ export default function AdminLogin() {
               required
             />
           </div>
+          {totpRequired && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Authenticator Code
+              </label>
+              <input
+                type="text"
+                value={formData.totp}
+                onChange={(e) => setFormData({ ...formData, totp: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                placeholder="6-digit code"
+                required
+              />
+            </div>
+          )}
 
           <button
             type="submit"
