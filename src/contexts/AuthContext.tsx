@@ -13,6 +13,12 @@ interface User {
   hasPin?: boolean;
 }
 
+function getPersistableUser(user: User | null): Omit<User, 'accountNumber'> | null {
+  if (!user) return null;
+  const { accountNumber, ...rest } = user;
+  return rest;
+}
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -29,7 +35,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
+    return saved ? (JSON.parse(saved) as Omit<User, 'accountNumber'>) : null;
   });
 
   const isAuthenticated = !!user;
@@ -59,7 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (user) {
-      localStorage.setItem('user', JSON.stringify(user));
+      const safeUser = getPersistableUser(user);
+      localStorage.setItem('user', JSON.stringify(safeUser));
     } else {
       localStorage.removeItem('user');
     }
