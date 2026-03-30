@@ -78,7 +78,7 @@ router.get('/providers', requireAdmin, requirePermission('bills:read'), async (r
     #swagger.responses[200] = { description: 'Providers', schema: { type: 'array', items: { type: 'object' } } }
   */
   const [rows] = await pool.query(
-    `SELECT p.id, p.name, p.code, p.active, c.name as category_name
+    `SELECT p.id, p.name, p.code, p.logo_url, p.active, c.name as category_name
      FROM bill_providers p
      JOIN bill_categories c ON c.id = p.category_id
      ORDER BY p.name`
@@ -94,11 +94,11 @@ router.post('/providers', requireAdmin, requirePermission('bills:write'), async 
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/AdminBillsProviderRequest' } }
     #swagger.responses[201] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { categoryId, name, code } = req.body || {};
+  const { categoryId, name, code, logoUrl } = req.body || {};
   if (!categoryId || !name || !code) return res.status(400).json({ error: 'Missing fields' });
   await pool.query(
-    'INSERT INTO bill_providers (category_id, name, code, active) VALUES (?, ?, ?, 1)',
-    [categoryId, name, code]
+    'INSERT INTO bill_providers (category_id, name, code, logo_url, active) VALUES (?, ?, ?, ?, 1)',
+    [categoryId, name, code, logoUrl || null]
   );
   logAudit({
     actorType: 'admin',
@@ -120,10 +120,10 @@ router.put('/providers/:id', requireAdmin, requirePermission('bills:write'), asy
     #swagger.parameters['body'] = { in: 'body', schema: { $ref: '#/definitions/AdminBillsProviderUpdateRequest' } }
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { name, code, active } = req.body || {};
+  const { name, code, logoUrl, active } = req.body || {};
   await pool.query(
-    'UPDATE bill_providers SET name = ?, code = ?, active = ? WHERE id = ?',
-    [name, code, active ? 1 : 0, req.params.id]
+    'UPDATE bill_providers SET name = ?, code = ?, logo_url = ?, active = ? WHERE id = ?',
+    [name, code, logoUrl || null, active ? 1 : 0, req.params.id]
   );
   logAudit({
     actorType: 'admin',
@@ -145,9 +145,11 @@ router.get('/pricing', requireAdmin, requirePermission('pricing:read'), async (r
     #swagger.responses[200] = { description: 'Pricing', schema: { type: 'array', items: { type: 'object' } } }
   */
   const [rows] = await pool.query(
-    `SELECT pr.id, p.name as provider, pr.base_fee, pr.markup_type, pr.markup_value, pr.currency, pr.active
+    `SELECT pr.id, p.name as provider, p.code as provider_code, c.code as category_code,
+        pr.base_fee, pr.markup_type, pr.markup_value, pr.currency, pr.active
      FROM bill_pricing pr
      JOIN bill_providers p ON p.id = pr.provider_id
+     JOIN bill_categories c ON c.id = p.category_id
      ORDER BY p.name`
   );
   return res.json(rows);

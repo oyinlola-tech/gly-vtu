@@ -20,6 +20,14 @@ export default function BuyData() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const getProviderInitials = (name: string) =>
+    name
+      .split(' ')
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 3)
+      .toUpperCase();
+
   useEffect(() => {
     loadProviders();
   }, []);
@@ -111,9 +119,19 @@ export default function BuyData() {
                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
-                      {provider.name?.slice(0, 3).toUpperCase()}
-                    </span>
+                    <div className="relative w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-300">
+                      {getProviderInitials(provider.name || '---')}
+                      {provider.logo_url && (
+                        <img
+                          src={provider.logo_url}
+                          alt={provider.name}
+                          className="absolute inset-0 w-full h-full object-contain rounded-full"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      )}
+                    </div>
                     <span className="text-xs font-medium text-gray-900 dark:text-white">
                       {provider.name}
                     </span>

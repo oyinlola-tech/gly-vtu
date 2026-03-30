@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -42,27 +43,27 @@ async function seedDefaults(conn) {
   );
 
   await conn.query(
-    `INSERT IGNORE INTO bill_providers (category_id, name, code, active)
-     SELECT id, 'MTN', 'mtn', 1 FROM bill_categories WHERE code='airtime'
-     UNION ALL SELECT id, 'Airtel', 'airtel', 1 FROM bill_categories WHERE code='airtime'
-     UNION ALL SELECT id, 'Glo', 'glo', 1 FROM bill_categories WHERE code='airtime'
-     UNION ALL SELECT id, '9mobile', '9mobile', 1 FROM bill_categories WHERE code='airtime'
-     UNION ALL SELECT id, 'MTN Data', 'mtn-data', 1 FROM bill_categories WHERE code='data'
-     UNION ALL SELECT id, 'Airtel Data', 'airtel-data', 1 FROM bill_categories WHERE code='data'
-     UNION ALL SELECT id, 'Glo Data', 'glo-data', 1 FROM bill_categories WHERE code='data'
-     UNION ALL SELECT id, '9mobile Data', '9mobile-data', 1 FROM bill_categories WHERE code='data'
-     UNION ALL SELECT id, 'DStv', 'dstv', 1 FROM bill_categories WHERE code='tv'
-     UNION ALL SELECT id, 'GOtv', 'gotv', 1 FROM bill_categories WHERE code='tv'
-     UNION ALL SELECT id, 'StarTimes', 'startimes', 1 FROM bill_categories WHERE code='tv'
-     UNION ALL SELECT id, 'IKEDC', 'ikedc', 1 FROM bill_categories WHERE code='electricity'
-     UNION ALL SELECT id, 'EKEDC', 'ekedc', 1 FROM bill_categories WHERE code='electricity'
-     UNION ALL SELECT id, 'AEDC', 'aedc', 1 FROM bill_categories WHERE code='electricity'
-     UNION ALL SELECT id, 'WAEC', 'waec', 1 FROM bill_categories WHERE code='education'
-     UNION ALL SELECT id, 'JAMB', 'jamb', 1 FROM bill_categories WHERE code='education'
-     UNION ALL SELECT id, 'Bet9ja', 'bet9ja', 1 FROM bill_categories WHERE code='betting'
-     UNION ALL SELECT id, 'SportyBet', 'sportybet', 1 FROM bill_categories WHERE code='betting'
-     UNION ALL SELECT id, 'Spectranet', 'spectranet', 1 FROM bill_categories WHERE code='internet'
-     UNION ALL SELECT id, 'Smile', 'smile', 1 FROM bill_categories WHERE code='internet'`
+    `INSERT IGNORE INTO bill_providers (category_id, name, code, logo_url, active)
+     SELECT id, 'MTN', 'mtn', 'https://logo.clearbit.com/mtn.ng', 1 FROM bill_categories WHERE code='airtime'
+     UNION ALL SELECT id, 'Airtel', 'airtel', 'https://logo.clearbit.com/airtel.com.ng', 1 FROM bill_categories WHERE code='airtime'
+     UNION ALL SELECT id, 'Glo', 'glo', 'https://logo.clearbit.com/gloworld.com', 1 FROM bill_categories WHERE code='airtime'
+     UNION ALL SELECT id, '9mobile', '9mobile', 'https://logo.clearbit.com/9mobile.com.ng', 1 FROM bill_categories WHERE code='airtime'
+     UNION ALL SELECT id, 'MTN Data', 'mtn-data', 'https://logo.clearbit.com/mtn.ng', 1 FROM bill_categories WHERE code='data'
+     UNION ALL SELECT id, 'Airtel Data', 'airtel-data', 'https://logo.clearbit.com/airtel.com.ng', 1 FROM bill_categories WHERE code='data'
+     UNION ALL SELECT id, 'Glo Data', 'glo-data', 'https://logo.clearbit.com/gloworld.com', 1 FROM bill_categories WHERE code='data'
+     UNION ALL SELECT id, '9mobile Data', '9mobile-data', 'https://logo.clearbit.com/9mobile.com.ng', 1 FROM bill_categories WHERE code='data'
+     UNION ALL SELECT id, 'DStv', 'dstv', 'https://logo.clearbit.com/dstv.com', 1 FROM bill_categories WHERE code='tv'
+     UNION ALL SELECT id, 'GOtv', 'gotv', 'https://logo.clearbit.com/gotvafrica.com', 1 FROM bill_categories WHERE code='tv'
+     UNION ALL SELECT id, 'StarTimes', 'startimes', 'https://logo.clearbit.com/startimestv.com', 1 FROM bill_categories WHERE code='tv'
+     UNION ALL SELECT id, 'IKEDC', 'ikedc', 'https://logo.clearbit.com/ikedc.com', 1 FROM bill_categories WHERE code='electricity'
+     UNION ALL SELECT id, 'EKEDC', 'ekedc', 'https://logo.clearbit.com/ekedp.com', 1 FROM bill_categories WHERE code='electricity'
+     UNION ALL SELECT id, 'AEDC', 'aedc', 'https://logo.clearbit.com/aedc.com.ng', 1 FROM bill_categories WHERE code='electricity'
+     UNION ALL SELECT id, 'WAEC', 'waec', 'https://logo.clearbit.com/waecnigeria.org', 1 FROM bill_categories WHERE code='education'
+     UNION ALL SELECT id, 'JAMB', 'jamb', 'https://logo.clearbit.com/jamb.gov.ng', 1 FROM bill_categories WHERE code='education'
+     UNION ALL SELECT id, 'Bet9ja', 'bet9ja', 'https://logo.clearbit.com/bet9ja.com', 1 FROM bill_categories WHERE code='betting'
+     UNION ALL SELECT id, 'SportyBet', 'sportybet', 'https://logo.clearbit.com/sportybet.com', 1 FROM bill_categories WHERE code='betting'
+     UNION ALL SELECT id, 'Spectranet', 'spectranet', 'https://logo.clearbit.com/spectranet.com.ng', 1 FROM bill_categories WHERE code='internet'
+     UNION ALL SELECT id, 'Smile', 'smile', 'https://logo.clearbit.com/smile.com.ng', 1 FROM bill_categories WHERE code='internet'`
   );
 
   await conn.query(
@@ -76,11 +77,17 @@ async function seedDefaults(conn) {
 async function seedAdmin(conn) {
   const adminEmail = process.env.ADMIN_SEED_EMAIL;
   const adminPasswordHash = process.env.ADMIN_SEED_PASSWORD_HASH;
-  if (!adminEmail || !adminPasswordHash) return;
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD;
+  if (!adminEmail || (!adminPasswordHash && !adminPassword)) return;
+
+  let passwordHash = adminPasswordHash;
+  if (!passwordHash && adminPassword) {
+    passwordHash = await bcrypt.hash(adminPassword, 12);
+  }
 
   await conn.query(
     'INSERT IGNORE INTO admin_users (id, name, email, password_hash, role) VALUES (UUID(), ?, ?, ?, ?)',
-    ['Super Admin', adminEmail, adminPasswordHash, 'superadmin']
+    ['Super Admin', adminEmail, passwordHash, 'superadmin']
   );
 }
 
@@ -261,6 +268,7 @@ export async function initDatabase() {
         category_id INT NOT NULL,
         name VARCHAR(120) NOT NULL,
         code VARCHAR(80) NOT NULL UNIQUE,
+        logo_url VARCHAR(255) NULL,
         active TINYINT NOT NULL DEFAULT 1,
         FOREIGN KEY (category_id) REFERENCES bill_categories(id)
       );
@@ -346,6 +354,7 @@ export async function initDatabase() {
     await seedDefaults(conn);
     await seedAdmin(conn);
     await ensureUserSecurityColumns(conn);
+    await ensureBillProviderLogoColumn(conn);
   } finally {
     conn.release();
   }
@@ -373,5 +382,16 @@ async function ensureUserSecurityColumns(conn) {
   }
   if (alters.length) {
     await conn.query(`ALTER TABLE users ${alters.join(', ')}`);
+  }
+}
+
+async function ensureBillProviderLogoColumn(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'bill_providers'`,
+    [DB_NAME]
+  );
+  const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+  if (!existing.has('logo_url')) {
+    await conn.query('ALTER TABLE bill_providers ADD COLUMN logo_url VARCHAR(255) NULL');
   }
 }

@@ -60,7 +60,12 @@ export default function SendMoney() {
               <Smartphone className="text-[#235697]" size={24} />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-gray-900 dark:text-white">eNaira</p>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-gray-900 dark:text-white">eNaira</p>
+                <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">
+                  Coming Soon
+                </span>
+              </div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Send to eNaira account</p>
             </div>
             <ChevronLeft size={20} className="rotate-180 text-gray-400" />

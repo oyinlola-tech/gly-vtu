@@ -19,6 +19,7 @@ import Dashboard from './pages/Dashboard';
 import SendMoney from './pages/SendMoney';
 import SendToBank from './pages/SendToBank';
 import SendToUser from './pages/SendToUser';
+import ComingSoon from './pages/ComingSoon';
 import Transactions from './pages/Transactions';
 import BuyAirtime from './pages/BuyAirtime';
 import BuyData from './pages/BuyData';
@@ -107,7 +108,11 @@ function AppContent() {
             path="/send/enaira"
             element={
               <PrivateRoute>
-                <SendToUser />
+                <ComingSoon
+                  title="eNaira"
+                  description="eNaira transfers are coming soon. We'll notify you once the service is live."
+                  backTo="/send"
+                />
               </PrivateRoute>
             }
           />

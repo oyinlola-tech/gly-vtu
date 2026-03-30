@@ -19,6 +19,14 @@ export default function PayElectricity() {
   const [showPINInput, setShowPINInput] = useState(false);
   const [error, setError] = useState('');
 
+  const getProviderInitials = (name: string) =>
+    name
+      .split(' ')
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 3)
+      .toUpperCase();
+
   useEffect(() => {
     billsAPI
       .getProviders('electricity')
@@ -67,9 +75,19 @@ export default function PayElectricity() {
                       : 'bg-white dark:bg-gray-900 text-[#3a3c4c] dark:text-white'
                   }`}
                 >
-                  <span className="text-xs font-semibold bg-white/80 text-[#235697] px-2 py-1 rounded-lg">
-                    {provider.name?.slice(0, 3).toUpperCase()}
-                  </span>
+                  <div className="relative w-10 h-10 rounded-full bg-white/80 flex items-center justify-center text-xs font-semibold text-[#235697]">
+                    {getProviderInitials(provider.name || '---')}
+                    {provider.logo_url && (
+                      <img
+                        src={provider.logo_url}
+                        alt={provider.name}
+                        className="absolute inset-0 w-full h-full object-contain rounded-full"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    )}
+                  </div>
                   <span className="text-xs font-semibold">{provider.name}</span>
                 </button>
               ))}

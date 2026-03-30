@@ -42,7 +42,7 @@ router.get('/providers', async (req, res) => {
   if (!category) return res.status(400).json({ error: 'Category required' });
 
   const [rows] = await pool.query(
-    `SELECT p.id, p.name, p.code, c.code as category_code
+    `SELECT p.id, p.name, p.code, p.logo_url, c.code as category_code
      FROM bill_providers p
      JOIN bill_categories c ON c.id = p.category_id
      WHERE c.code = ? AND p.active = 1`,

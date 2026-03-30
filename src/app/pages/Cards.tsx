@@ -1,8 +1,12 @@
 import { Link } from 'react-router';
-import { ChevronLeft, CreditCard, Plus, Lock, MoreVertical } from 'lucide-react';
+import { ChevronLeft, CreditCard, Plus, Lock, MoreVertical, Eye } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 
 export default function Cards() {
+  const virtualCardProvider = (import.meta.env.VITE_VIRTUAL_CARD_PROVIDER || '').trim();
+  const virtualCardStatus = (import.meta.env.VITE_VIRTUAL_CARD_STATUS || 'coming_soon').toLowerCase();
+  const virtualCardReady = virtualCardStatus === 'live';
+
   const cardFeatures = [
     {
       icon: Lock,
@@ -12,7 +16,9 @@ export default function Cards() {
     {
       icon: CreditCard,
       title: 'Virtual Card',
-      description: 'Create unlimited virtual cards',
+      description: virtualCardReady
+        ? 'Issue and manage virtual cards instantly'
+        : 'Virtual cards are coming soon',
     },
     {
       icon: Eye,
@@ -97,10 +103,28 @@ export default function Cards() {
           </div>
         </div>
 
+        {/* Virtual Card Provider */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow mb-6">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+            Virtual Card Provider
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {virtualCardProvider
+              ? `Planned partner: ${virtualCardProvider}`
+              : 'No provider configured yet.'}
+          </p>
+          <span className="inline-flex mt-3 items-center text-xs px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+            {virtualCardReady ? 'Live' : 'Coming Soon'}
+          </span>
+        </div>
+
         {/* Create New Card */}
-        <button className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity mb-6">
+        <button
+          disabled={!virtualCardReady}
+          className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity mb-6 disabled:opacity-50"
+        >
           <Plus size={20} />
-          <span>Create New Virtual Card</span>
+          <span>{virtualCardReady ? 'Create New Virtual Card' : 'Virtual Cards Coming Soon'}</span>
         </button>
 
         {/* Coming Soon Section */}

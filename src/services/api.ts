@@ -530,6 +530,28 @@ export const adminAPI = {
       { admin: true }
     );
   },
+
+  getBillPricing: async () => {
+    return request<any[]>(ADMIN_API_BASE_URL, '/bills/pricing', {}, { admin: true });
+  },
+
+  updateBillPricing: async (
+    id: string,
+    payload: {
+      baseFee: number;
+      markupType: 'flat' | 'percent';
+      markupValue: number;
+      currency: string;
+      active: boolean;
+    }
+  ) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/bills/pricing/${id}`,
+      { method: 'PUT', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
 };
 
 export const tokenStore = {
