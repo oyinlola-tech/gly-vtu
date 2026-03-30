@@ -128,43 +128,57 @@ router.post('/login', otpLimiter, async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  if (admin.totp_enabled) {
-    if (!admin.totp_secret) {
-      return res.status(500).json({ error: 'TOTP not configured' });
+  // TOTP is now mandatory for all admin accounts
+  if (!admin.totp_secret || !admin.totp_enabled) {
+    logSecurityEvent({
+      type: 'admin.login.totp_not_configured',
+      severity: 'high',
+      actorType: 'admin',
+      actorId: admin.id,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { message: 'Admin account missing TOTP configuration' },
+    }).catch(() => null);
+    return res.status(403).json({ 
+      error: 'Two-Factor Authentication (TOTP) is required for admin accounts. Please contact support to enable TOTP.' 
+    });
+  }
+
+  const totpToken = req.body?.totp || null;
+  const backupCode = req.body?.backupCode || null;
+  if (!totpToken && !backupCode) {
+    return res.json({ totpRequired: true });
+  }
+
+  let totpValid = false;
+  if (totpToken) {
+    totpValid = verifyTotp({ token: totpToken, secret: admin.totp_secret });
+  }
+
+  if (!totpValid && backupCode) {
+    const backupCodes = parseJson(admin.totp_backup_codes, []);
+    const usedCodes = new Set(parseJson(admin.backup_codes_used, []));
+    const hashed = hashBackupCode(backupCode);
+    if (backupCodes.includes(hashed) && !usedCodes.has(hashed)) {
+      usedCodes.add(hashed);
+      await pool.query('UPDATE admin_users SET backup_codes_used = ? WHERE id = ?', [
+        JSON.stringify([...usedCodes]),
+        admin.id,
+      ]);
+      totpValid = true;
     }
-    const totpToken = req.body?.totp || null;
-    const backupCode = req.body?.backupCode || null;
-    if (!totpToken && !backupCode) {
-      return res.json({ totpRequired: true });
-    }
-    let totpValid = false;
-    if (totpToken) {
-      totpValid = verifyTotp({ token: totpToken, secret: admin.totp_secret });
-    }
-    if (!totpValid && backupCode) {
-      const backupCodes = parseJson(admin.totp_backup_codes, []);
-      const usedCodes = new Set(parseJson(admin.backup_codes_used, []));
-      const hashed = hashBackupCode(backupCode);
-      if (backupCodes.includes(hashed) && !usedCodes.has(hashed)) {
-        usedCodes.add(hashed);
-        await pool.query('UPDATE admin_users SET backup_codes_used = ? WHERE id = ?', [
-          JSON.stringify([...usedCodes]),
-          admin.id,
-        ]);
-        totpValid = true;
-      }
-    }
-    if (!totpValid) {
-      logSecurityEvent({
-        type: 'admin.login.totp_failed',
-        severity: 'medium',
-        actorType: 'admin',
-        actorId: admin.id,
-        ip: req.ip,
-        userAgent: req.headers['user-agent'],
-      }).catch(() => null);
-      return res.status(401).json({ error: 'Invalid TOTP code' });
-    }
+  }
+
+  if (!totpValid) {
+    logSecurityEvent({
+      type: 'admin.login.totp_failed',
+      severity: 'medium',
+      actorType: 'admin',
+      actorId: admin.id,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => null);
+    return res.status(401).json({ error: 'Invalid TOTP code' });
   }
 
   const accessToken = signAccessToken({ type: 'admin', sub: admin.id }, JWT_ADMIN_SECRET);

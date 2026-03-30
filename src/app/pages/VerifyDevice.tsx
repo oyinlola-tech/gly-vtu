@@ -12,6 +12,9 @@ export default function VerifyDevice() {
   const [code, setCode] = useState('');
   const [question, setQuestion] = useState<string | null>(null);
   const [answer, setAnswer] = useState('');
+  const [totpRequired, setTotpRequired] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
+  const [backupCode, setBackupCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,11 +31,18 @@ export default function VerifyDevice() {
     setError('');
     setLoading(true);
     try {
-      await authAPI.verifyDevice({
+      const response = await authAPI.verifyDevice({
         email,
         code: code || undefined,
         securityAnswer: answer || undefined,
+        totp: totpCode || undefined,
+        backupCode: backupCode || undefined,
       });
+      if (response?.totpRequired) {
+        setTotpRequired(true);
+        setError('Enter your authenticator code to continue.');
+        return;
+      }
       await refreshProfile();
       const security = await userAPI.getSecurityStatus().catch(() => null);
       if (security && !security.pinSet) {
@@ -101,6 +111,35 @@ export default function VerifyDevice() {
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
                 placeholder="Answer"
               />
+            </div>
+          )}
+
+          {totpRequired && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Authenticator Code
+                </label>
+                <input
+                  type="text"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697] text-center tracking-widest"
+                  placeholder="000000"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Backup Code (optional)
+                </label>
+                <input
+                  type="text"
+                  value={backupCode}
+                  onChange={(e) => setBackupCode(e.target.value.trim())}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                  placeholder="Use if you lost access"
+                />
+              </div>
             </div>
           )}
 

@@ -5,16 +5,56 @@ import { sanitizeFlutterwaveWebhook } from '../utils/sanitize.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { sendReceiptEmail } from '../utils/email.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { webhookLimiter } from '../middleware/rateLimiters.js';
 
 const router = express.Router();
 
-router.post('/', async (req, res) => {
+// Utility to get request IP
+function getRequestIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return String(forwarded).split(',')[0].trim();
+  }
+  return req.ip;
+}
+
+// IP whitelist validation for Flutterwave webhooks
+function isIpAllowed(req) {
+  const list = (process.env.FLW_WEBHOOK_IPS || '')
+    .split(',')
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+  
+  // If no IP list configured, allow in non-production or deny in production
+  if (!list.length) {
+    return process.env.NODE_ENV !== 'production';
+  }
+  
+  const ip = getRequestIp(req);
+  return list.includes(ip);
+}
+
+router.post('/', webhookLimiter, async (req, res) => {
+  // Check IP whitelist first
+  if (!isIpAllowed(req)) {
+    logSecurityEvent({
+      type: 'webhook.flutterwave.ip_rejected',
+      severity: 'high',
+      actorType: 'system',
+      ip: getRequestIp(req),
+      userAgent: req.headers['user-agent'],
+      metadata: { reason: 'IP not whitelisted' },
+    }).catch(() => null);
+    return res.status(403).json({ error: 'IP not allowed' });
+  }
+
+  // Verify webhook signature
   if (!verifyFlutterwaveWebhook(req)) {
     logSecurityEvent({
       type: 'webhook.flutterwave.invalid',
       severity: 'high',
       actorType: 'system',
-      ip: req.ip,
+      ip: getRequestIp(req),
       userAgent: req.headers['user-agent'],
       metadata: { signature: Boolean(req.headers['verif-hash']) },
     }).catch(() => null);

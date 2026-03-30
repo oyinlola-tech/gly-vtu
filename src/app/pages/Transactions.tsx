@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router';
 import { ChevronLeft, Filter, Search, Download } from 'lucide-react';
 import { walletAPI } from '../../services/api';
 import BottomNav from '../components/BottomNav';
-import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Transactions() {
   const navigate = useNavigate();
@@ -153,8 +152,11 @@ export default function Transactions() {
 
       <div className="px-6 pt-6">
         {loading ? (
-          <div className="flex justify-center py-12">
-            <LoadingSpinner />
+          <div className="space-y-3 animate-pulse">
+            <div className="h-16 bg-white dark:bg-gray-900 rounded-xl shadow" />
+            <div className="h-16 bg-white dark:bg-gray-900 rounded-xl shadow" />
+            <div className="h-16 bg-white dark:bg-gray-900 rounded-xl shadow" />
+            <div className="h-16 bg-white dark:bg-gray-900 rounded-xl shadow" />
           </div>
         ) : filteredTransactions.length === 0 ? (
           <div className="text-center py-12">

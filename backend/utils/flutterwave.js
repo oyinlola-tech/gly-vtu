@@ -111,7 +111,31 @@ export async function unblockVirtualCard(cardId) {
 
 export function verifyFlutterwaveWebhook(req) {
   const secret = process.env.FLW_WEBHOOK_HASH || '';
-  if (!secret) return false;
-  const header = (req.headers['verif-hash'] || '').toString();
-  return header && header === secret;
+  if (!secret) {
+    return false;
+  }
+  
+  // Get the verif-hash from request headers
+  const signature = (req.headers['verif-hash'] || '').toString();
+  if (!signature) {
+    return false;
+  }
+  
+  // Get the raw body for HMAC calculation
+  const rawBody = Buffer.isBuffer(req.rawBody) 
+    ? req.rawBody 
+    : Buffer.from(JSON.stringify(req.body || ''));
+  
+  // Calculate HMAC-SHA256
+  try {
+    const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    
+    // Use timing-safe comparison to prevent timing attacks
+    if (expected.length !== signature.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch (err) {
+    return false;
+  }
 }

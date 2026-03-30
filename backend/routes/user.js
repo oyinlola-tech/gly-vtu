@@ -14,6 +14,13 @@ import {
 import { logAudit } from '../utils/audit.js';
 import bcrypt from 'bcryptjs';
 import { QUESTIONS, normalizeAnswer, isValidSecurityAnswer } from '../utils/securityQuestions.js';
+import {
+  generateTotpSecret,
+  generateTotpQr,
+  verifyTotp,
+  generateBackupCodes,
+  hashBackupCode,
+} from '../utils/totp.js';
 import zxcvbn from 'zxcvbn';
 import { getKycLimitConfig } from '../utils/kycLimits.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
@@ -250,10 +257,64 @@ router.get('/security', requireUser, async (req, res) => {
   const status = await getPinStatus(req.user.sub);
   if (!status) return res.status(404).json({ error: 'Not found' });
   const [[row]] = await pool.query(
-    'SELECT security_question_enabled FROM users WHERE id = ?',
+    'SELECT security_question_enabled, totp_enabled FROM users WHERE id = ?',
     [req.user.sub]
   );
-  return res.json({ ...status, securityQuestionEnabled: Boolean(row?.security_question_enabled) });
+  return res.json({
+    ...status,
+    securityQuestionEnabled: Boolean(row?.security_question_enabled),
+    totpEnabled: Boolean(row?.totp_enabled),
+  });
+});
+
+function csvEscape(value) {
+  const str = value === null || value === undefined ? '' : String(value);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+router.get('/security-events', requireUser, async (req, res) => {
+  const exportCsv = String(req.query.export || '').toLowerCase() === 'csv';
+  const limit = Math.min(Number(req.query.limit || 50), 200);
+  const offset = Math.max(Number(req.query.offset || 0), 0);
+
+  const [rows] = await pool.query(
+    `SELECT id, event_type, severity, ip_address, user_agent, metadata, created_at
+     FROM security_events
+     WHERE actor_type = 'user' AND actor_id = ?
+     ORDER BY created_at DESC
+     LIMIT ? OFFSET ?`,
+    [req.user.sub, limit, offset]
+  );
+
+  if (!exportCsv) {
+    return res.json(rows || []);
+  }
+
+  const header = ['id', 'event_type', 'severity', 'ip_address', 'user_agent', 'metadata', 'created_at'];
+  const lines = [header.join(',')];
+  for (const row of rows || []) {
+    lines.push(
+      [
+        row.id,
+        row.event_type,
+        row.severity,
+        row.ip_address || '',
+        row.user_agent || '',
+        row.metadata ? JSON.stringify(row.metadata) : '',
+        row.created_at ? new Date(row.created_at).toISOString() : '',
+      ]
+        .map(csvEscape)
+        .join(',')
+    );
+  }
+
+  const filename = `security-events-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  return res.send(lines.join('\n'));
 });
 
 router.get('/kyc/limits', requireUser, async (req, res) => {
@@ -308,6 +369,24 @@ router.post('/sessions/:id/revoke', requireUser, async (req, res) => {
     userAgent: req.headers['user-agent'],
   }).catch(() => null);
   return res.json({ message: 'Session revoked' });
+});
+
+router.post('/sessions/:id/label', requireUser, async (req, res) => {
+  const label = String(req.body?.label || '').trim();
+  if (!label || label.length > 80) {
+    return res.status(400).json({ error: 'Label is required (max 80 chars)' });
+  }
+  const [rows] = await pool.query(
+    'SELECT id FROM user_devices WHERE id = ? AND user_id = ? LIMIT 1',
+    [req.params.id, req.user.sub]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Device not found' });
+  await pool.query('UPDATE user_devices SET label = ? WHERE id = ? AND user_id = ?', [
+    label,
+    req.params.id,
+    req.user.sub,
+  ]);
+  return res.json({ message: 'Device label updated' });
 });
 
 router.post('/password/change', requireUser, async (req, res) => {
@@ -551,6 +630,86 @@ router.post('/security-question/verify', requireUser, async (req, res) => {
   const ok = await bcrypt.compare(normalizeAnswer(answer), row.security_answer_hash);
   if (!ok) return res.status(400).json({ error: 'Incorrect answer' });
   return res.json({ valid: true });
+});
+
+router.post('/totp/setup', requireUser, async (req, res) => {
+  const [[user]] = await pool.query(
+    'SELECT email, totp_enabled FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const secret = generateTotpSecret(user.email || 'user');
+  const qrCode = await generateTotpQr(secret.otpauth_url);
+
+  await pool.query(
+    'UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?',
+    [secret.base32, req.user.sub]
+  );
+
+  return res.json({
+    secret: secret.base32,
+    otpauthUrl: secret.otpauth_url,
+    qrCode,
+  });
+});
+
+router.post('/totp/enable', requireUser, async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: 'TOTP code required' });
+
+  const [[user]] = await pool.query(
+    'SELECT totp_secret FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!user?.totp_secret) return res.status(400).json({ error: 'TOTP not set up' });
+
+  const valid = verifyTotp({ token, secret: user.totp_secret });
+  if (!valid) return res.status(400).json({ error: 'Invalid TOTP code' });
+
+  const backupCodes = generateBackupCodes();
+  const hashed = backupCodes.map((code) => hashBackupCode(code));
+  await pool.query(
+    'UPDATE users SET totp_enabled = 1, totp_backup_codes = ?, backup_codes_used = ? WHERE id = ?',
+    [JSON.stringify(hashed), JSON.stringify([]), req.user.sub]
+  );
+
+  return res.json({ enabled: true, backupCodes });
+});
+
+router.post('/totp/disable', requireUser, async (req, res) => {
+  const { token, backupCode } = req.body || {};
+  const [[user]] = await pool.query(
+    'SELECT totp_secret, totp_backup_codes, backup_codes_used FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  let valid = false;
+  if (token && user.totp_secret) {
+    valid = verifyTotp({ token, secret: user.totp_secret });
+  }
+  if (!valid && backupCode) {
+    const used = new Set(JSON.parse(user.backup_codes_used || '[]'));
+    const codes = JSON.parse(user.totp_backup_codes || '[]');
+    const hashed = hashBackupCode(backupCode);
+    if (codes.includes(hashed) && !used.has(hashed)) {
+      used.add(hashed);
+      await pool.query('UPDATE users SET backup_codes_used = ? WHERE id = ?', [
+        JSON.stringify([...used]),
+        req.user.sub,
+      ]);
+      valid = true;
+    }
+  }
+  if (!valid) return res.status(400).json({ error: 'Invalid TOTP or backup code' });
+
+  await pool.query(
+    'UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_backup_codes = NULL, backup_codes_used = NULL WHERE id = ?',
+    [req.user.sub]
+  );
+
+  return res.json({ disabled: true });
 });
 
 export default router;

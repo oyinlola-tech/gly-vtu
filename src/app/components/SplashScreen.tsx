@@ -37,7 +37,11 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
           className="w-24 h-24 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-6"
         >
           <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center">
-            <span className="text-4xl font-bold text-[#235697]">GLY</span>
+            <img
+              src="/assets/logo/gly-vtu.png"
+              alt="GLY VTU logo"
+              className="w-14 h-14 object-contain"
+            />
           </div>
         </motion.div>
         <h1 className="text-4xl font-bold text-white mb-2">GLY VTU</h1>

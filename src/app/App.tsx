@@ -1,53 +1,57 @@
-import { useState, useEffect } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { AdminAuthProvider, useAdminAuth } from '../contexts/AdminAuthContext';
 import SplashScreen from './components/SplashScreen';
 import NotificationListener from './components/NotificationListener';
+import LoadingSpinner from './components/LoadingSpinner';
 
-// Auth Pages
-import Login from './pages/Login';
-import Register from './pages/Register';
-import SetPIN from './pages/SetPIN';
-import VerifyDevice from './pages/VerifyDevice';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
+// Auth Pages (code-split)
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const SetPIN = lazy(() => import('./pages/SetPIN'));
+const VerifyDevice = lazy(() => import('./pages/VerifyDevice'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 
-// User Pages
-import Dashboard from './pages/Dashboard';
-import SendMoney from './pages/SendMoney';
-import SendToBank from './pages/SendToBank';
-import SendToUser from './pages/SendToUser';
-import ComingSoon from './pages/ComingSoon';
-import Transactions from './pages/Transactions';
-import BuyAirtime from './pages/BuyAirtime';
-import BuyData from './pages/BuyData';
-import PayTV from './pages/PayTV';
-import PayElectricity from './pages/PayElectricity';
-import TransactionSuccess from './pages/TransactionSuccess';
-import Bills from './pages/Bills';
-import Cards from './pages/Cards';
-import More from './pages/More';
-import AddMoney from './pages/AddMoney';
-import Profile from './pages/Profile';
-import Security from './pages/Security';
-import SecurityCenter from './pages/SecurityCenter';
-import Notifications from './pages/Notifications';
-import HelpCenter from './pages/HelpCenter';
-import TermsPrivacy from './pages/TermsPrivacy';
-import SecurityTips from './pages/SecurityTips';
-import KYC from './pages/KYC';
-import KycStatusLimits from './pages/KycStatusLimits';
-import CompliancePolicies from './pages/CompliancePolicies';
-import Disputes from './pages/Disputes';
+// User Pages (code-split)
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const SendMoney = lazy(() => import('./pages/SendMoney'));
+const SendToBank = lazy(() => import('./pages/SendToBank'));
+const SendToUser = lazy(() => import('./pages/SendToUser'));
+const ComingSoon = lazy(() => import('./pages/ComingSoon'));
+const Transactions = lazy(() => import('./pages/Transactions'));
+const TransactionDetails = lazy(() => import('./pages/TransactionDetails'));
+const BuyAirtime = lazy(() => import('./pages/BuyAirtime'));
+const BuyData = lazy(() => import('./pages/BuyData'));
+const PayTV = lazy(() => import('./pages/PayTV'));
+const PayElectricity = lazy(() => import('./pages/PayElectricity'));
+const TransactionSuccess = lazy(() => import('./pages/TransactionSuccess'));
+const Bills = lazy(() => import('./pages/Bills'));
+const Cards = lazy(() => import('./pages/Cards'));
+const More = lazy(() => import('./pages/More'));
+const AddMoney = lazy(() => import('./pages/AddMoney'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Security = lazy(() => import('./pages/Security'));
+const SecurityCenter = lazy(() => import('./pages/SecurityCenter'));
+const TwoFactorSetup = lazy(() => import('./pages/TwoFactorSetup'));
+const DeviceManagement = lazy(() => import('./pages/DeviceManagement'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const HelpCenter = lazy(() => import('./pages/HelpCenter'));
+const TermsPrivacy = lazy(() => import('./pages/TermsPrivacy'));
+const SecurityTips = lazy(() => import('./pages/SecurityTips'));
+const KYC = lazy(() => import('./pages/KYC'));
+const KycStatusLimits = lazy(() => import('./pages/KycStatusLimits'));
+const CompliancePolicies = lazy(() => import('./pages/CompliancePolicies'));
+const Disputes = lazy(() => import('./pages/Disputes'));
 
-// Admin Pages
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminLogin from './pages/admin/AdminLogin';
-import AdminTransactions from './pages/admin/AdminTransactions';
-import AdminReview from './pages/admin/AdminReview';
-import AdminAuditLogs from './pages/admin/AdminAuditLogs';
+// Admin Pages (code-split)
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
+const AdminTransactions = lazy(() => import('./pages/admin/AdminTransactions'));
+const AdminReview = lazy(() => import('./pages/admin/AdminReview'));
+const AdminAuditLogs = lazy(() => import('./pages/admin/AdminAuditLogs'));
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -67,15 +71,23 @@ function AppContent() {
     <>
       {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
       {!showSplash && (
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Navigate to="/login" />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/set-pin" element={<SetPIN />} />
-          <Route path="/verify-device" element={<VerifyDevice />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+        <Suspense
+          fallback={
+            <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-white dark:bg-gray-950">
+              <LoadingSpinner size="lg" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading page...</p>
+            </div>
+          }
+        >
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<Navigate to="/login" />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/set-pin" element={<SetPIN />} />
+            <Route path="/verify-device" element={<VerifyDevice />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* User Routes - Dashboard */}
           <Route
@@ -138,7 +150,7 @@ function AppContent() {
             path="/transaction/:id"
             element={
               <PrivateRoute>
-                <Transactions />
+                <TransactionDetails />
               </PrivateRoute>
             }
           />
@@ -208,6 +220,22 @@ function AppContent() {
             element={
               <PrivateRoute>
                 <SecurityCenter />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/auth/setup-2fa"
+            element={
+              <PrivateRoute>
+                <TwoFactorSetup />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/settings/devices"
+            element={
+              <PrivateRoute>
+                <DeviceManagement />
               </PrivateRoute>
             }
           />
@@ -336,8 +364,9 @@ function AppContent() {
           <Route path="/admin/login" element={<AdminLogin />} />
 
           {/* Catch all */}
-          <Route path="*" element={<Navigate to="/dashboard" />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/dashboard" />} />
+          </Routes>
+        </Suspense>
       )}
     </>
   );

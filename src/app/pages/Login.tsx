@@ -1,19 +1,73 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { motion } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { Eye, EyeOff } from 'lucide-react';
+import { tokenStore } from '../../services/api';
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
+  const [totpCode, setTotpCode] = useState('');
+  const [backupCode, setBackupCode] = useState('');
+  const [totpRequired, setTotpRequired] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const registered = location.state?.registered;
+  const [recentDevices, setRecentDevices] = useState<{ label: string; lastLoginAt: string }[]>([]);
+  const [lastLoginHint, setLastLoginHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('login_hints');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setRecentDevices(parsed.slice(0, 3));
+        }
+      } catch {
+        // ignore
+      }
+    }
+    const deviceId = tokenStore.getDeviceId();
+    const last = localStorage.getItem(`last_login_${deviceId}`);
+    if (last) {
+      setLastLoginHint(last);
+    }
+  }, []);
+
+  const buildDeviceLabel = () => {
+    const ua = navigator.userAgent || '';
+    const isMobile = /Mobi|Android/i.test(ua);
+    const isTablet = /Tablet|iPad/i.test(ua);
+    const type = isTablet ? 'Tablet' : isMobile ? 'Mobile' : 'Desktop';
+    let browser = 'Browser';
+    if (ua.includes('Chrome')) browser = 'Chrome';
+    else if (ua.includes('Firefox')) browser = 'Firefox';
+    else if (ua.includes('Safari')) browser = 'Safari';
+    else if (ua.includes('Edge')) browser = 'Edge';
+    return `${browser} · ${type}`;
+  };
+
+  const persistLoginHint = () => {
+    const deviceId = tokenStore.getDeviceId();
+    const label = buildDeviceLabel();
+    const lastLoginAt = new Date().toISOString();
+    localStorage.setItem(`last_login_${deviceId}`, lastLoginAt);
+    const stored = localStorage.getItem('login_hints');
+    const list = stored ? JSON.parse(stored) : [];
+    const filtered = Array.isArray(list)
+      ? list.filter((item: any) => item.label !== label)
+      : [];
+    const next = [{ label, lastLoginAt }, ...filtered].slice(0, 3);
+    localStorage.setItem('login_hints', JSON.stringify(next));
+    setRecentDevices(next);
+    setLastLoginHint(lastLoginAt);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,15 +75,21 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const result = await login(formData.email, formData.password);
+      const result = await login(formData.email, formData.password, totpCode || undefined, backupCode || undefined);
       if (result?.otpRequired) {
         navigate('/verify-device', { state: { email: formData.email } });
+        return;
+      }
+      if (result?.totpRequired) {
+        setTotpRequired(true);
+        setError('Enter your authenticator code to continue.');
         return;
       }
       if (result?.needsPin) {
         navigate('/set-pin');
         return;
       }
+      persistLoginHint();
       navigate('/dashboard');
     } catch (err) {
       setError('Invalid email or password');
@@ -48,7 +108,11 @@ export default function Login() {
         >
           <div className="text-center mb-12">
             <div className="w-20 h-20 bg-gradient-to-br from-[#235697] to-[#114280] rounded-3xl flex items-center justify-center mx-auto mb-6">
-              <span className="text-3xl font-bold text-white">GLY</span>
+              <img
+                src="/assets/logo/gly-vtu.png"
+                alt="GLY VTU logo"
+                className="w-12 h-12 object-contain"
+              />
             </div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Welcome Back</h1>
             <p className="text-gray-500 dark:text-gray-400">Sign in to continue to GLY VTU</p>
@@ -111,6 +175,36 @@ export default function Login() {
               </div>
             </div>
 
+            {totpRequired && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Authenticator Code
+                  </label>
+                  <input
+                    type="text"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697] text-center tracking-widest"
+                    placeholder="000000"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Backup Code (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={backupCode}
+                    onChange={(e) => setBackupCode(e.target.value.trim())}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    placeholder="Use if you lost access"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2">
                 <input type="checkbox" className="rounded" />
@@ -136,6 +230,27 @@ export default function Login() {
               Sign Up
             </Link>
           </p>
+
+          <div className="mt-6 space-y-3">
+            {lastLoginHint && (
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 text-xs text-gray-600 dark:text-gray-300">
+                Last login on this device: {new Date(lastLoginHint).toLocaleString()}
+              </div>
+            )}
+            {recentDevices.length > 0 && (
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3">
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Recent devices</p>
+                <div className="space-y-2 text-xs text-gray-600 dark:text-gray-400">
+                  {recentDevices.map((device) => (
+                    <div key={`${device.label}-${device.lastLoginAt}`} className="flex items-center justify-between">
+                      <span>{device.label}</span>
+                      <span>{new Date(device.lastLoginAt).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </motion.div>
       </div>
 

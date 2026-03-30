@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import {
   Eye, EyeOff, Plus, Send, CreditCard, Phone, Wifi, Tv, Zap,
-  Sun, Moon, Bell, Wallet, Receipt
+  Sun, Moon, Bell, Wallet, Receipt, ShieldCheck
 } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,6 +17,9 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [kycInfo, setKycInfo] = useState<any>(null);
+  const [securityStatus, setSecurityStatus] = useState<any>(null);
+  const [deviceCount, setDeviceCount] = useState(0);
+  const [securityEvents, setSecurityEvents] = useState<any[]>([]);
 
   useEffect(() => {
     loadDashboard();
@@ -24,10 +27,13 @@ export default function Dashboard() {
 
   const loadDashboard = async () => {
     try {
-      const [balanceRes, txns, kyc] = await Promise.all([
+      const [balanceRes, txns, kyc, security, sessions, events] = await Promise.all([
         walletAPI.getBalance(),
         walletAPI.getTransactions(),
         userAPI.getKycLimits(),
+        userAPI.getSecurityStatus(),
+        userAPI.getSessions(),
+        userAPI.getSecurityEvents({ limit: 3 }),
       ]);
       setBalance(Number(balanceRes?.balance || 0));
       setLastUpdated(new Date().toISOString());
@@ -66,6 +72,9 @@ export default function Dashboard() {
         })
       );
       setKycInfo(kyc);
+      setSecurityStatus(security);
+      setDeviceCount((sessions || []).length);
+      setSecurityEvents(events || []);
     } catch (err) {
       console.error('Failed to load dashboard data');
     }
@@ -113,6 +122,16 @@ export default function Dashboard() {
                 {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
               </button>
             </div>
+            <div className="flex items-center gap-2 mb-2">
+              <span
+                className={`text-xs px-2 py-1 rounded-full inline-flex items-center gap-1 ${
+                  securityStatus?.totpEnabled ? 'bg-green-500/20 text-green-100' : 'bg-yellow-500/20 text-yellow-100'
+                }`}
+              >
+                <ShieldCheck size={12} />
+                {securityStatus?.totpEnabled ? 'Secure' : 'Protection needed'}
+              </span>
+            </div>
             <h2 className="text-white text-3xl font-bold mb-2">
               {showBalance
                 ? `₦${balance.toLocaleString('en-NG', {
@@ -146,7 +165,53 @@ export default function Dashboard() {
       </div>
 
       <div className="px-6 -mt-16">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 mb-6">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 mb-6 transition-transform hover:-translate-y-0.5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Security Status</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">Your account</p>
+            </div>
+            <Link to="/security-center" className="text-xs text-[#235697] font-semibold">
+              Manage
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+              <p className="text-gray-500 dark:text-gray-400">2FA</p>
+              <p className={`font-semibold ${securityStatus?.totpEnabled ? 'text-green-600' : 'text-yellow-600'}`}>
+                {securityStatus?.totpEnabled ? 'Enabled' : 'Off'}
+              </p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+              <p className="text-gray-500 dark:text-gray-400">PIN</p>
+              <p className={`font-semibold ${securityStatus?.pinSet ? 'text-green-600' : 'text-red-600'}`}>
+                {securityStatus?.pinSet ? 'Set' : 'Missing'}
+              </p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+              <p className="text-gray-500 dark:text-gray-400">Devices</p>
+              <p className="font-semibold text-gray-900 dark:text-white">{deviceCount}</p>
+            </div>
+          </div>
+          {(!securityStatus?.totpEnabled || securityEvents.length) && (
+            <div className="mt-4 space-y-2">
+              {!securityStatus?.totpEnabled && (
+                <div className="text-xs bg-yellow-50 border border-yellow-200 rounded-xl p-2 text-yellow-700">
+                  2FA is off. Enable it to protect your account.
+                </div>
+              )}
+              {securityEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="text-xs bg-red-50 border border-red-200 rounded-xl p-2 text-red-700"
+                >
+                  Security alert: {event.event_type?.replace(/\./g, ' ') || 'Event detected'}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 mb-6 transition-transform hover:-translate-y-0.5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">KYC Tier</p>

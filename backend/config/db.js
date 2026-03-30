@@ -2,6 +2,7 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { ensureAdminTotpColumns } from '../docs/migrations/2026-03-30_admin_totp.js';
 
 dotenv.config();
 
@@ -468,6 +469,8 @@ export async function initDatabase() {
     await ensureBillProviderLogoColumn(conn);
     await ensureBillOrderProviderNullable(conn);
     await ensureSecurityEventsTable(conn);
+    await ensureAdminTotpColumns(conn, DB_NAME);
+    await ensureUserTotpColumns(conn);
   } finally {
     conn.release();
   }
@@ -523,6 +526,12 @@ async function ensureUserLoginLockColumns(conn) {
   }
   if (!existing.has('last_login_failed_at')) {
     alters.push('ADD COLUMN last_login_failed_at TIMESTAMP NULL');
+  }
+  if (!existing.has('last_login_at')) {
+    alters.push('ADD COLUMN last_login_at TIMESTAMP NULL');
+  }
+  if (!existing.has('last_login_ip')) {
+    alters.push('ADD COLUMN last_login_ip VARCHAR(60) NULL');
   }
   if (alters.length) {
     await conn.query(`ALTER TABLE users ${alters.join(', ')}`);
@@ -679,4 +688,28 @@ async function ensureSecurityEventsTable(conn) {
       INDEX idx_event_actor (actor_type, actor_id)
     )
   `);
+}
+
+async function ensureUserTotpColumns(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'`,
+    [DB_NAME]
+  );
+  const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+  const alters = [];
+  if (!existing.has('totp_secret')) {
+    alters.push("ADD COLUMN totp_secret VARCHAR(255) NULL COMMENT 'Base32 encoded TOTP secret'");
+  }
+  if (!existing.has('totp_enabled')) {
+    alters.push('ADD COLUMN totp_enabled TINYINT NOT NULL DEFAULT 0');
+  }
+  if (!existing.has('totp_backup_codes')) {
+    alters.push("ADD COLUMN totp_backup_codes JSON NULL COMMENT 'Array of hashed backup codes'");
+  }
+  if (!existing.has('backup_codes_used')) {
+    alters.push("ADD COLUMN backup_codes_used JSON NULL COMMENT 'Array of used backup code hashes'");
+  }
+  if (alters.length) {
+    await conn.query(`ALTER TABLE users ${alters.join(', ')}`);
+  }
 }

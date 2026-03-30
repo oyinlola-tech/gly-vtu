@@ -23,6 +23,7 @@ import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js
 import zxcvbn from 'zxcvbn';
 import { checkFailedLoginAnomaly } from '../utils/anomalies.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { verifyTotp, hashBackupCode } from '../utils/totp.js';
 
 const router = express.Router();
 
@@ -273,8 +274,8 @@ router.post('/login', otpLimiter, async (req, res) => {
   }
 
   await pool.query(
-    'UPDATE users SET login_failed_attempts = 0, login_locked_until = NULL, last_login_failed_at = NULL WHERE id = ?',
-    [user.id]
+    'UPDATE users SET login_failed_attempts = 0, login_locked_until = NULL, last_login_failed_at = NULL, last_login_at = NOW(), last_login_ip = ? WHERE id = ?',
+    [req.ip, user.id]
   );
 
   const [devices] = await pool.query(
@@ -311,6 +312,34 @@ router.post('/login', otpLimiter, async (req, res) => {
     'UPDATE user_devices SET last_seen = NOW(), ip_address = ?, user_agent = ? WHERE user_id = ? AND device_id = ?',
     [req.ip, req.headers['user-agent'] || null, user.id, deviceId]
   );
+
+  if (user.totp_enabled) {
+    const totpToken = req.body?.totp || null;
+    const backupCode = req.body?.backupCode || null;
+    if (!totpToken && !backupCode) {
+      return res.json({ totpRequired: true });
+    }
+    let totpValid = false;
+    if (totpToken && user.totp_secret) {
+      totpValid = verifyTotp({ token: totpToken, secret: user.totp_secret });
+    }
+    if (!totpValid && backupCode) {
+      const used = new Set(JSON.parse(user.backup_codes_used || '[]'));
+      const codes = JSON.parse(user.totp_backup_codes || '[]');
+      const hashed = hashBackupCode(backupCode);
+      if (codes.includes(hashed) && !used.has(hashed)) {
+        used.add(hashed);
+        await pool.query('UPDATE users SET backup_codes_used = ? WHERE id = ?', [
+          JSON.stringify([...used]),
+          user.id,
+        ]);
+        totpValid = true;
+      }
+    }
+    if (!totpValid) {
+      return res.status(401).json({ error: 'Invalid TOTP code' });
+    }
+  }
 
   const accessToken = signAccessToken({ type: 'user', sub: user.id }, JWT_SECRET);
   setAccessCookie(res, accessToken, 'user');
@@ -356,14 +385,14 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
     const [rows] = await pool.query(
-      'SELECT id, full_name, email, phone FROM users WHERE id = ?',
+      'SELECT id, full_name, email, phone, totp_enabled, totp_secret, totp_backup_codes, backup_codes_used FROM users WHERE id = ?',
       [otp.user_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     user = rows[0];
   } else {
     const [rows] = await pool.query(
-      'SELECT id, full_name, email, phone FROM users WHERE email = ? LIMIT 1',
+      'SELECT id, full_name, email, phone, totp_enabled, totp_secret, totp_backup_codes, backup_codes_used FROM users WHERE email = ? LIMIT 1',
       [email]
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
@@ -378,12 +407,44 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
     user = rows[0];
   }
 
+  if (user?.totp_enabled) {
+    const totpToken = req.body?.totp || null;
+    const backupCode = req.body?.backupCode || null;
+    if (!totpToken && !backupCode) {
+      return res.json({ totpRequired: true });
+    }
+    let totpValid = false;
+    if (totpToken && user.totp_secret) {
+      totpValid = verifyTotp({ token: totpToken, secret: user.totp_secret });
+    }
+    if (!totpValid && backupCode) {
+      const used = new Set(JSON.parse(user.backup_codes_used || '[]'));
+      const codes = JSON.parse(user.totp_backup_codes || '[]');
+      const hashed = hashBackupCode(backupCode);
+      if (codes.includes(hashed) && !used.has(hashed)) {
+        used.add(hashed);
+        await pool.query('UPDATE users SET backup_codes_used = ? WHERE id = ?', [
+          JSON.stringify([...used]),
+          user.id,
+        ]);
+        totpValid = true;
+      }
+    }
+    if (!totpValid) {
+      return res.status(401).json({ error: 'Invalid TOTP code' });
+    }
+  }
+
   await pool.query(
     `INSERT INTO user_devices (id, user_id, device_id, label, ip_address, user_agent)
      VALUES (UUID(), ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE last_seen = NOW(), ip_address = VALUES(ip_address), user_agent = VALUES(user_agent)`,
     [user.id, deviceId, label || null, req.ip, req.headers['user-agent'] || null]
   );
+  await pool.query('UPDATE users SET last_login_at = NOW(), last_login_ip = ? WHERE id = ?', [
+    req.ip,
+    user.id,
+  ]);
 
   const accessToken = signAccessToken({ type: 'user', sub: user.id }, JWT_SECRET);
   setAccessCookie(res, accessToken, 'user');

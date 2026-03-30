@@ -5,21 +5,27 @@ const MAX_ATTEMPTS = Number(process.env.PIN_MAX_ATTEMPTS || 5);
 const LOCK_MINUTES = Number(process.env.PIN_LOCK_MINUTES || 15);
 
 export function isValidPin(pin) {
-  return typeof pin === 'string' && /^\d{6}$/.test(pin);
+  return typeof pin === 'string' && /^\d{8,}$/.test(pin);
 }
 
 export function validatePinComplexity(pin) {
   if (!isValidPin(pin)) {
-    return 'PIN must be exactly 6 digits';
+    return 'PIN must be at least 8 digits';
   }
-  if (/^(\d)\1{5}$/.test(pin)) {
-    return 'PIN cannot be all the same digit (e.g., 111111)';
+  
+  // Check for all same digits (111111111)
+  if (/^(\d)\1+$/.test(pin)) {
+    return 'PIN cannot be all the same digit (e.g., 11111111)';
   }
+  
+  // Check for 4+ consecutive identical digits
   if (/(\d)\1{3,}/.test(pin)) {
     return 'PIN cannot contain 4+ consecutive identical digits';
   }
+  
+  // Check for sequential patterns (123456... or 987654...)
   let sequential = true;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < pin.length - 1; i++) {
     const curr = Number(pin[i]);
     const next = Number(pin[i + 1]);
     if (curr + 1 !== next && curr - 1 !== next) {
@@ -27,9 +33,20 @@ export function validatePinComplexity(pin) {
       break;
     }
   }
-  if (sequential) {
-    return 'PIN cannot be sequential';
+  if (sequential && pin.length >= 4) {
+    return 'PIN cannot be sequential (e.g., 12345678)';
   }
+  
+  // Check for keyboard patterns (111222 or 789456)
+  if (/^(01{2}2{2}|12{2}3{2}|23{2}4{2}|34{2}5{2}|45{2}6{2}|56{2}7{2}|67{2}8{2}|78{2}9{2})/.test(pin)) {
+    return 'PIN cannot use predictable keyboard patterns';
+  }
+  
+  // Check for repeating double digits (1212121212)
+  if (/^(\d{2})\1+$/.test(pin)) {
+    return 'PIN cannot use repeating double digit patterns';
+  }
+  
   return null;
 }
 

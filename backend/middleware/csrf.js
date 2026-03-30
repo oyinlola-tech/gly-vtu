@@ -32,9 +32,8 @@ export function csrfMiddleware(req, res, next) {
       : path;
   if (csrfExemptPaths.some((p) => proxyStripped.startsWith(p))) return next();
 
-  const authHeader = req.headers.authorization;
-  if (authHeader) return next();
-
+  // CSRF validation is required for all state-changing requests
+  // regardless of authentication method (Authorization header doesn't exempt CSRF checks)
   const csrfCookie = req.cookies?.csrf_token;
   const csrfHeader = req.headers['x-csrf-token'];
   if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {

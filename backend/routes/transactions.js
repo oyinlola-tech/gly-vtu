@@ -1,7 +1,7 @@
 import express from 'express';
 import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
-import { generateStatementPdf, sendStatementEmail } from '../utils/email.js';
+import { generateStatementPdf, sendStatementEmail, generateReceiptPdf } from '../utils/email.js';
 
 const router = express.Router();
 
@@ -73,6 +73,88 @@ router.get('/', requireUser, async (req, res) => {
     [req.user.sub]
   );
   return res.json(rows);
+});
+
+router.get('/:id', requireUser, async (req, res) => {
+  const [rows] = await pool.query(
+    'SELECT id, type, amount, fee, total, status, reference, metadata, created_at FROM transactions WHERE id = ? AND user_id = ? LIMIT 1',
+    [req.params.id, req.user.sub]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Transaction not found' });
+
+  const tx = rows[0];
+  let meta = tx.metadata;
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      meta = {};
+    }
+  }
+
+  const recipient = {
+    name:
+      meta?.accountName ||
+      meta?.provider ||
+      meta?.to ||
+      meta?.from ||
+      meta?.accountNumber ||
+      null,
+    account: meta?.accountNumber || null,
+    bank: meta?.bankName || meta?.bankCode || null,
+  };
+
+  return res.json({
+    ...tx,
+    metadata: meta,
+    recipient,
+    createdAt: tx.created_at,
+    completedAt: null,
+  });
+});
+
+router.get('/:id/receipt', requireUser, async (req, res) => {
+  const [rows] = await pool.query(
+    'SELECT id, type, amount, fee, total, status, reference, metadata, created_at FROM transactions WHERE id = ? AND user_id = ? LIMIT 1',
+    [req.params.id, req.user.sub]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Transaction not found' });
+
+  const tx = rows[0];
+  let meta = tx.metadata;
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      meta = {};
+    }
+  }
+
+  const [[user]] = await pool.query('SELECT full_name FROM users WHERE id = ?', [req.user.sub]);
+  const title = 'Transaction Receipt';
+  const details = [
+    `Reference: ${tx.reference}`,
+    `Status: ${String(tx.status || '').toUpperCase()}`,
+    `Type: ${String(tx.type || '').toUpperCase()}`,
+    `Amount: NGN ${Number(tx.amount || 0).toFixed(2)}`,
+    `Fee: NGN ${Number(tx.fee || 0).toFixed(2)}`,
+    `Total: NGN ${Number(tx.total || 0).toFixed(2)}`,
+  ];
+  if (meta?.accountName || meta?.accountNumber || meta?.provider) {
+    details.push(
+      `Recipient: ${meta.accountName || meta.provider || meta.accountNumber}`
+    );
+  }
+
+  const pdf = await generateReceiptPdf({
+    title,
+    name: user?.full_name,
+    details,
+  });
+  const filename = `glyvtu-receipt-${tx.reference}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  return res.send(pdf);
 });
 
 router.post('/statement', requireUser, async (req, res) => {

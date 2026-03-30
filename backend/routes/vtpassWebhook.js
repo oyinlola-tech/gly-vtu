@@ -4,6 +4,7 @@ import { pool } from '../config/db.js';
 import { sendReceiptEmail } from '../utils/email.js';
 import { sanitizeVtpassPayload } from '../utils/sanitize.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { webhookLimiter } from '../middleware/rateLimiters.js';
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ function ipAllowed(req) {
   return list.includes(ip);
 }
 
-router.post('/', async (req, res) => {
+router.post('/', webhookLimiter, async (req, res) => {
   let signatureValid = false;
   try {
     signatureValid = verifyVtpassWebhook(req);

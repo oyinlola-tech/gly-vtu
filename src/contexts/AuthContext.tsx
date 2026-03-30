@@ -22,7 +22,12 @@ function getPersistableUser(user: User | null): Omit<User, 'accountNumber'> | nu
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ otpRequired?: boolean; email?: string; needsPin?: boolean }>;
+  login: (
+    email: string,
+    password: string,
+    totp?: string,
+    backupCode?: string
+  ) => Promise<{ otpRequired?: boolean; totpRequired?: boolean; email?: string; needsPin?: boolean }>;
   register: (data: any) => Promise<void>;
   logout: () => void;
   verifyPin: (pin: string) => Promise<boolean>;
@@ -76,11 +81,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, totp?: string, backupCode?: string) => {
     try {
-      const response = await authAPI.login({ email, password });
+      const response = await authAPI.login({ email, password, totp, backupCode });
       if (response?.otpRequired) {
         return { otpRequired: true, email };
+      }
+      if (response?.totpRequired) {
+        return { totpRequired: true, email };
       }
       const profile = await userAPI.getProfile();
       const security = await userAPI.getSecurityStatus();

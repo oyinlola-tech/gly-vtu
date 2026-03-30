@@ -19,6 +19,34 @@ const SUPPORT_URL = process.env.SUPPORT_URL || '';
 const PRIVACY_URL = process.env.PRIVACY_URL || '';
 const TERMS_URL = process.env.TERMS_URL || '';
 
+// HTML escaping function to prevent injection attacks
+function escapeHtml(text) {
+  if (!text) return '';
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return String(text).replace(/[&<>"']/g, (char) => map[char]);
+}
+
+// Validate and sanitize URLs to prevent open redirects
+function sanitizeUrl(url) {
+  if (!url) return '';
+  try {
+    const urlObj = new URL(url, 'https://example.com');
+    // Only allow http and https protocols
+    if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+      return '';
+    }
+    return escapeHtml(url);
+  } catch {
+    return '';
+  }
+}
+
 function transporter() {
   if (!process.env.SMTP_HOST) return null;
   return nodemailer.createTransport({
@@ -35,19 +63,28 @@ function transporter() {
 }
 
 function baseTemplate({ title, body, footer, highlight, cta }) {
+  // Escape all user-supplied and environment variable content
+  const safeTitle = escapeHtml(title);
+  const safeFooter = escapeHtml(footer);
+  const safeLogoUrl = sanitizeUrl(LOGO_URL);
+  const safeBrandUrl = sanitizeUrl(BRAND_URL);
+  const safeSupportUrl = sanitizeUrl(SUPPORT_URL);
+  const safePrivacyUrl = sanitizeUrl(PRIVACY_URL);
+  const safeTermsUrl = sanitizeUrl(TERMS_URL);
+
   return `<!DOCTYPE html>
   <html>
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>${title}</title>
+      <title>${safeTitle}</title>
     </head>
     <body style="margin:0;background:${LIGHT};font-family:Arial,sans-serif;color:${BLACK};">
       <div style="max-width:640px;margin:0 auto;padding:32px 18px;">
         <div style="background:linear-gradient(135deg, ${WINE}, ${DEEP});padding:24px;border-radius:20px;color:${WHITE};display:flex;align-items:center;gap:14px;box-shadow:0 14px 34px rgba(27,7,16,0.28);">
           ${
-            LOGO_URL
-              ? `<img src="${LOGO_URL}" alt="${BRAND}" style="width:46px;height:46px;border-radius:12px;background:${WHITE};padding:6px;" />`
+            safeLogoUrl
+              ? `<img src="${safeLogoUrl}" alt="${BRAND}" style="width:46px;height:46px;border-radius:12px;background:${WHITE};padding:6px;" />`
               : ''
           }
           <div>
@@ -56,25 +93,25 @@ function baseTemplate({ title, body, footer, highlight, cta }) {
           </div>
         </div>
         <div style="background:${WHITE};color:${BLACK};padding:28px;border-radius:20px;margin-top:18px;border:1px solid ${BORDER};box-shadow:0 12px 30px rgba(33,12,20,0.08);">
-          <h2 style="margin-top:0;color:${WINE};font-size:20px;">${title}</h2>
+          <h2 style="margin-top:0;color:${WINE};font-size:20px;">${safeTitle}</h2>
           ${highlight ? `<div style="background:${LIGHT};border:1px solid ${BORDER};padding:14px;border-radius:12px;margin:14px 0;color:${BLACK};">${highlight}</div>` : ''}
           ${body}
           ${
             cta?.label && cta?.href
               ? `<div style="margin-top:18px;">
-                  <a href="${cta.href}" style="display:inline-block;background:${WINE};color:${WHITE};text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:600;">${cta.label}</a>
+                  <a href="${sanitizeUrl(cta.href)}" style="display:inline-block;background:${WINE};color:${WHITE};text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:600;">${escapeHtml(cta.label)}</a>
                 </div>`
               : ''
           }
         </div>
         <p style="font-size:12px;color:${SLATE};margin-top:16px;line-height:1.6;">
-          ${footer}<br />Need help? Reply to this email or visit support.
+          ${safeFooter}<br />Need help? Reply to this email or visit support.
         </p>
         <div style="font-size:12px;color:${SLATE};display:flex;gap:12px;flex-wrap:wrap;">
-          ${BRAND_URL ? `<a href="${BRAND_URL}" style="color:${SLATE};">Website</a>` : ''}
-          ${SUPPORT_URL ? `<a href="${SUPPORT_URL}" style="color:${SLATE};">Support</a>` : ''}
-          ${PRIVACY_URL ? `<a href="${PRIVACY_URL}" style="color:${SLATE};">Privacy</a>` : ''}
-          ${TERMS_URL ? `<a href="${TERMS_URL}" style="color:${SLATE};">Terms</a>` : ''}
+          ${safeBrandUrl ? `<a href="${safeBrandUrl}" style="color:${SLATE};">Website</a>` : ''}
+          ${safeSupportUrl ? `<a href="${safeSupportUrl}" style="color:${SLATE};">Support</a>` : ''}
+          ${safePrivacyUrl ? `<a href="${safePrivacyUrl}" style="color:${SLATE};">Privacy</a>` : ''}
+          ${safeTermsUrl ? `<a href="${safeTermsUrl}" style="color:${SLATE};">Terms</a>` : ''}
         </div>
       </div>
     </body>
@@ -364,6 +401,10 @@ export async function generateStatementPdf({
     closingBalance,
     transactions,
   });
+}
+
+export async function generateReceiptPdf({ title, name, details }) {
+  return createReceiptPdf({ title, name, details });
 }
 
 export async function sendSecurityEmail({ to, title, message }) {

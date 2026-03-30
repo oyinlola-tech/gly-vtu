@@ -189,6 +189,8 @@ const userPages = [
   'kyc-status',
   'settings',
   'security-center',
+  'auth/setup-2fa',
+  'settings/devices',
   'verify-device',
   'forgot-password',
   'reset-password',
