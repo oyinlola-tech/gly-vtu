@@ -75,7 +75,7 @@ export function SecurityDashboard() {
             <p className={`text-4xl font-bold ${securityColor}`}>{securityScore}%</p>
             <p className={`text-lg font-semibold mt-1 ${securityColor}`}>{securityLevel} Security</p>
           </div>
-          <Shield className={`w-16 h-16 ${securityColor.replace('text-', 'text-')}`} />
+          <Shield className={`w-16 h-16 ${securityColor}`} />
         </div>
       </div>
 
