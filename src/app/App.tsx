@@ -41,6 +41,7 @@ import KYC from './pages/KYC';
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminLogin from './pages/admin/AdminLogin';
+import AdminTransactions from './pages/admin/AdminTransactions';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -266,6 +267,14 @@ function AppContent() {
             element={
               <AdminRoute>
                 <AdminDashboard />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/transactions"
+            element={
+              <AdminRoute>
+                <AdminTransactions />
               </AdminRoute>
             }
           />

@@ -495,6 +495,15 @@ export const cardsAPI = {
       method: 'POST',
     });
   },
+  getSettings: async (cardId: string) => {
+    return request<any>(API_BASE_URL, `/cards/${cardId}/settings`);
+  },
+  updateSettings: async (cardId: string, payload: any) => {
+    return request<{ message: string }>(API_BASE_URL, `/cards/${cardId}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 // ============= ADMIN APIs =============

@@ -12,6 +12,14 @@ export default function Cards() {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<any | null>(null);
+  const [settings, setSettings] = useState({
+    dailyLimit: '',
+    monthlyLimit: '',
+    merchantLocks: '',
+    autoFreeze: true,
+  });
 
   const loadCards = async () => {
     try {
@@ -52,6 +60,38 @@ export default function Cards() {
     } catch {
       // ignore
     }
+  };
+
+  const openSettings = async (card: any) => {
+    try {
+      const data = await cardsAPI.getSettings(card.card_id);
+      setSettings({
+        dailyLimit: data?.daily_limit ?? '',
+        monthlyLimit: data?.monthly_limit ?? '',
+        merchantLocks: data?.merchant_locks ?? '',
+        autoFreeze: data?.auto_freeze ? true : false,
+      });
+    } catch {
+      setSettings({
+        dailyLimit: '',
+        monthlyLimit: '',
+        merchantLocks: '',
+        autoFreeze: true,
+      });
+    }
+    setSelectedCard(card);
+    setSettingsOpen(true);
+  };
+
+  const saveSettings = async () => {
+    if (!selectedCard) return;
+    await cardsAPI.updateSettings(selectedCard.card_id, {
+      dailyLimit: settings.dailyLimit ? Number(settings.dailyLimit) : null,
+      monthlyLimit: settings.monthlyLimit ? Number(settings.monthlyLimit) : null,
+      merchantLocks: settings.merchantLocks || '',
+      autoFreeze: settings.autoFreeze,
+    });
+    setSettingsOpen(false);
   };
 
   const cardFeatures = [
@@ -137,6 +177,12 @@ export default function Cards() {
                   className="mt-4 w-full bg-[#235697] text-white py-2 rounded-xl text-sm font-semibold"
                 >
                   {card.status === 'frozen' ? 'Unfreeze Card' : 'Freeze Card'}
+                </button>
+                <button
+                  onClick={() => openSettings(card)}
+                  className="mt-2 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-2 rounded-xl text-sm font-semibold"
+                >
+                  Card Settings
                 </button>
               </div>
             ))}
@@ -253,6 +299,86 @@ export default function Cards() {
       </div>
 
       <BottomNav />
+
+      {settingsOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-end z-50">
+          <div className="w-full bg-white dark:bg-gray-900 rounded-t-3xl p-6 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Card Settings</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {selectedCard?.masked_pan || 'Virtual Card'}
+                </p>
+              </div>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="text-sm text-gray-500 dark:text-gray-400"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Daily spend limit</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
+                  <input
+                    type="number"
+                    value={settings.dailyLimit}
+                    onChange={(e) => setSettings({ ...settings, dailyLimit: e.target.value })}
+                    className="w-full pl-8 pr-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                    placeholder="e.g. 20000"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Monthly spend limit</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
+                  <input
+                    type="number"
+                    value={settings.monthlyLimit}
+                    onChange={(e) => setSettings({ ...settings, monthlyLimit: e.target.value })}
+                    className="w-full pl-8 pr-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                    placeholder="e.g. 200000"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Merchant locks</label>
+                <input
+                  value={settings.merchantLocks}
+                  onChange={(e) => setSettings({ ...settings, merchantLocks: e.target.value })}
+                  className="w-full px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                  placeholder="e.g. Netflix, Spotify, AWS"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Comma‑separated list of merchants to allow.
+                </p>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={settings.autoFreeze}
+                  onChange={(e) => setSettings({ ...settings, autoFreeze: e.target.checked })}
+                />
+                Auto‑freeze on suspicious activity
+              </label>
+
+              <button
+                onClick={saveSettings}
+                className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-3 rounded-xl text-sm font-semibold"
+              >
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -201,7 +201,7 @@ const adminPages = [
   'transactions',
   'settings',
   'audit',
-  'monnify',
+  'vtpass',
 ];
 
 adminPages.forEach((page) => {

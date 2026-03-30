@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   Users,
   DollarSign,
@@ -314,6 +314,9 @@ export default function AdminDashboard() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6 lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Recent Transactions</h2>
+              <Link to="/admin/transactions" className="text-xs text-[#235697] font-semibold">
+                View all
+              </Link>
             </div>
             {recentTransactions.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">No transactions yet.</p>

@@ -370,6 +370,32 @@ export async function initDatabase() {
         INDEX idx_card_user (user_id),
         FOREIGN KEY (user_id) REFERENCES users(id)
       );
+
+      CREATE TABLE IF NOT EXISTS card_settings (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        card_id VARCHAR(120) NOT NULL,
+        daily_limit DECIMAL(14,2) NULL,
+        monthly_limit DECIMAL(14,2) NULL,
+        merchant_locks TEXT NULL,
+        auto_freeze TINYINT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_card_settings (card_id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS card_spends (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        card_id VARCHAR(120) NOT NULL,
+        amount DECIMAL(14,2) NOT NULL,
+        merchant VARCHAR(120) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_spend_card (card_id),
+        INDEX idx_spend_user (user_id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
     `);
 
     await conn.query('INSERT IGNORE INTO schema_meta (id, seeded) VALUES (1, 0)');
