@@ -1,12 +1,6 @@
-# Changelog
+# Notices
 
 ## Confidentiality and Authorized Access
 The Software is proprietary and confidential. You may not disclose, share, or make any part of the codebase available to third parties without prior written authorization from the owner. Use is permitted only to individuals or entities expressly granted access by the owner.
 
-All notable changes to this project will be documented in this file.
-
-## [Unreleased]
-- Initial documentation and project policies
-
-## [0.0.1] - 2026-03-30
-- Initial project structure
+This project includes third-party open-source dependencies. Their respective licenses and notices are provided by the dependency authors and can be found within `node_modules/` and associated package metadata.

@@ -1,5 +1,8 @@
 # Troubleshooting
 
+## Confidentiality and Authorized Access
+The Software is proprietary and confidential. You may not disclose, share, or make any part of the codebase available to third parties without prior written authorization from the owner. Use is permitted only to individuals or entities expressly granted access by the owner.
+
 ## API returns 403 for `/api/*` in browser
 Direct browser access to `/api/*` is blocked. Use `/app/api/*` via the proxy layer.
 

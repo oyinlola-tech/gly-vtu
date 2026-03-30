@@ -1,5 +1,8 @@
 # Deployment Guide
 
+## Confidentiality and Authorized Access
+The Software is proprietary and confidential. You may not disclose, share, or make any part of the codebase available to third parties without prior written authorization from the owner. Use is permitted only to individuals or entities expressly granted access by the owner.
+
 ## Summary
 The Express server hosts the API and static user/admin portals. In production, run the API server and serve built frontend assets from the expected directories.
 

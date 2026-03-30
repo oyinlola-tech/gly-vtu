@@ -1,5 +1,8 @@
 # Architecture
 
+## Confidentiality and Authorized Access
+The Software is proprietary and confidential. You may not disclose, share, or make any part of the codebase available to third parties without prior written authorization from the owner. Use is permitted only to individuals or entities expressly granted access by the owner.
+
 ## Overview
 GLY VTU is a full-stack VTU platform with a Node.js/Express backend and a React/Vite frontend. The backend serves APIs, static user/admin portals, and WebSocket connectivity.
 

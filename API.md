@@ -1,5 +1,8 @@
 # API Overview
 
+## Confidentiality and Authorized Access
+The Software is proprietary and confidential. You may not disclose, share, or make any part of the codebase available to third parties without prior written authorization from the owner. Use is permitted only to individuals or entities expressly granted access by the owner.
+
 This is a high-level overview of available routes. For full request/response schemas, use Swagger (`/api-docs`) when enabled.
 
 ## Public API Prefixes
@@ -34,7 +37,7 @@ The same routes exist under both prefixes (for example, `/api/auth` and `/app/ap
 - Admin Flutterwave: `/api/admin/flutterwave`
 
 ## Webhooks
-- Flutterwave: `/api/flutterwave/webhook`
+- Flutterwave: `/api/flutterwave/webhook` (sole supported virtual card provider)
 - VTpass: `/api/vtpass/webhook`
 
 ## Swagger

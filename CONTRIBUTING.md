@@ -3,6 +3,9 @@
 ## Proprietary Access
 This repository is proprietary and not free to use. Contributions are only accepted from authorized collaborators with explicit permission from the owner.
 
+## Confidentiality and Authorized Access
+The Software is proprietary and confidential. You may not disclose, share, or make any part of the codebase available to third parties without prior written authorization from the owner. Use is permitted only to individuals or entities expressly granted access by the owner.
+
 ## How to Contribute (Authorized Only)
 1. Discuss the change with the owner before starting.
 2. Work on a feature branch.

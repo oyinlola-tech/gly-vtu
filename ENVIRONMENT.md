@@ -1,5 +1,8 @@
 # Environment Variables
 
+## Confidentiality and Authorized Access
+The Software is proprietary and confidential. You may not disclose, share, or make any part of the codebase available to third parties without prior written authorization from the owner. Use is permitted only to individuals or entities expressly granted access by the owner.
+
 This project reads environment variables from `.env`. Use `.env.example` as a template.
 
 ## Server
@@ -68,19 +71,6 @@ This project reads environment variables from `.env`. Use `.env.example` as a te
 - `FLW_BASE_URL`
 - `FLW_WEBHOOK_HASH`
 
-### Monnify (if used)
-- `MONNIFY_BASE_URL`
-- `MONNIFY_API_KEY`
-- `MONNIFY_SECRET_KEY`
-- `MONNIFY_CONTRACT_CODE`
-- `MONNIFY_RESERVE_PATH`
-- `MONNIFY_BANKS_PATH`
-- `MONNIFY_VALIDATE_PATH`
-- `MONNIFY_WEBHOOK_SECRET`
-- `MONNIFY_WEBHOOK_IPS`
-- `MONNIFY_RETRY_INTERVAL_MS`
-- `MONNIFY_RETRY_BATCH`
-- `MONNIFY_RETRY_MAX_ATTEMPTS`
 
 ## Banking Cache
 - `BANKS_CACHE_TTL_MINUTES`

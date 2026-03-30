@@ -1,5 +1,8 @@
 # Code of Conduct
 
+## Confidentiality and Authorized Access
+The Software is proprietary and confidential. You may not disclose, share, or make any part of the codebase available to third parties without prior written authorization from the owner. Use is permitted only to individuals or entities expressly granted access by the owner.
+
 ## Our Pledge
 We are committed to providing a respectful, harassment-free collaboration environment for all authorized contributors.
 
