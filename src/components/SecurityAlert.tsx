@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 /**
  * SecurityAlert Component
@@ -7,6 +7,60 @@ import React, { useState, useEffect } from 'react';
  * Alert types: info, warning, error, success
  * Actions can be TOTP setup, password change, device verification, etc.
  */
+
+type SecurityAlertType = 'info' | 'warning' | 'error' | 'success';
+
+interface SecurityAlertAction {
+  label: string;
+  onClick: () => void;
+}
+
+interface SecurityAlertProps {
+  type?: SecurityAlertType;
+  title: string;
+  message: string;
+  action?: SecurityAlertAction;
+  onDismiss?: () => void;
+  icon?: React.ReactNode;
+  persistent?: boolean;
+}
+
+interface SecurityAlertItem extends SecurityAlertProps {
+  id: string;
+  type: SecurityAlertType;
+}
+
+const typeConfig: Record<SecurityAlertType, { bg: string; border: string; text: string; icon: string; accentBg: string }> = {
+  info: {
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    text: 'text-blue-800',
+    icon: 'â„¹ï¸',
+    accentBg: 'bg-blue-100'
+  },
+  warning: {
+    bg: 'bg-yellow-50',
+    border: 'border-yellow-200',
+    text: 'text-yellow-800',
+    icon: 'âš ï¸',
+    accentBg: 'bg-yellow-100'
+  },
+  error: {
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    text: 'text-red-800',
+    icon: 'ðŸš¨',
+    accentBg: 'bg-red-100'
+  },
+  success: {
+    bg: 'bg-green-50',
+    border: 'border-green-200',
+    text: 'text-green-800',
+    icon: 'âœ“',
+    accentBg: 'bg-green-100'
+  }
+};
+
 export function SecurityAlert({ 
   type = 'info',
   title,
@@ -15,39 +69,8 @@ export function SecurityAlert({
   onDismiss,
   icon,
   persistent = false
-}) {
+}: SecurityAlertProps) {
   const [visible, setVisible] = useState(true);
-
-  const typeConfig = {
-    info: {
-      bg: 'bg-blue-50',
-      border: 'border-blue-200',
-      text: 'text-blue-800',
-      icon: 'ℹ️',
-      accentBg: 'bg-blue-100'
-    },
-    warning: {
-      bg: 'bg-yellow-50',
-      border: 'border-yellow-200',
-      text: 'text-yellow-800',
-      icon: '⚠️',
-      accentBg: 'bg-yellow-100'
-    },
-    error: {
-      bg: 'bg-red-50',
-      border: 'border-red-200',
-      text: 'text-red-800',
-      icon: '🚨',
-      accentBg: 'bg-red-100'
-    },
-    success: {
-      bg: 'bg-green-50',
-      border: 'border-green-200',
-      text: 'text-green-800',
-      icon: '✓',
-      accentBg: 'bg-green-100'
-    }
-  };
 
   const config = typeConfig[type];
 
@@ -94,10 +117,10 @@ export function SecurityAlert({
         {!persistent && (
           <button
             onClick={handleDismiss}
-            className={`flex-shrink-0 text-lg opacity-60 hover:opacity-100 transition-opacity`}
+            className="flex-shrink-0 text-lg opacity-60 hover:opacity-100 transition-opacity"
             aria-label="Dismiss alert"
           >
-            ✕
+            âœ•
           </button>
         )}
       </div>
@@ -109,10 +132,10 @@ export function SecurityAlert({
  * SecurityAlertList Component
  * Container for multiple security alerts
  */
-export function SecurityAlertList({ alerts = [] }) {
-  const [dismissedIds, setDismissedIds] = useState(new Set());
+export function SecurityAlertList({ alerts = [] }: { alerts?: SecurityAlertItem[] }) {
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
-  const handleDismiss = (id) => {
+  const handleDismiss = (id: string) => {
     setDismissedIds(prev => new Set([...prev, id]));
   };
 

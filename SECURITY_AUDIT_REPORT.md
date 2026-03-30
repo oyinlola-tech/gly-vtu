@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-GLY-VTU is a sophisticated fintech platform handling sensitive Nigerian financial transactions ($0-∞ USD values daily). The application implements **strong foundational security** (JWT auth, TOTP, webhook signatures) but contains **multiple critical vulnerabilities** affecting:
+GLY-VTU is a sophisticated fintech platform handling sensitive Nigerian financial transactions ($0-inf USD values daily). The application implements **strong foundational security** (JWT auth, TOTP, webhook signatures) but contains **multiple critical vulnerabilities** affecting:
 
 - **Authentication & Authorization** (token forgery risk, weak rate limiting)
 - **API Key Management** (plaintext credentials, no rotation)
@@ -175,7 +175,7 @@ const LOGIN_LOCK_WINDOW_MINUTES = Number(process.env.LOGIN_LOCK_WINDOW_MINUTES |
 if (withinWindow) {
   nextAttempts = lockCount + 1;
 } else {
-  nextAttempts = 1; // ❌ RESET on new window - allows bypass
+  nextAttempts = 1; //  RESET on new window - allows bypass
 }
 ```
 
@@ -374,7 +374,7 @@ router.post('/verify-totp', async (req, res) => {
     secret: admins[0].totp_secret,
     encoding: 'base32',
     token: totpCode,
-    window: 1 // Allow ±1 time step
+    window: 1 // Allow +/-1 time step
   });
   
   if (!isValid) {
@@ -413,7 +413,7 @@ export async function chargeCard(cardData) {
     cardData,
     {
       headers: {
-        'Authorization': `Bearer ${SECRET_KEY}` // ❌ Plaintext in memory
+        'Authorization': `Bearer ${SECRET_KEY}` //  Plaintext in memory
       }
     }
   );
@@ -705,11 +705,11 @@ const requiredPatterns = [
 const missing = requiredPatterns.filter(pattern => !gitignore.includes(pattern));
 
 if (missing.length > 0) {
-  console.error('❌ Missing patterns in .gitignore:', missing);
+  console.error(' Missing patterns in .gitignore:', missing);
   process.exit(1);
 }
 
-console.log('✅ .gitignore is properly configured');
+console.log(' .gitignore is properly configured');
 
 // Pre-commit hook
 // .husky/pre-commit
@@ -818,74 +818,49 @@ sameSite: 'lax', // Allows some cross-site POSTs
 ```javascript
 // backend/middleware/csrf.js - UPDATED
 export function csrfMiddleware(req, res, next) {
-  // Check if exemption applies
+  const method = req.method.toUpperCase();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return next();
+
   const csrfExemptPaths = [
     '/api/flutterwave/webhook',
     '/api/vtpass/webhook',
-    // Remove: /api/auth/login and /api/auth/register from here
+    '/api/auth/csrf',
+    '/api/auth/refresh',
+    '/api/admin/auth/csrf',
+    '/api/admin/auth/refresh',
   ];
-  
-  const isExempt = csrfExemptPaths.some(path => req.path.startsWith(path));
-  if (isExempt) return next();
-  
-  // Enforce CSRF for all state-changing requests
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-    return next(); // Safe methods don't need CSRF
-  }
-  
+
+  const path = req.path || '';
+  const proxyStripped = path.startsWith('/app/admin/api')
+    ? path.replace('/app/admin/api', '/api/admin')
+    : path.startsWith('/app/api')
+      ? path.replace('/app/api', '/api')
+      : path;
+  if (csrfExemptPaths.some((p) => proxyStripped.startsWith(p))) return next();
+
   const csrfCookie = req.cookies?.csrf_token;
   const csrfHeader = req.headers['x-csrf-token'];
-  
   if (!csrfCookie || !csrfHeader) {
-    return res.status(403).json({
-      error: 'CSRF token missing',
-      code: 'CSRF_TOKEN_MISSING'
-    });
+    return res.status(403).json({ error: 'CSRF validation failed' });
   }
-  
-  // Use timing-safe comparison
-  const isValid = crypto.timingSafeEqual(
-    Buffer.from(csrfCookie),
-    Buffer.from(csrfHeader)
-  ).catch(() => false);
-  
-  if (!isValid) {
-    logger.warn('CSRF token mismatch', {
-      ip: req.ip,
-      path: req.path,
-      userAgent: req.headers['user-agent']
-    });
-    return res.status(403).json({
-      error: 'CSRF validation failed',
-      code: 'CSRF_INVALID'
-    });
-  }
-  
-  next();
-}
 
-export function csrfTokenMiddleware(req, res, next) {
-  // Ensure CSRF token cookie is set (double-submit)
-  if (!req.cookies?.csrf_token) {
-    const newToken = crypto.randomBytes(32).toString('hex');
-    res.cookie('csrf_token', newToken, {
-      httpOnly: false, // allow SPA to read and send X-CSRF-Token
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 1000 * 60 * 60, // 1 hour
-      path: '/'
-    });
-    req.csrfToken = newToken;
-  } else {
-    req.csrfToken = req.cookies.csrf_token;
+  const cookieValue = Array.isArray(csrfCookie) ? csrfCookie[0] : csrfCookie;
+  const headerValue = Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader;
+  if (!cookieValue || !headerValue || cookieValue.length !== headerValue.length) {
+    return res.status(403).json({ error: 'CSRF validation failed' });
   }
-  
-  next();
-}
 
-// For API responses, include CSRF token in body (NOT cookie)
-export function getCsrfTokenForResponse(req) {
-  return req.csrfToken;
+  let isMatch = false;
+  try {
+    isMatch = crypto.timingSafeEqual(Buffer.from(cookieValue), Buffer.from(headerValue));
+  } catch (err) {
+    isMatch = false;
+  }
+  if (!isMatch) {
+    return res.status(403).json({ error: 'CSRF validation failed' });
+  }
+
+  return next();
 }
 ```
 
@@ -922,31 +897,7 @@ router.post('/transfer', csrfMiddleware, requireUser, async (req, res) => {
 
 **Fix 3: Remove Auth Endpoints from CSRF Exemption**
 
-```javascript
-// backend/middleware/csrf.js - CORRECTED
-const csrfExemptPaths = [
-  '/api/flutterwave/webhook',  // ✅ External webhooks - use signature verification
-  '/api/vtpass/webhook',       // ✅ External webhooks - use signature verification
-  // ❌ Remove /api/auth/login, /api/auth/register
-  // ❌ Remove any user-facing endpoints
-];
-
-// For login/register, require CSRF token OR device fingerprint
-export function csrfOrDeviceFingerprintMiddleware(req, res, next) {
-  // Option 1: CSRF token
-  const csrfValid = req.cookies?.csrf_token === req.headers['x-csrf-token'];
-  
-  // Option 2: Device fingerprint + rate limiting
-  const deviceFingerprint = req.headers['x-device-fingerprint'];
-  const deviceValid = deviceFingerprint && validateDeviceFingerprint(deviceFingerprint);
-  
-  if (!csrfValid && !deviceValid) {
-    return res.status(403).json({ error: 'CSRF validation failed' });
-  }
-  
-  next();
-}
-```
+Auth endpoints now require CSRF tokens. The only exemptions are webhook callbacks and the CSRF token issuance/refresh routes (`/api/auth/csrf`, `/api/admin/auth/csrf`, `/api/auth/refresh`, `/api/admin/auth/refresh`) so non-cookie clients can refresh without CSRF.
 
 ---
 
@@ -969,7 +920,7 @@ await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
 **Attack:** If column names come from user input, attacker could inject SQL:
 ```
 fieldName: "password_hash = 'hacked', "
-→ UPDATE users SET password_hash = 'hacked', email = ? WHERE id = ?
+-> UPDATE users SET password_hash = 'hacked', email = ? WHERE id = ?
 ```
 
 **Fix:**
@@ -1062,8 +1013,8 @@ export const billPaymentSchema = Joi.object({
     .max(50),
   amount: Joi.number()
     .required()
-    .min(100) // Minimum ₦100
-    .max(1000000) // Maximum ₦1,000,000
+    .min(100) // Minimum NGN 100
+    .max(1000000) // Maximum NGN 1,000,000
     .integer(),
   pin: Joi.string()
     .required()
@@ -1340,7 +1291,7 @@ console.assert(isValidNigerianPhone('+123456789') === false); // Wrong country
 **Current Code:**
 ```javascript
 if (!list.length) {
-  return process.env.NODE_ENV !== 'production'; // ❌ Defaults to ALLOW
+  return process.env.NODE_ENV !== 'production'; //  Defaults to ALLOW
 }
 ```
 
@@ -1363,7 +1314,7 @@ function isIpAllowed(req) {
     logger.error('CRITICAL: FLW_WEBHOOK_IPS not configured in production', {
       ip: req.ip
     });
-    return false; // ✅ DENY by default
+    return false; //  DENY by default
   }
   
   if (allowedIps.length === 0) {
@@ -1440,7 +1391,7 @@ cron.schedule('0 3 * * *', updateFlutterwaveIps); // Daily at 3 AM
 ```javascript
 const [existing] = await pool.query('SELECT id FROM transactions WHERE reference = ?');
 if (existing.length) return res.json({ message: 'Already processed' });
-// ❌ Two simultaneous requests see empty, both create transaction
+//  Two simultaneous requests see empty, both create transaction
 ```
 
 **Fix: Database-Level Locking**
@@ -1544,10 +1495,10 @@ INSERT INTO transactions (
 
 ```javascript
 // backend/routes/auth.js - FIND & REPLACE ALL INSTANCES
-// ❌ OLD:
+//  OLD:
 sendWelcomeEmail({...}).catch(console.error);
 
-// ✅ NEW:
+//  NEW:
 sendWelcomeEmail({...}).catch(err => {
   logger.error('Failed to send welcome email', {
     userId: user.id,
@@ -2085,7 +2036,7 @@ export async function enforceKycLimits({ userId, level, amount, types = ['transf
   
   if (amount > dailyRemaining) {
     throw new Error(
-      `Daily limit exceeded. Used: ₦${dailyUsed}, Limit: ₦${limit.daily}, Requested: ₦${amount}`
+      `Daily limit exceeded. Used: NGN ${dailyUsed}, Limit: NGN ${limit.daily}, Requested: NGN ${amount}`
     );
   }
   
@@ -2106,7 +2057,7 @@ export async function enforceKycLimits({ userId, level, amount, types = ['transf
   
   if (amount > monthlyRemaining) {
     throw new Error(
-      `Monthly limit exceeded. Used: ₦${monthlyUsed}, Limit: ₦${limit.monthly}`
+      `Monthly limit exceeded. Used: NGN ${monthlyUsed}, Limit: NGN ${limit.monthly}`
     );
   }
   
@@ -2137,7 +2088,7 @@ export function validatePreparedStatements(req, res, next) {
       const valueCount = Array.isArray(values) ? values.length : 0;
       
       if (paramCount !== valueCount) {
-        console.warn('⚠️ Query parameter mismatch!', { sql, valueCount, paramCount });
+        console.warn(' Query parameter mismatch!', { sql, valueCount, paramCount });
       }
       
       return originalQuery(sql, values, ...args);

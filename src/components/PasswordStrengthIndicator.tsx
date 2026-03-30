@@ -8,7 +8,11 @@ import zxcvbn from 'zxcvbn';
  * Usage:
  * <PasswordStrengthIndicator password={password} />
  */
-export function PasswordStrengthIndicator({ password = '' }) {
+interface PasswordStrengthIndicatorProps {
+  password?: string;
+}
+
+export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthIndicatorProps) {
   const [strength, setStrength] = useState(0);
   const [feedback, setFeedback] = useState('');
 
@@ -80,7 +84,12 @@ export function PasswordStrengthIndicator({ password = '' }) {
  * RequirementCheck Component
  * Helper component to show individual password requirement status
  */
-function RequirementCheck({ met, label }) {
+interface RequirementCheckProps {
+  met: boolean;
+  label: string;
+}
+
+function RequirementCheck({ met, label }: RequirementCheckProps) {
   return (
     <div className="flex items-center gap-2">
       <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${

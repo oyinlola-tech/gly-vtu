@@ -12,7 +12,9 @@ export function csrfMiddleware(req, res, next) {
     '/api/flutterwave/webhook',
     '/api/vtpass/webhook',
     '/api/auth/csrf',
+    '/api/auth/refresh',
     '/api/admin/auth/csrf',
+    '/api/admin/auth/refresh',
   ];
   const path = req.path || '';
   const proxyStripped = path.startsWith('/app/admin/api')

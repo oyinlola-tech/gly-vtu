@@ -192,6 +192,27 @@ export async function initDatabase() {
         INDEX idx_event_actor (actor_type, actor_id)
       );
 
+      CREATE TABLE IF NOT EXISTS kyc_verifications (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        provider VARCHAR(60) NOT NULL,
+        verification_type ENUM('bvn','nin') NOT NULL,
+        status ENUM('pending','verified','failed','mismatch') NOT NULL DEFAULT 'pending',
+        name_match TINYINT NOT NULL DEFAULT 0,
+        verified_name VARCHAR(160) NULL,
+        verified_dob DATE NULL,
+        verified_phone VARCHAR(30) NULL,
+        verified_gender VARCHAR(20) NULL,
+        reference VARCHAR(120) NULL,
+        request_payload JSON NULL,
+        response_payload JSON NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_kyc_user (user_id),
+        INDEX idx_kyc_status (status),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+
       CREATE TABLE IF NOT EXISTS admin_adjustments (
         id CHAR(36) PRIMARY KEY,
         user_id CHAR(36) NOT NULL,
@@ -486,6 +507,7 @@ export async function initDatabase() {
     await ensureBillProviderLogoColumn(conn);
     await ensureBillOrderProviderNullable(conn);
     await ensureSecurityEventsTable(conn);
+    await ensureKycVerificationTable(conn);
     await ensureAdminTotpColumns(conn, DB_NAME);
     await ensureUserTotpColumns(conn);
   } finally {
@@ -819,6 +841,31 @@ async function ensureSecurityEventsTable(conn) {
       INDEX idx_severity (severity),
       INDEX idx_event_type (event_type),
       INDEX idx_event_actor (actor_type, actor_id)
+    )
+  `);
+}
+
+async function ensureKycVerificationTable(conn) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS kyc_verifications (
+      id CHAR(36) PRIMARY KEY,
+      user_id CHAR(36) NOT NULL,
+      provider VARCHAR(60) NOT NULL,
+      verification_type ENUM('bvn','nin') NOT NULL,
+      status ENUM('pending','verified','failed','mismatch') NOT NULL DEFAULT 'pending',
+      name_match TINYINT NOT NULL DEFAULT 0,
+      verified_name VARCHAR(160) NULL,
+      verified_dob DATE NULL,
+      verified_phone VARCHAR(30) NULL,
+      verified_gender VARCHAR(20) NULL,
+      reference VARCHAR(120) NULL,
+      request_payload JSON NULL,
+      response_payload JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_kyc_user (user_id),
+      INDEX idx_kyc_status (status),
+      FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
 }

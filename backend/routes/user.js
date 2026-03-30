@@ -27,6 +27,7 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { changePasswordSchema, validateRequest } from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
 import { applyUserPII, decryptJson, encryptJson, hashPhone, encryptPII } from '../utils/encryption.js';
+import { runKycVerification } from '../utils/kycVerification.js';
 
 const router = express.Router();
 const MIN_PASSWORD_LENGTH = 10;
@@ -269,6 +270,15 @@ router.put('/kyc', requireUser, async (req, res) => {
         // Keep KYC submission; reserved account can be retried later.
       }
     }
+    runKycVerification({
+      userId: req.user.sub,
+      payload: mergedPayload,
+      level: targetLevel,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch((err) => {
+      logger.warn('KYC verification flow failed', { error: logger.format(err) });
+    });
   }
 
   return res.json({ message: 'KYC submitted' });
