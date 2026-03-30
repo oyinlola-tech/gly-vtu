@@ -263,6 +263,51 @@ export const authAPI = {
       { auth: false }
     );
   },
+
+  // Additional auth methods for security pages
+  getProfile: async () => {
+    return request<any>(API_BASE_URL, '/auth/me');
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/password/change',
+      { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }
+    );
+  },
+
+  initiateTwoFactor: async () => {
+    return request<{ secret: string; qrCode: string }>(
+      API_BASE_URL,
+      '/user/totp/setup',
+      { method: 'POST' }
+    );
+  },
+
+  verifyTwoFactor: async (code: string, secret: string) => {
+    return request<{ backupCodes: string[] }>(
+      API_BASE_URL,
+      '/user/totp/verify',
+      { method: 'POST', body: JSON.stringify({ code, secret }) }
+    );
+  },
+
+  enable2FA: async (secret: string, code: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/totp/enable',
+      { method: 'POST', body: JSON.stringify({ token: code }) }
+    );
+  },
+
+  disable2FA: async () => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/totp/disable',
+      { method: 'POST', body: JSON.stringify({}) }
+    );
+  },
 };
 
 // ============= USER APIs =============
@@ -410,6 +455,26 @@ export const userAPI = {
     return request<any>(API_BASE_URL, '/user/totp/disable', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  // Wallet & Transaction methods
+  getTransactions: async () => {
+    return request<any[]>(API_BASE_URL, '/transactions');
+  },
+
+  getWalletInfo: async () => {
+    return request<any>(API_BASE_URL, '/wallet/info');
+  },
+
+  getTopupOptions: async () => {
+    return request<any[]>(API_BASE_URL, '/wallet/topup-options');
+  },
+
+  initiateTopup: async (providerId: string, amount: number) => {
+    return request<any>(API_BASE_URL, '/wallet/topup', {
+      method: 'POST',
+      body: JSON.stringify({ providerId, amount }),
     });
   },
 };
@@ -628,7 +693,7 @@ export const adminAPI = {
       },
       { auth: false, admin: true }
     );
-    if (response?.csrfToken) setStoredToken(ADMIN_CSRF_TOKEN_KEY, response.csrfToken);
+    // CSRF token is now httpOnly cookie, automatically sent by browser
     return response;
   },
   me: async () => {
@@ -647,7 +712,7 @@ export const adminAPI = {
       },
       { auth: false, admin: true }
     );
-    if (response?.csrfToken) setStoredToken(ADMIN_CSRF_TOKEN_KEY, response.csrfToken);
+    // CSRF token is now httpOnly cookie, automatically sent by browser
     return response;
   },
 
@@ -658,7 +723,7 @@ export const adminAPI = {
       { method: 'POST' },
       { auth: false, admin: true }
     );
-    setStoredToken(ADMIN_CSRF_TOKEN_KEY, null);
+    // CSRF token cleared via httpOnly cookie
   },
 
   getFinanceOverview: async () => {

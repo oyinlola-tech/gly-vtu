@@ -62,7 +62,7 @@ export function WalletManagementPage() {
       }
 
       const option = topupOptions.find(o => o.id === selectedOption);
-      if (!option) {
+      if (!option || !selectedOption) {
         setError('Please select a topup method');
         return;
       }
@@ -72,7 +72,7 @@ export function WalletManagementPage() {
         return;
       }
 
-      await userAPI.initiateTopup?.(selectedOption, amount);
+      await userAPI.initiateTopup(selectedOption, amount);
       setTopupAmount('');
       setSelectedOption(null);
       await loadWalletData();
