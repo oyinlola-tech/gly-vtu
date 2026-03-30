@@ -8,6 +8,7 @@ import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
 
 const router = express.Router();
 
+
 router.get('/balance', requireUser, async (req, res) => {
   /*
     #swagger.tags = ['Wallet']

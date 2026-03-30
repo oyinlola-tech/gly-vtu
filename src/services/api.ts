@@ -1,3 +1,17 @@
+import type {
+  AdminBillPricing,
+  AdminBillProvider,
+  BillCategory,
+  BillProvider,
+  BillQuoteRequest,
+  BillQuoteResponse,
+  BillVariationsResponse,
+  BillsPayCardRequest,
+  BillsPayCardResponse,
+  BillsPayRequest,
+  BillsPayResponse,
+} from '../types/bills';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/app/api';
 const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || '/app/admin/api';
 
@@ -369,47 +383,43 @@ export const walletAPI = {
 // ============= BILLS PAYMENT APIs =============
 export const billsAPI = {
   getCategories: async () => {
-    return request<any[]>(API_BASE_URL, '/bills/categories', {}, { auth: false });
+    return request<BillCategory[]>(API_BASE_URL, '/bills/categories', {}, { auth: false });
   },
 
   getProviders: async (category: string) => {
-    return request<any[]>(API_BASE_URL, `/bills/providers?category=${encodeURIComponent(category)}`, {}, { auth: false });
+    return request<BillProvider[]>(
+      API_BASE_URL,
+      `/bills/providers?category=${encodeURIComponent(category)}`,
+      {},
+      { auth: false }
+    );
   },
 
   getVariations: async (serviceID: string) => {
-    return request<any>(API_BASE_URL, `/bills/variations?serviceID=${encodeURIComponent(serviceID)}`, {}, { auth: false });
+    return request<BillVariationsResponse>(
+      API_BASE_URL,
+      `/bills/variations?serviceID=${encodeURIComponent(serviceID)}`,
+      {},
+      { auth: false }
+    );
   },
 
-  getQuote: async (data: { providerCode: string; amount: number }) => {
-    return request<any>(API_BASE_URL, '/bills/quote', {
+  getQuote: async (data: BillQuoteRequest) => {
+    return request<BillQuoteResponse>(API_BASE_URL, '/bills/quote', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  pay: async (data: {
-    providerCode: string;
-    amount: number;
-    account: string;
-    pin: string;
-    variationCode?: string;
-    phone?: string;
-    subscriptionType?: string;
-  }) => {
-    return request<any>(API_BASE_URL, '/bills/pay', {
+  pay: async (data: BillsPayRequest) => {
+    return request<BillsPayResponse>(API_BASE_URL, '/bills/pay', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  payWithCard: async (data: {
-    providerCode: string;
-    amount: number;
-    account: string;
-    variationCode?: string;
-    subscriptionType?: string;
-  }) => {
-    return request<any>(API_BASE_URL, '/bills/pay-card', {
+  payWithCard: async (data: BillsPayCardRequest) => {
+    return request<BillsPayCardResponse>(API_BASE_URL, '/bills/pay-card', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -557,7 +567,7 @@ export const adminAPI = {
   },
 
   getBillPricing: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/bills/pricing', {}, { admin: true });
+    return request<AdminBillPricing[]>(ADMIN_API_BASE_URL, '/bills/pricing', {}, { admin: true });
   },
 
   updateBillPricing: async (
@@ -579,7 +589,7 @@ export const adminAPI = {
   },
 
   getBillProviders: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/bills/providers', {}, { admin: true });
+    return request<AdminBillProvider[]>(ADMIN_API_BASE_URL, '/bills/providers', {}, { admin: true });
   },
 
   updateBillProvider: async (
@@ -608,6 +618,24 @@ export const adminAPI = {
       ADMIN_API_BASE_URL,
       '/monnify/retry',
       { method: 'POST', body: JSON.stringify({ paymentReference }) },
+      { admin: true }
+    );
+  },
+
+  getVtpassEvents: async (params?: { limit?: number; offset?: number; status?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    if (params?.status) search.set('status', params.status);
+    const query = search.toString();
+    return request<any[]>(ADMIN_API_BASE_URL, `/vtpass/events${query ? `?${query}` : ''}`, {}, { admin: true });
+  },
+
+  requeryVtpass: async (requestId: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/vtpass/requery',
+      { method: 'POST', body: JSON.stringify({ requestId }) },
       { admin: true }
     );
   },

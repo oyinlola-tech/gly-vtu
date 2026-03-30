@@ -6,11 +6,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import type { BillProvider, BillVariation } from '../../types/bills';
 
 export default function BuyData() {
   const navigate = useNavigate();
   const { verifyPin } = useAuth();
-  const [providers, setProviders] = useState<any[]>([]);
+  const [providers, setProviders] = useState<BillProvider[]>([]);
   const [formData, setFormData] = useState({
     network: '',
     phone: '',
@@ -21,7 +22,7 @@ export default function BuyData() {
   const [showPINInput, setShowPINInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [variations, setVariations] = useState<any[]>([]);
+  const [variations, setVariations] = useState<BillVariation[]>([]);
   const [variationCode, setVariationCode] = useState('');
 
   const getProviderInitials = (name: string) =>

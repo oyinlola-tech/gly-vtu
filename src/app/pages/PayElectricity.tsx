@@ -6,16 +6,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
-
-type Variation = {
-  variation_code?: string;
-  variation_amount?: string | number;
-};
+import type { BillProvider, BillVariation } from '../../types/bills';
 
 export default function PayElectricity() {
   const navigate = useNavigate();
   const { verifyPin } = useAuth();
-  const [providers, setProviders] = useState<any[]>([]);
+  const [providers, setProviders] = useState<BillProvider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState('');
   const [meterNumber, setMeterNumber] = useState('');
   const [meterType, setMeterType] = useState('prepaid');
@@ -24,7 +20,7 @@ export default function PayElectricity() {
   const [loading, setLoading] = useState(false);
   const [showPINInput, setShowPINInput] = useState(false);
   const [error, setError] = useState('');
-  const [variations, setVariations] = useState<any[]>([]);
+  const [variations, setVariations] = useState<BillVariation[]>([]);
   const [variationCode, setVariationCode] = useState('');
 
   const getProviderInitials = (name: string) =>
@@ -48,9 +44,9 @@ export default function PayElectricity() {
     billsAPI
       .getVariations(selectedProvider)
       .then((data) => {
-        const list = (data?.variations || []) as Variation[];
+        const list = (data?.variations || []) as BillVariation[];
         setVariations(list);
-        const auto = list.find((v: Variation) =>
+        const auto = list.find((v: BillVariation) =>
           String(v.variation_code || '').toLowerCase().includes(meterType)
         );
         if (auto) {

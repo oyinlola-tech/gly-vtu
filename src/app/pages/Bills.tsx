@@ -3,9 +3,10 @@ import { Link } from 'react-router';
 import { ChevronLeft, Phone, Wifi, Tv, Zap, Droplet, Wifi as Internet, ChevronRight } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 import { billsAPI } from '../../services/api';
+import type { BillCategory } from '../../types/bills';
 
 export default function Bills() {
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<BillCategory[]>([]);
 
   useEffect(() => {
     billsAPI

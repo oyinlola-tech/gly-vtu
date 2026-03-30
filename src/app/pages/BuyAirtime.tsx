@@ -6,11 +6,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import type { BillProvider } from '../../types/bills';
 
 export default function BuyAirtime() {
   const navigate = useNavigate();
   const { verifyPin } = useAuth();
-  const [providers, setProviders] = useState<any[]>([]);
+  const [providers, setProviders] = useState<BillProvider[]>([]);
   const [formData, setFormData] = useState({
     network: '',
     phone: '',

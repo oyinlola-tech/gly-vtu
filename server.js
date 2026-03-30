@@ -24,6 +24,10 @@ import adminAuditRoutes from './backend/routes/adminAudit.js';
 import adminFinanceRoutes from './backend/routes/adminFinance.js';
 import monnifyWebhookRoutes from './backend/routes/monnifyWebhook.js';
 import adminMonnifyRoutes from './backend/routes/adminMonnify.js';
+import flutterwaveWebhookRoutes from './backend/routes/flutterwaveWebhook.js';
+import vtpassWebhookRoutes from './backend/routes/vtpassWebhook.js';
+import adminVtpassRoutes from './backend/routes/adminVtpass.js';
+import cardsRoutes from './backend/routes/cards.js';
 import banksRoutes from './backend/routes/banks.js';
 import notificationsRoutes from './backend/routes/notifications.js';
 import adminNotificationsRoutes from './backend/routes/adminNotifications.js';
@@ -212,6 +216,7 @@ app.use('/api/transactions', transactionsRoutes);
 app.use('/api/banks', banksRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/conversations', conversationsRoutes);
+app.use('/api/cards', cardsRoutes);
 
 app.use('/api/admin/auth', adminAuthLimiter, adminAuthRoutes);
 app.use('/api/admin/users', adminUsersRoutes);
@@ -224,6 +229,9 @@ app.use('/api/admin/notifications', adminNotificationsRoutes);
 app.use('/api/admin/conversations', adminConversationsRoutes);
 app.use('/api/monnify/webhook', webhookLimiter, monnifyWebhookRoutes);
 app.use('/api/admin/monnify', adminMonnifyRoutes);
+app.use('/api/admin/vtpass', adminVtpassRoutes);
+app.use('/api/flutterwave/webhook', webhookLimiter, flutterwaveWebhookRoutes);
+app.use('/api/vtpass/webhook', webhookLimiter, vtpassWebhookRoutes);
 
 // Backend-only proxy layer for frontend calls
 app.use('/app/api/auth', authLimiter, authRoutes);
@@ -234,6 +242,7 @@ app.use('/app/api/transactions', transactionsRoutes);
 app.use('/app/api/banks', banksRoutes);
 app.use('/app/api/notifications', notificationsRoutes);
 app.use('/app/api/conversations', conversationsRoutes);
+app.use('/app/api/cards', cardsRoutes);
 
 app.use('/app/admin/api/auth', adminAuthLimiter, adminAuthRoutes);
 app.use('/app/admin/api/users', adminUsersRoutes);
@@ -245,6 +254,9 @@ app.use('/app/admin/api/finance', adminFinanceRoutes);
 app.use('/app/admin/api/notifications', adminNotificationsRoutes);
 app.use('/app/admin/api/conversations', adminConversationsRoutes);
 app.use('/app/admin/api/monnify', adminMonnifyRoutes);
+app.use('/app/admin/api/vtpass', adminVtpassRoutes);
+app.use('/app/api/flutterwave/webhook', webhookLimiter, flutterwaveWebhookRoutes);
+app.use('/app/api/vtpass/webhook', webhookLimiter, vtpassWebhookRoutes);
 
 const enableSwagger = process.env.ENABLE_SWAGGER !== 'false';
 async function setupSwaggerDocs(appInstance) {

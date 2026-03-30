@@ -10,6 +10,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { adminAPI, tokenStore } from '../../../services/api';
+import type { AdminBillPricing, AdminBillProvider } from '../../../types/bills';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -22,8 +23,8 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [conversations, setConversations] = useState<any[]>([]);
-  const [pricing, setPricing] = useState<any[]>([]);
-  const [providers, setProviders] = useState<any[]>([]);
+  const [pricing, setPricing] = useState<AdminBillPricing[]>([]);
+  const [providers, setProviders] = useState<AdminBillProvider[]>([]);
   const [providerSaving, setProviderSaving] = useState<string | number | null>(null);
   const [pricingSaving, setPricingSaving] = useState<string | number | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<any | null>(null);
@@ -34,9 +35,9 @@ export default function AdminDashboard() {
     body: '',
     force: true,
   });
-  const [monnifyEvents, setMonnifyEvents] = useState<any[]>([]);
-  const [monnifyStatus, setMonnifyStatus] = useState('all');
-  const [monnifyLoading, setMonnifyLoading] = useState(false);
+  const [vtpassEvents, setVtpassEvents] = useState<any[]>([]);
+  const [vtpassStatus, setVtpassStatus] = useState('all');
+  const [vtpassLoading, setVtpassLoading] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -199,13 +200,17 @@ export default function AdminDashboard() {
     }
   };
 
-  const handlePricingChange = (id: string, field: string, value: any) => {
+  const handlePricingChange = (
+    id: string | number,
+    field: keyof AdminBillPricing,
+    value: AdminBillPricing[keyof AdminBillPricing]
+  ) => {
     setPricing((prev) =>
       prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
     );
   };
 
-  const savePricing = async (row: any) => {
+  const savePricing = async (row: AdminBillPricing) => {
     setPricingSaving(row.id);
     try {
       await adminAPI.updateBillPricing(String(row.id), {
@@ -222,13 +227,17 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleProviderChange = (id: string, field: string, value: any) => {
+  const handleProviderChange = (
+    id: string | number,
+    field: keyof AdminBillProvider,
+    value: AdminBillProvider[keyof AdminBillProvider]
+  ) => {
     setProviders((prev) =>
       prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
     );
   };
 
-  const saveProvider = async (row: any) => {
+  const saveProvider = async (row: AdminBillProvider) => {
     setProviderSaving(row.id);
     try {
       await adminAPI.updateBillProvider(String(row.id), {
@@ -244,22 +253,22 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadMonnifyEvents = async () => {
-    setMonnifyLoading(true);
+  const loadVtpassEvents = async () => {
+    setVtpassLoading(true);
     try {
-      const status = monnifyStatus === 'all' ? undefined : monnifyStatus;
-      const rows = await adminAPI.getMonnifyEvents({ limit: 50, status });
-      setMonnifyEvents(rows || []);
+      const status = vtpassStatus === 'all' ? undefined : vtpassStatus;
+      const rows = await adminAPI.getVtpassEvents({ limit: 50, status });
+      setVtpassEvents(rows || []);
     } catch {
-      setMonnifyEvents([]);
+      setVtpassEvents([]);
     } finally {
-      setMonnifyLoading(false);
+      setVtpassLoading(false);
     }
   };
 
   useEffect(() => {
-    loadMonnifyEvents();
-  }, [monnifyStatus]);
+    loadVtpassEvents();
+  }, [vtpassStatus]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -594,60 +603,57 @@ export default function AdminDashboard() {
 
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Monnify Webhooks</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">VTpass Bills Status</h2>
             <div className="flex items-center gap-2">
               <select
-                value={monnifyStatus}
-                onChange={(e) => setMonnifyStatus(e.target.value)}
+                value={vtpassStatus}
+                onChange={(e) => setVtpassStatus(e.target.value)}
                 className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
               >
                 <option value="all">All</option>
-                <option value="received">Received</option>
-                <option value="processed">Processed</option>
+                <option value="pending">Pending</option>
+                <option value="success">Delivered</option>
                 <option value="failed">Failed</option>
               </select>
               <button
-                onClick={loadMonnifyEvents}
+                onClick={loadVtpassEvents}
                 className="bg-[#235697] text-white px-3 py-2 rounded-lg text-xs font-semibold"
               >
                 Refresh
               </button>
             </div>
           </div>
-          {monnifyLoading ? (
+          {vtpassLoading ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">Loading events...</p>
-          ) : monnifyEvents.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No webhook events yet.</p>
+          ) : vtpassEvents.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No VTpass events yet.</p>
           ) : (
             <div className="space-y-3">
-              {monnifyEvents.map((event) => (
+              {vtpassEvents.map((event) => (
                 <div
-                  key={event.payment_reference}
+                  key={event.request_id}
                   className="border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center gap-3"
                 >
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {event.payment_reference}
+                      {event.request_id}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {event.account_reference || 'Account: N/A'} · {event.currency} {Number(event.amount || 0).toLocaleString()}
+                      Transaction ID: {event.transaction_id || 'N/A'}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Status: <span className="font-semibold">{event.status}</span>
-                      {event.last_error ? ` · Error: ${event.last_error}` : ''}
                     </p>
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
                     {event.updated_at ? new Date(event.updated_at).toLocaleString() : ''}
                   </div>
-                  {event.status === 'failed' && (
-                    <button
-                      onClick={() => adminAPI.retryMonnifyEvent(event.payment_reference).then(loadMonnifyEvents)}
-                      className="bg-red-500 text-white px-3 py-2 rounded-lg text-xs font-semibold"
-                    >
-                      Retry
-                    </button>
-                  )}
+                  <button
+                    onClick={() => adminAPI.requeryVtpass(event.request_id).then(loadVtpassEvents)}
+                    className="bg-[#235697] text-white px-3 py-2 rounded-lg text-xs font-semibold"
+                  >
+                    Requery
+                  </button>
                 </div>
               ))}
             </div>
