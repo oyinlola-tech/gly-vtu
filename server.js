@@ -37,6 +37,8 @@ import { pool } from './backend/config/db.js';
 import { authLimiter, adminAuthLimiter, webhookLimiter } from './backend/middleware/rateLimiters.js';
 import { csrfMiddleware } from './backend/middleware/csrf.js';
 import { attachRealtime } from './backend/utils/realtime.js';
+import { pruneWebhookEvents } from './backend/utils/retention.js';
+import { logger } from './backend/utils/logger.js';
 
 dotenv.config();
 
@@ -321,7 +323,7 @@ app.use((err, req, res, next) => {
   if (err?.message === 'Not allowed by CORS') {
     return res.status(403).json({ error: 'CORS blocked' });
   }
-  console.error(err);
+  logger.error('Unhandled error', { error: logger.format(err) });
   res.status(500).json({ error: 'Server error' });
 });
 
@@ -356,11 +358,21 @@ async function startServer() {
   const banksRefreshInterval = Number(process.env.BANKS_REFRESH_INTERVAL_MS || 21600000);
   setInterval(() => {
     refreshBankCache().catch((err) =>
-      console.error('Bank cache refresh failed:', err.message)
+      logger.warn('Bank cache refresh failed', { error: logger.format(err) })
     );
   }, banksRefreshInterval);
   refreshBankCache().catch((err) =>
-    console.error('Bank cache initial refresh failed:', err.message)
+    logger.warn('Bank cache initial refresh failed', { error: logger.format(err) })
+  );
+
+  const retentionInterval = 24 * 60 * 60 * 1000;
+  setInterval(() => {
+    pruneWebhookEvents().catch((err) =>
+      logger.warn('Webhook retention prune failed', { error: logger.format(err) })
+    );
+  }, retentionInterval);
+  pruneWebhookEvents().catch((err) =>
+    logger.warn('Webhook retention initial prune failed', { error: logger.format(err) })
   );
 
   // VTpass and Flutterwave webhooks handle async updates

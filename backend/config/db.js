@@ -176,7 +176,7 @@ export async function initDatabase() {
         id CHAR(36) PRIMARY KEY,
         user_id CHAR(36) NULL,
         admin_id CHAR(36) NULL,
-        refresh_family_id CHAR(36) NOT NULL,
+        refresh_family_id CHAR(36) NULL,
         device_id VARCHAR(120) NULL,
         ip_address VARCHAR(60) NULL,
         user_agent VARCHAR(255) NULL,
@@ -502,7 +502,7 @@ async function ensureRefreshTokenFamilyColumns(conn) {
   const existing = new Set(cols.map((c) => c.COLUMN_NAME));
   const alters = [];
   if (!existing.has('refresh_family_id')) {
-    alters.push('ADD COLUMN refresh_family_id CHAR(36) NOT NULL');
+    alters.push('ADD COLUMN refresh_family_id CHAR(36) NULL');
   }
   if (!existing.has('device_id')) {
     alters.push('ADD COLUMN device_id VARCHAR(120) NULL');

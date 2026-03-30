@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../config/db.js';
 import { verifyFlutterwaveWebhook } from '../utils/flutterwave.js';
 import { sanitizeFlutterwaveWebhook } from '../utils/sanitize.js';
+import { enforceKycLimits } from '../utils/kycLimits.js';
 import { sendReceiptEmail } from '../utils/email.js';
 
 const router = express.Router();
@@ -56,6 +57,32 @@ router.post('/', async (req, res) => {
     [reference]
   );
   if (existing.length) return res.json({ message: 'Already processed' });
+
+  const [[userRow]] = await pool.query('SELECT kyc_level FROM users WHERE id = ?', [
+    account.user_id,
+  ]);
+  const limitCheck = await enforceKycLimits({
+    userId: account.user_id,
+    level: userRow?.kyc_level || 1,
+    amount,
+    types: ['topup'],
+  });
+  if (!limitCheck.ok) {
+    await pool.query(
+      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        account.user_id,
+        'topup',
+        amount,
+        0,
+        amount,
+        'pending',
+        reference,
+        JSON.stringify({ provider: 'flutterwave', reason: 'kyc_limit' }),
+      ]
+    );
+    return res.json({ message: 'Held for KYC limits' });
+  }
 
   const conn = await pool.getConnection();
   try {

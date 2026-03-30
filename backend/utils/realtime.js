@@ -15,6 +15,7 @@ const allowedOrigins = process.env.CORS_ORIGIN
       .map((o) => o.trim())
       .filter((o) => o.length > 0)
   : [...defaultOrigins, ...extraOrigins];
+const WS_TOKEN_MAX_AGE_MINUTES = Number(process.env.WS_TOKEN_MAX_AGE_MINUTES || 10);
 
 function originAllowed(origin) {
   if (!origin) return true;
@@ -107,6 +108,10 @@ function parseAuth(reqUrl, req) {
     const payload = jwt.verify(token, secret);
     if (role === 'admin' && payload.type !== 'admin') return null;
     if (role === 'user' && payload.type !== 'user') return null;
+    if (payload?.iat) {
+      const ageMs = Date.now() - payload.iat * 1000;
+      if (ageMs > WS_TOKEN_MAX_AGE_MINUTES * 60 * 1000) return null;
+    }
     return { role, id: payload.sub, payload };
   } catch {
     return null;

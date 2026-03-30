@@ -23,6 +23,7 @@ import {
 import { billsLimiter } from '../middleware/rateLimiters.js';
 import { sanitizeVtpassPayload } from '../utils/sanitize.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
+import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 
 const router = express.Router();
 
@@ -171,7 +172,7 @@ router.post('/quote', requireUser, async (req, res) => {
         const variations = await getServiceVariations(providerCode);
         const items = variations?.content?.variations || [];
         const match = items.find((v) => v.variation_code === variationCode);
-        if (!match) return res.status(400).json({ error: 'Invalid variation code' });
+        if (!match) return respond(400, { error: 'Invalid variation code' });
         resolvedAmount = Number(match.variation_amount || match.amount || numericAmount || 0);
       }
       return res.json({
@@ -222,28 +223,47 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const { providerCode, amount, account, pin, variationCode, phone, subscriptionType } = req.body || {};
+  const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
+  const idem = await checkIdempotency({
+    userId: req.user.sub,
+    key: idemKey,
+    route: 'bills.pay',
+    body: req.body,
+  });
+  if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
+  if (idem.hit) return res.json(idem.response || {});
+
+  async function respond(status, payload) {
+    await completeIdempotency({
+      userId: req.user.sub,
+      key: idemKey,
+      route: 'bills.pay',
+      response: payload,
+    });
+    return res.status(status).json(payload);
+  }
   const numericAmount = Number(amount);
   if (!providerCode || !isValidServiceId(providerCode) || !account) {
-    return res.status(400).json({ error: 'Invalid request' });
+    return respond(400, { error: 'Invalid request' });
   }
   if (!variationCode && !isValidAmount(numericAmount)) {
-    return res.status(400).json({ error: 'Invalid amount' });
+    return respond(400, { error: 'Invalid amount' });
   }
-  if (!isValidPin(pin)) return res.status(400).json({ error: 'Invalid transaction PIN' });
-  if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Invalid phone number' });
+  if (!isValidPin(pin)) return respond(400, { error: 'Invalid transaction PIN' });
+  if (phone && !isValidPhone(phone)) return respond(400, { error: 'Invalid phone number' });
   const safeAccount = normalizeAccount(account);
-  if (!safeAccount) return res.status(400).json({ error: 'Invalid account' });
+  if (!safeAccount) return respond(400, { error: 'Invalid account' });
   try {
     await verifyTransactionPin(req.user.sub, pin);
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    return respond(400, { error: err.message });
   }
 
   const [[userMeta]] = await pool.query(
     'SELECT full_name, email, phone, kyc_level, kyc_status FROM users WHERE id = ?',
     [req.user.sub]
   );
-  if (!userMeta) return res.status(404).json({ error: 'User not found' });
+  if (!userMeta) return respond(404, { error: 'User not found' });
 
   const limitCheck = await enforceKycLimits({
     userId: req.user.sub,
@@ -252,7 +272,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
     types: ['bill'],
   });
   if (!limitCheck.ok) {
-    return res.status(403).json({ error: limitCheck.message });
+    return respond(403, { error: limitCheck.message });
   }
 
   if (vtpassEnabled) {
@@ -290,7 +310,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
               ],
             }).catch(console.error);
           }
-          return res.status(400).json({ error: 'Insufficient balance' });
+          return respond(400, { error: 'Insufficient balance' });
         }
 
         await conn.query('UPDATE wallets SET balance = balance - ? WHERE user_id = ?', [
@@ -372,7 +392,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
             ],
           }).catch(console.error);
         }
-        return res.status(502).json({ error: 'VTpass payment failed' });
+        return respond(502, { error: 'VTpass payment failed' });
       }
 
       if (userMeta?.email && status === 'success') {
@@ -397,7 +417,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         userAgent: req.headers['user-agent'],
         metadata: { provider: providerCode, account: safeAccount },
       }).catch(console.error);
-      return res.json({
+      return respond(200, {
         message: status === 'success' ? 'Bill paid' : 'Payment pending',
         reference,
         total: resolvedAmount,
@@ -405,7 +425,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         vtpass: vtpassRes ? sanitizeVtpassPayload(vtpassRes) : null,
       });
     } catch (err) {
-      return res.status(502).json({ error: 'VTpass payment failed' });
+      return respond(502, { error: 'VTpass payment failed' });
     }
   }
 
@@ -416,7 +436,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
      WHERE p.code = ? AND p.active = 1 AND pr.active = 1`,
     [providerCode]
   );
-  if (!rows.length) return res.status(404).json({ error: 'Provider not found' });
+  if (!rows.length) return respond(404, { error: 'Provider not found' });
 
   const pricing = rows[0];
   const markup =
@@ -448,7 +468,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
           ],
         }).catch(console.error);
       }
-      return res.status(400).json({ error: 'Insufficient balance' });
+      return respond(400, { error: 'Insufficient balance' });
     }
 
     await conn.query('UPDATE wallets SET balance = balance - ? WHERE user_id = ?', [
@@ -497,7 +517,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
       userAgent: req.headers['user-agent'],
       metadata: { provider: pricing.name, account },
     }).catch(console.error);
-    return res.json({ message: 'Bill paid', reference, total });
+    return respond(200, { message: 'Bill paid', reference, total });
   } catch (err) {
     await conn.rollback();
     if (user?.email) {
@@ -511,7 +531,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         ],
       }).catch(console.error);
     }
-    return res.status(500).json({ error: 'Payment failed' });
+    return respond(500, { error: 'Payment failed' });
   } finally {
     conn.release();
   }

@@ -6,6 +6,7 @@ import { sendReceiptEmail } from '../utils/email.js';
 import { logAudit } from '../utils/audit.js';
 import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
+import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 
 const router = express.Router();
 
@@ -36,28 +37,47 @@ router.post('/send', requireUser, async (req, res) => {
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const { amount, pin, accountNumber, bankCode, accountName, to, channel } = req.body || {};
+  const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
+  const idem = await checkIdempotency({
+    userId: req.user.sub,
+    key: idemKey,
+    route: 'wallet.send',
+    body: req.body,
+  });
+  if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
+  if (idem.hit) return res.json(idem.response || {});
+
+  async function respond(status, payload) {
+    await completeIdempotency({
+      userId: req.user.sub,
+      key: idemKey,
+      route: 'wallet.send',
+      response: payload,
+    });
+    return res.status(status).json(payload);
+  }
   const numericAmount = Number(amount);
   if (!numericAmount || numericAmount <= 0) {
-    return res.status(400).json({ error: 'Invalid payload' });
+    return respond(400, { error: 'Invalid payload' });
   }
 
   const [[user]] = await pool.query('SELECT kyc_level, kyc_status FROM users WHERE id = ?', [
     req.user.sub,
   ]);
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  if (!isValidPin(pin)) return res.status(400).json({ error: 'Invalid transaction PIN' });
+  if (!user) return respond(404, { error: 'User not found' });
+  if (!isValidPin(pin)) return respond(400, { error: 'Invalid transaction PIN' });
   try {
     await verifyTransactionPin(req.user.sub, pin);
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    return respond(400, { error: err.message });
   }
   const isBank = channel === 'bank' || accountNumber || bankCode;
   if (isBank) {
     if (Number(user.kyc_level || 1) < 2) {
-      return res.status(403).json({ error: 'Level 2 KYC required for bank transfers' });
+      return respond(403, { error: 'Level 2 KYC required for bank transfers' });
     }
     if (String(user.kyc_status || 'pending') !== 'verified') {
-      return res.status(403).json({ error: 'KYC must be verified for bank transfers' });
+      return respond(403, { error: 'KYC must be verified for bank transfers' });
     }
   }
   const limitCheck = await enforceKycLimits({
@@ -67,26 +87,26 @@ router.post('/send', requireUser, async (req, res) => {
     types: ['send'],
   });
   if (!limitCheck.ok) {
-    return res.status(403).json({ error: limitCheck.message });
+    return respond(403, { error: limitCheck.message });
   }
   let recipientId = null;
   let bankName = null;
   if (isBank) {
     if (!accountNumber || !bankCode || !accountName) {
-      return res.status(400).json({ error: 'Account number, bank, and name are required' });
+      return respond(400, { error: 'Account number, bank, and name are required' });
     }
     const [[bank]] = await pool.query('SELECT name FROM banks WHERE code = ? AND active = 1', [
       bankCode,
     ]);
-    if (!bank) return res.status(400).json({ error: 'Invalid bank selected' });
+    if (!bank) return respond(400, { error: 'Invalid bank selected' });
     bankName = bank.name;
   } else {
-    if (!to) return res.status(400).json({ error: 'Recipient required' });
+    if (!to) return respond(400, { error: 'Recipient required' });
     const [targets] = await pool.query(
       'SELECT id FROM users WHERE email = ? OR phone = ? LIMIT 1',
       [to, to]
     );
-    if (!targets.length) return res.status(404).json({ error: 'Recipient not found' });
+    if (!targets.length) return respond(404, { error: 'Recipient not found' });
     recipientId = targets[0].id;
   }
 
@@ -100,7 +120,7 @@ router.post('/send', requireUser, async (req, res) => {
     if (!walletRows.length) throw new Error('Wallet missing');
     if (Number(walletRows[0].balance) < numericAmount) {
       await conn.rollback();
-      return res.status(400).json({ error: 'Insufficient balance' });
+      return respond(400, { error: 'Insufficient balance' });
     }
 
     await conn.query('UPDATE wallets SET balance = balance - ? WHERE user_id = ?', [
@@ -202,14 +222,14 @@ router.post('/send', requireUser, async (req, res) => {
       userAgent: req.headers['user-agent'],
       metadata: isBank ? { bankCode, bankName, accountNumber } : { to },
     }).catch(console.error);
-    return res.json({
+    return respond(200, {
       message: isBank ? 'Transfer initiated' : 'Transfer completed',
       reference,
       status: isBank ? 'pending' : 'success',
     });
   } catch (err) {
     await conn.rollback();
-    return res.status(500).json({ error: 'Transfer failed' });
+    return respond(500, { error: 'Transfer failed' });
   } finally {
     conn.release();
   }
