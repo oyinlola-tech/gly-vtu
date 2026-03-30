@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
+import { logAudit } from '../utils/audit.js';
 
 const router = express.Router();
 
@@ -50,5 +51,96 @@ router.get('/metrics', requireAdmin, requirePermission('transactions:read'), asy
     volume: Number(volume.total || 0),
   });
 });
+
+router.get('/held-topups', requireAdmin, requirePermission('transactions:read'), async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT t.id, t.user_id, u.full_name, t.amount, t.reference, t.metadata, t.created_at
+     FROM transactions t
+     JOIN users u ON u.id = t.user_id
+     WHERE t.type = 'topup' AND t.status = 'pending'
+       AND JSON_EXTRACT(t.metadata, '$.reason') = 'kyc_limit'
+     ORDER BY t.created_at DESC
+     LIMIT 200`
+  );
+  return res.json(rows);
+});
+
+router.post(
+  '/held-topups/:reference/approve',
+  requireAdmin,
+  requirePermission('transactions:write'),
+  async (req, res) => {
+    const reference = req.params.reference;
+    const [[tx]] = await pool.query(
+      'SELECT user_id, amount, status FROM transactions WHERE reference = ? AND type = ? LIMIT 1',
+      [reference, 'topup']
+    );
+    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (tx.status !== 'pending') return res.status(400).json({ error: 'Not pending' });
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
+        tx.amount,
+        tx.user_id,
+      ]);
+      await conn.query('UPDATE transactions SET status = ? WHERE reference = ?', [
+        'success',
+        reference,
+      ]);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      return res.status(500).json({ error: 'Approval failed' });
+    } finally {
+      conn.release();
+    }
+
+    logAudit({
+      actorType: 'admin',
+      actorId: req.admin.sub,
+      action: 'admin.topup.approve',
+      entityType: 'transaction',
+      entityId: reference,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => null);
+
+    return res.json({ message: 'Topup approved', reference });
+  }
+);
+
+router.post(
+  '/held-topups/:reference/reject',
+  requireAdmin,
+  requirePermission('transactions:write'),
+  async (req, res) => {
+    const reference = req.params.reference;
+    const [[tx]] = await pool.query(
+      'SELECT user_id, amount, status FROM transactions WHERE reference = ? AND type = ? LIMIT 1',
+      [reference, 'topup']
+    );
+    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (tx.status !== 'pending') return res.status(400).json({ error: 'Not pending' });
+
+    await pool.query('UPDATE transactions SET status = ? WHERE reference = ?', [
+      'failed',
+      reference,
+    ]);
+
+    logAudit({
+      actorType: 'admin',
+      actorId: req.admin.sub,
+      action: 'admin.topup.reject',
+      entityType: 'transaction',
+      entityId: reference,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => null);
+
+    return res.json({ message: 'Topup rejected', reference });
+  }
+);
 
 export default router;

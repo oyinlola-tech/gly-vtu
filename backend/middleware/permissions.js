@@ -4,6 +4,7 @@ const rolePermissions = {
     'users:read',
     'users:kyc',
     'transactions:read',
+    'transactions:write',
     'bills:read',
     'bills:write',
     'accounts:read',
@@ -12,7 +13,14 @@ const rolePermissions = {
     'support:chat',
   ],
   support: ['users:read', 'users:kyc', 'support:chat', 'accounts:read'],
-  finance: ['transactions:read', 'pricing:read', 'pricing:write', 'bills:read', 'finance:read'],
+  finance: [
+    'transactions:read',
+    'transactions:write',
+    'pricing:read',
+    'pricing:write',
+    'bills:read',
+    'finance:read',
+  ],
   compliance: ['audit:read', 'users:read'],
 };
 

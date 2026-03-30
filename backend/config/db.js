@@ -162,6 +162,22 @@ export async function initDatabase() {
         INDEX idx_audit_entity (entity_type, entity_id)
       );
 
+      CREATE TABLE IF NOT EXISTS admin_adjustments (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        type ENUM('credit','debit') NOT NULL,
+        amount DECIMAL(14,2) NOT NULL,
+        status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+        reason VARCHAR(255) NULL,
+        requested_by CHAR(36) NOT NULL,
+        approved_by CHAR(36) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_adj_user (user_id),
+        INDEX idx_adj_status (status),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+
       CREATE TABLE IF NOT EXISTS wallets (
         id CHAR(36) PRIMARY KEY,
         user_id CHAR(36) NOT NULL,
@@ -431,6 +447,7 @@ export async function initDatabase() {
     await ensureIdempotencyTable(conn);
     await ensureTransactionReferenceUnique(conn);
     await ensureBillOrderReferenceUnique(conn);
+    await ensureAdminAdjustmentsTable(conn);
     await ensureBillProviderLogoColumn(conn);
     await ensureBillOrderProviderNullable(conn);
   } finally {
@@ -555,6 +572,26 @@ async function ensureBillOrderReferenceUnique(conn) {
   if (!rows[0]?.c) {
     await conn.query('ALTER TABLE bill_orders ADD UNIQUE KEY uniq_bill_reference (reference)');
   }
+}
+
+async function ensureAdminAdjustmentsTable(conn) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS admin_adjustments (
+      id CHAR(36) PRIMARY KEY,
+      user_id CHAR(36) NOT NULL,
+      type ENUM('credit','debit') NOT NULL,
+      amount DECIMAL(14,2) NOT NULL,
+      status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+      reason VARCHAR(255) NULL,
+      requested_by CHAR(36) NOT NULL,
+      approved_by CHAR(36) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_adj_user (user_id),
+      INDEX idx_adj_status (status),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
 }
 
 async function ensureBillProviderLogoColumn(conn) {

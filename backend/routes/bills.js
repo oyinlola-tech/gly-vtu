@@ -547,19 +547,38 @@ router.post('/pay-card', billsLimiter, requireUser, async (req, res) => {
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   const { providerCode, amount, account, variationCode } = req.body || {};
+  const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
+  const idem = await checkIdempotency({
+    userId: req.user.sub,
+    key: idemKey,
+    route: 'bills.pay-card',
+    body: req.body,
+  });
+  if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
+  if (idem.hit) return res.json(idem.response || {});
+
+  async function respond(status, payload) {
+    await completeIdempotency({
+      userId: req.user.sub,
+      key: idemKey,
+      route: 'bills.pay-card',
+      response: payload,
+    });
+    return res.status(status).json(payload);
+  }
   const numericAmount = Number(amount);
   if (!providerCode || !isValidServiceId(providerCode) || !account) {
-    return res.status(400).json({ error: 'Invalid request' });
+    return respond(400, { error: 'Invalid request' });
   }
   if (!variationCode && !isValidAmount(numericAmount)) {
-    return res.status(400).json({ error: 'Invalid amount' });
+    return respond(400, { error: 'Invalid amount' });
   }
   const safeAccount = normalizeAccount(account);
-  if (!safeAccount) return res.status(400).json({ error: 'Invalid account' });
+  if (!safeAccount) return respond(400, { error: 'Invalid account' });
 
   const checkoutBase = (process.env.CARD_CHECKOUT_URL || '').trim();
   if (!checkoutBase) {
-    return res.status(400).json({ error: 'Card payments not configured' });
+    return respond(400, { error: 'Card payments not configured' });
   }
 
   let pricing = { name: providerCode, currency: 'NGN' };
@@ -568,7 +587,7 @@ router.post('/pay-card', billsLimiter, requireUser, async (req, res) => {
     const variations = await getServiceVariations(providerCode);
     const items = variations?.content?.variations || [];
     const match = items.find((v) => v.variation_code === variationCode);
-    if (!match) return res.status(400).json({ error: 'Invalid variation code' });
+    if (!match) return respond(400, { error: 'Invalid variation code' });
     resolvedAmount = Number(match.variation_amount || match.amount || numericAmount || 0);
   }
   const fee = 0;
@@ -605,7 +624,7 @@ router.post('/pay-card', billsLimiter, requireUser, async (req, res) => {
     reference
   )}&amount=${encodeURIComponent(total)}&currency=${encodeURIComponent(pricing.currency)}`;
 
-  return res.json({
+  return respond(200, {
     message: 'Card checkout created',
     reference,
     total,

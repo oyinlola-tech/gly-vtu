@@ -29,6 +29,9 @@ Configure `.env` using `.env.example`. Ensure `JWT_SECRET`, `JWT_ADMIN_SECRET`, 
 If behind a reverse proxy (Nginx/Cloudflare), set:
 - `TRUST_PROXY=1` (or appropriate hop count)
 
+## Edge Security Headers
+If you terminate TLS or serve static assets at the edge (CDN/Nginx), enforce CSP and HSTS at the edge to prevent header stripping or overrides.
+
 ## Swagger
 Disable Swagger in production by setting:
 - `ENABLE_SWAGGER=false`

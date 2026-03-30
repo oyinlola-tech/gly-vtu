@@ -112,6 +112,10 @@ Optional per-transaction-type overrides:
 ## Retention
 - `FLW_EVENTS_RETENTION_DAYS`
 - `VTPASS_EVENTS_RETENTION_DAYS`
+- `AUDIT_LOG_RETENTION_DAYS`
+
+## Admin Adjustments
+- `ADMIN_ADJUSTMENT_MAX`
 
 ## Admin Seed (Optional)
 - `ADMIN_SEED_EMAIL`

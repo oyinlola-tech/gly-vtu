@@ -3,8 +3,10 @@ import PDFDocument from 'pdfkit';
 import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
+import { logAudit } from '../utils/audit.js';
 
 const router = express.Router();
+const ADMIN_ADJUSTMENT_MAX = Number(process.env.ADMIN_ADJUSTMENT_MAX || 1000000);
 
 router.get('/overview', requireAdmin, requirePermission('finance:read'), async (req, res) => {
   /*
@@ -138,5 +140,164 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), async (re
   res.setHeader('Content-Disposition', 'attachment; filename="finance-report.csv"');
   res.send(csv);
 });
+
+router.get('/adjustments', requireAdmin, requirePermission('transactions:read'), async (req, res) => {
+  const status = req.query.status;
+  const params = [];
+  const where = status ? 'WHERE status = ?' : '';
+  if (status) params.push(status);
+  const [rows] = await pool.query(
+    `SELECT a.id, a.user_id, u.full_name, a.type, a.amount, a.status, a.reason, a.requested_by, a.approved_by, a.created_at
+     FROM admin_adjustments a
+     JOIN users u ON u.id = a.user_id
+     ${where}
+     ORDER BY a.created_at DESC
+     LIMIT 200`,
+    params
+  );
+  return res.json(rows);
+});
+
+router.post(
+  '/adjustments',
+  requireAdmin,
+  requirePermission('transactions:write'),
+  async (req, res) => {
+    const { userId, type, amount, reason } = req.body || {};
+    const numericAmount = Number(amount);
+    if (!userId || !['credit', 'debit'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid request' });
+    }
+    if (!numericAmount || numericAmount <= 0 || numericAmount > ADMIN_ADJUSTMENT_MAX) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+    const [[user]] = await pool.query('SELECT id FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    await pool.query(
+      `INSERT INTO admin_adjustments (id, user_id, type, amount, reason, requested_by)
+       VALUES (UUID(), ?, ?, ?, ?, ?)`,
+      [userId, type, numericAmount, reason || null, req.admin.sub]
+    );
+    logAudit({
+      actorType: 'admin',
+      actorId: req.admin.sub,
+      action: 'admin.adjustment.request',
+      entityType: 'adjustment',
+      entityId: userId,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { type, amount: numericAmount },
+    }).catch(() => null);
+    return res.status(201).json({ message: 'Adjustment requested' });
+  }
+);
+
+router.post(
+  '/adjustments/:id/approve',
+  requireAdmin,
+  requirePermission('transactions:write'),
+  async (req, res) => {
+    const id = req.params.id;
+    const [[adj]] = await pool.query(
+      'SELECT id, user_id, type, amount, status FROM admin_adjustments WHERE id = ? LIMIT 1',
+      [id]
+    );
+    if (!adj) return res.status(404).json({ error: 'Adjustment not found' });
+    if (adj.status !== 'pending') return res.status(400).json({ error: 'Not pending' });
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [walletRows] = await conn.query(
+        'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
+        [adj.user_id]
+      );
+      if (!walletRows.length) throw new Error('Wallet missing');
+      if (adj.type === 'debit' && Number(walletRows[0].balance) < Number(adj.amount)) {
+        await conn.rollback();
+        return res.status(400).json({ error: 'Insufficient balance' });
+      }
+      if (adj.type === 'credit') {
+        await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
+          adj.amount,
+          adj.user_id,
+        ]);
+      } else {
+        await conn.query('UPDATE wallets SET balance = balance - ? WHERE user_id = ?', [
+          adj.amount,
+          adj.user_id,
+        ]);
+      }
+      const reference = `ADM-${id}`;
+      await conn.query(
+        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          adj.user_id,
+          adj.type === 'credit' ? 'receive' : 'send',
+          adj.amount,
+          0,
+          adj.amount,
+          'success',
+          reference,
+          JSON.stringify({ source: 'admin_adjustment', adjustment_id: id }),
+        ]
+      );
+      await conn.query(
+        'UPDATE admin_adjustments SET status = ?, approved_by = ? WHERE id = ?',
+        ['approved', req.admin.sub, id]
+      );
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      return res.status(500).json({ error: 'Approval failed' });
+    } finally {
+      conn.release();
+    }
+
+    logAudit({
+      actorType: 'admin',
+      actorId: req.admin.sub,
+      action: 'admin.adjustment.approve',
+      entityType: 'adjustment',
+      entityId: id,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => null);
+    return res.json({ message: 'Adjustment approved', id });
+  }
+);
+
+router.post(
+  '/adjustments/:id/reject',
+  requireAdmin,
+  requirePermission('transactions:write'),
+  async (req, res) => {
+    const id = req.params.id;
+    const [[adj]] = await pool.query(
+      'SELECT id, status FROM admin_adjustments WHERE id = ? LIMIT 1',
+      [id]
+    );
+    if (!adj) return res.status(404).json({ error: 'Adjustment not found' });
+    if (adj.status !== 'pending') return res.status(400).json({ error: 'Not pending' });
+
+    await pool.query('UPDATE admin_adjustments SET status = ?, approved_by = ? WHERE id = ?', [
+      'rejected',
+      req.admin.sub,
+      id,
+    ]);
+
+    logAudit({
+      actorType: 'admin',
+      actorId: req.admin.sub,
+      action: 'admin.adjustment.reject',
+      entityType: 'adjustment',
+      entityId: id,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => null);
+    return res.json({ message: 'Adjustment rejected', id });
+  }
+);
 
 export default router;

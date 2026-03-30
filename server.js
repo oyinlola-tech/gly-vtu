@@ -37,7 +37,7 @@ import { pool } from './backend/config/db.js';
 import { authLimiter, adminAuthLimiter, webhookLimiter } from './backend/middleware/rateLimiters.js';
 import { csrfMiddleware } from './backend/middleware/csrf.js';
 import { attachRealtime } from './backend/utils/realtime.js';
-import { pruneWebhookEvents } from './backend/utils/retention.js';
+import { pruneWebhookEvents, pruneAuditLogs } from './backend/utils/retention.js';
 import { logger } from './backend/utils/logger.js';
 
 dotenv.config();
@@ -370,9 +370,15 @@ async function startServer() {
     pruneWebhookEvents().catch((err) =>
       logger.warn('Webhook retention prune failed', { error: logger.format(err) })
     );
+    pruneAuditLogs().catch((err) =>
+      logger.warn('Audit retention prune failed', { error: logger.format(err) })
+    );
   }, retentionInterval);
   pruneWebhookEvents().catch((err) =>
     logger.warn('Webhook retention initial prune failed', { error: logger.format(err) })
+  );
+  pruneAuditLogs().catch((err) =>
+    logger.warn('Audit retention initial prune failed', { error: logger.format(err) })
   );
 
   // VTpass and Flutterwave webhooks handle async updates

@@ -123,10 +123,21 @@ router.post('/refresh', async (req, res) => {
   if (!incoming) return res.status(400).json({ error: 'Refresh token required' });
 
   const [tokenRow] = await pool.query(
-    'SELECT admin_id, refresh_family_id, device_id FROM refresh_tokens WHERE token_hash = SHA2(?, 256) LIMIT 1',
+    'SELECT admin_id, refresh_family_id, device_id, ip_address, user_agent FROM refresh_tokens WHERE token_hash = SHA2(?, 256) LIMIT 1',
     [incoming]
   );
   if (!tokenRow.length) return res.status(401).json({ error: 'Invalid token' });
+  const currentIp = req.ip;
+  const currentUa = req.headers['user-agent'] || '';
+  if (
+    (tokenRow[0].ip_address && tokenRow[0].ip_address !== currentIp) ||
+    (tokenRow[0].user_agent && tokenRow[0].user_agent !== currentUa)
+  ) {
+    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE refresh_family_id = ?', [
+      tokenRow[0].refresh_family_id,
+    ]);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
 
   const rotated = await rotateRefreshToken(incoming, { adminId: tokenRow[0].admin_id });
   if (!rotated) {
