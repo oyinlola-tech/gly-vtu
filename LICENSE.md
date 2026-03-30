@@ -1,0 +1,9 @@
+# Proprietary License
+
+Copyright (c) 2026 Oluwayemi Oyinlola Michael
+
+All rights reserved.
+
+This software and associated documentation files (the "Software") are proprietary and confidential. No permission is granted to use, copy, modify, merge, publish, distribute, sublicense, or sell copies of the Software, in whole or in part, without prior written authorization from the copyright holder.
+
+Unauthorized use, distribution, or reproduction is strictly prohibited.
