@@ -177,7 +177,7 @@ export default function BuyAirtime() {
                     {getProviderInitials(providerName || '---')}
                     {providers.find((p) => p.code === formData.network)?.logo_url && (
                       <img
-                        src={providers.find((p) => p.code === formData.network)?.logo_url}
+                        src={providers.find((p) => p.code === formData.network)?.logo_url || ''}
                         alt={providerName}
                         className="absolute inset-0 w-full h-full object-contain rounded-full"
                         onError={(e) => {

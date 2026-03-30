@@ -8,6 +8,10 @@ interface ImportMetaEnv {
   readonly VITE_VIRTUAL_CARD_STATUS?: string;
 }
 
+declare module 'vite' {
+  interface ImportMetaEnv extends ImportMetaEnv {}
+}
+
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }

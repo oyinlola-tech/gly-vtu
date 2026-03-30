@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+// @ts-ignore - zxcvbn does not have TypeScript types available
 import zxcvbn from 'zxcvbn';
 
 /**
@@ -12,6 +13,11 @@ interface PasswordStrengthIndicatorProps {
   password?: string;
 }
 
+interface ZxcvbnResult {
+  score: number;
+  feedback: { warning: string; suggestions: string[] };
+}
+
 export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthIndicatorProps) {
   const [strength, setStrength] = useState(0);
   const [feedback, setFeedback] = useState('');
@@ -23,7 +29,8 @@ export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthInd
       return;
     }
 
-    const result = zxcvbn(password);
+    // @ts-ignore - zxcvbn does not have TypeScript types available
+    const result = zxcvbn(password) as ZxcvbnResult;
     setStrength(result.score);
 
     // Generate feedback message

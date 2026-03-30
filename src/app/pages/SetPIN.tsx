@@ -96,7 +96,9 @@ export default function SetPIN() {
           {currentPin.map((digit, index) => (
             <input
               key={index}
-              ref={(el) => (inputRefs[index] = el)}
+              ref={(el) => {
+                if (el) inputRefs[index] = el;
+              }}
               type="tel"
               maxLength={1}
               value={digit}

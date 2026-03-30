@@ -227,7 +227,7 @@ export default function AdminDashboard() {
     try {
       await adminAPI.updateBillPricing(String(row.id), {
         baseFee: Number(row.base_fee || 0),
-        markupType: row.markup_type || 'flat',
+        markupType: (row.markup_type || 'flat') as 'flat' | 'percent',
         markupValue: Number(row.markup_value || 0),
         currency: row.currency || 'NGN',
         active: !!row.active,

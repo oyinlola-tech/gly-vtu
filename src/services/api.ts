@@ -12,8 +12,8 @@ import type {
   BillsPayResponse,
 } from '../types/bills';
 
-const API_BASE_URL = (import.meta.env as any).VITE_API_URL || '/app/api';
-const ADMIN_API_BASE_URL = (import.meta.env as any).VITE_ADMIN_API_URL || '/app/admin/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/app/api';
+const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || '/app/admin/api';
 
 const DEVICE_ID_KEY = 'gly_device_id';
 let csrfToken: string | null = null;

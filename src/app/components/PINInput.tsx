@@ -79,7 +79,9 @@ export default function PINInput({
           {pin.map((digit, index) => (
             <input
               key={index}
-              ref={(el) => (inputRefs.current[index] = el)}
+              ref={(el) => {
+                if (el) inputRefs.current[index] = el;
+              }}
               type="tel"
               maxLength={1}
               value={digit}
