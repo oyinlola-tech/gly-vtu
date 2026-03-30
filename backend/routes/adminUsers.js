@@ -4,7 +4,7 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
 import { sendKycStatusEmail } from '../utils/email.js';
-import { createReservedAccount } from '../utils/monnify.js';
+import { createVirtualAccount } from '../utils/flutterwave.js';
 import { sendReservedAccountEmail } from '../utils/email.js';
 
 const router = express.Router();
@@ -88,37 +88,36 @@ router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:w
   if (!bvn && !nin) return res.status(400).json({ error: 'BVN or NIN required' });
 
   const accountReference = `GLY-${userId}`;
-  const reserved = await createReservedAccount({
-    accountReference,
-    accountName: user.full_name,
-    customerName: user.full_name,
-    customerEmail: user.email,
-    bvn,
-    nin,
+  const reserved = await createVirtualAccount({
+    email: user.email,
+    bvn: bvn || null,
+    tx_ref: accountReference,
+    firstName: user.full_name?.split(' ')[0] || user.full_name,
+    lastName: user.full_name?.split(' ').slice(1).join(' ') || user.full_name,
   });
-  const account = reserved?.accounts?.[0] || {};
+  const account = reserved?.data || reserved?.response || {};
   await pool.query(
     `INSERT INTO reserved_accounts
      (id, user_id, provider, account_reference, reservation_reference, account_name, account_number, bank_name, bank_code, status, raw_response)
      VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       userId,
-      'monnify',
+      'flutterwave',
       accountReference,
-      reserved?.reservationReference || null,
-      reserved?.accountName || user.full_name,
-      account.accountNumber || reserved?.accountNumber || '',
-      account.bankName || reserved?.bankName || '',
-      account.bankCode || null,
-      reserved?.status || 'ACTIVE',
+      account.order_ref || account.reference || null,
+      account.account_name || user.full_name,
+      account.account_number || '',
+      account.bank_name || '',
+      account.bank_code || null,
+      account.status || 'ACTIVE',
       JSON.stringify(reserved || {}),
     ]
   );
   sendReservedAccountEmail({
     to: user.email,
     name: user.full_name,
-    accountNumber: account.accountNumber || reserved?.accountNumber,
-    bankName: account.bankName || reserved?.bankName,
+    accountNumber: account.account_number,
+    bankName: account.bank_name,
   }).catch(console.error);
   logAudit({
     actorType: 'admin',

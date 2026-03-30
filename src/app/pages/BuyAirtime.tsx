@@ -48,7 +48,7 @@ export default function BuyAirtime() {
     if (mtn.has(prefix5) || mtn.has(prefix4) || mtn.has(prefix3)) return 'mtn';
     if (airtel.has(prefix4) || airtel.has(prefix3)) return 'airtel';
     if (glo.has(prefix4) || glo.has(prefix3)) return 'glo';
-    if (etisalat.has(prefix4) || etisalat.has(prefix3)) return '9mobile';
+    if (etisalat.has(prefix4) || etisalat.has(prefix3)) return 'etisalat';
     return '';
   };
 
@@ -127,6 +127,7 @@ export default function BuyAirtime() {
         amount: parseFloat(formData.amount),
         account: formData.phone,
         pin,
+        phone: formData.phone,
       });
 
       navigate('/transaction-success', {

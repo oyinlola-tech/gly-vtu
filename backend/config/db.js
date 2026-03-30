@@ -287,7 +287,7 @@ export async function initDatabase() {
       CREATE TABLE IF NOT EXISTS bill_orders (
         id CHAR(36) PRIMARY KEY,
         user_id CHAR(36) NOT NULL,
-        provider_id INT NOT NULL,
+        provider_id INT NULL,
         amount DECIMAL(14,2) NOT NULL,
         fee DECIMAL(14,2) NOT NULL,
         total DECIMAL(14,2) NOT NULL,
@@ -347,6 +347,44 @@ export async function initDatabase() {
         INDEX idx_notification_user (user_id),
         FOREIGN KEY (user_id) REFERENCES users(id)
       );
+
+      CREATE TABLE IF NOT EXISTS vtpass_events (
+        id CHAR(36) PRIMARY KEY,
+        request_id VARCHAR(120) NOT NULL UNIQUE,
+        transaction_id VARCHAR(120) NULL,
+        status VARCHAR(40) NOT NULL,
+        raw_payload JSON NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS flutterwave_events (
+        id CHAR(36) PRIMARY KEY,
+        event_id VARCHAR(120) NULL,
+        tx_ref VARCHAR(120) NULL,
+        flw_ref VARCHAR(120) NULL,
+        status VARCHAR(40) NOT NULL,
+        raw_payload JSON NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS virtual_cards (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        provider VARCHAR(40) NOT NULL DEFAULT 'flutterwave',
+        card_id VARCHAR(120) NOT NULL,
+        masked_pan VARCHAR(40) NULL,
+        expiry VARCHAR(20) NULL,
+        currency VARCHAR(10) NOT NULL DEFAULT 'NGN',
+        status VARCHAR(40) NOT NULL DEFAULT 'active',
+        balance DECIMAL(14,2) NOT NULL DEFAULT 0,
+        raw_response JSON NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_card_provider (provider, card_id),
+        INDEX idx_card_user (user_id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
     `);
 
     await conn.query('INSERT IGNORE INTO schema_meta (id, seeded) VALUES (1, 0)');
@@ -355,6 +393,7 @@ export async function initDatabase() {
     await seedAdmin(conn);
     await ensureUserSecurityColumns(conn);
     await ensureBillProviderLogoColumn(conn);
+    await ensureBillOrderProviderNullable(conn);
   } finally {
     conn.release();
   }
@@ -421,4 +460,14 @@ async function ensureBillProviderLogoColumn(conn) {
      END
      WHERE logo_url IS NULL`
   );
+}
+
+async function ensureBillOrderProviderNullable(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'bill_orders' AND COLUMN_NAME = 'provider_id'`,
+    [DB_NAME]
+  );
+  if (cols.length && cols[0].IS_NULLABLE === 'NO') {
+    await conn.query('ALTER TABLE bill_orders MODIFY COLUMN provider_id INT NULL');
+  }
 }

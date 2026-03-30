@@ -376,6 +376,10 @@ export const billsAPI = {
     return request<any[]>(API_BASE_URL, `/bills/providers?category=${encodeURIComponent(category)}`, {}, { auth: false });
   },
 
+  getVariations: async (serviceID: string) => {
+    return request<any>(API_BASE_URL, `/bills/variations?serviceID=${encodeURIComponent(serviceID)}`, {}, { auth: false });
+  },
+
   getQuote: async (data: { providerCode: string; amount: number }) => {
     return request<any>(API_BASE_URL, '/bills/quote', {
       method: 'POST',
@@ -383,14 +387,28 @@ export const billsAPI = {
     });
   },
 
-  pay: async (data: { providerCode: string; amount: number; account: string; pin: string }) => {
+  pay: async (data: {
+    providerCode: string;
+    amount: number;
+    account: string;
+    pin: string;
+    variationCode?: string;
+    phone?: string;
+    subscriptionType?: string;
+  }) => {
     return request<any>(API_BASE_URL, '/bills/pay', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  payWithCard: async (data: { providerCode: string; amount: number; account: string }) => {
+  payWithCard: async (data: {
+    providerCode: string;
+    amount: number;
+    account: string;
+    variationCode?: string;
+    subscriptionType?: string;
+  }) => {
     return request<any>(API_BASE_URL, '/bills/pay-card', {
       method: 'POST',
       body: JSON.stringify(data),

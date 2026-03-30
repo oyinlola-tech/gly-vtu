@@ -5,7 +5,7 @@ import { pool } from '../config/db.js';
 import { signAccessToken, issueRefreshToken, rotateRefreshToken, revokeRefreshToken } from '../utils/tokens.js';
 import { createOtp, verifyOtp } from '../utils/otp.js';
 import { sendOtpEmail, sendWelcomeEmail, sendSecurityEmail, sendLoginFailedEmail } from '../utils/email.js';
-import { createReservedAccount } from '../utils/monnify.js';
+import { createVirtualAccount } from '../utils/flutterwave.js';
 import { logAudit } from '../utils/audit.js';
 import { requireUser } from '../middleware/auth.js';
 import { generateCsrfToken } from '../middleware/csrf.js';
@@ -83,33 +83,30 @@ router.post('/register', async (req, res) => {
       'NGN',
     ]);
 
-    if (bvn || nin) {
-      const accountReference = `GLY-${userId}`;
-      const accountName = fullName;
-      const reserved = await createReservedAccount({
-        accountReference,
-        accountName,
-        customerName: fullName,
-        customerEmail: email,
-        bvn,
-        nin,
+    const accountReference = `GLY-${userId}`;
+    try {
+      const reserved = await createVirtualAccount({
+        email,
+        bvn: bvn || null,
+        tx_ref: accountReference,
+        firstName: fullName?.split(' ')[0] || fullName,
+        lastName: fullName?.split(' ').slice(1).join(' ') || fullName,
       });
-
-      const account = reserved?.accounts?.[0] || {};
+      const account = reserved?.data || reserved?.response || {};
       await pool.query(
         `INSERT INTO reserved_accounts
          (id, user_id, provider, account_reference, reservation_reference, account_name, account_number, bank_name, bank_code, status, raw_response)
          VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
-          'monnify',
+          'flutterwave',
           accountReference,
-          reserved?.reservationReference || null,
-          reserved?.accountName || accountName,
-          account.accountNumber || reserved?.accountNumber || '',
-          account.bankName || reserved?.bankName || '',
-          account.bankCode || null,
-          reserved?.status || 'ACTIVE',
+          account.order_ref || account.reference || null,
+          account.account_name || fullName,
+          account.account_number || '',
+          account.bank_name || '',
+          account.bank_code || null,
+          account.status || 'ACTIVE',
           JSON.stringify(reserved || {}),
         ]
       );
@@ -117,10 +114,10 @@ router.post('/register', async (req, res) => {
       sendWelcomeEmail({
         to: email,
         name: fullName,
-        accountNumber: account.accountNumber || reserved?.accountNumber,
-        bankName: account.bankName || reserved?.bankName,
+        accountNumber: account.account_number,
+        bankName: account.bank_name,
       }).catch(console.error);
-    } else {
+    } catch (err) {
       sendWelcomeEmail({ to: email, name: fullName }).catch(console.error);
     }
     logAudit({

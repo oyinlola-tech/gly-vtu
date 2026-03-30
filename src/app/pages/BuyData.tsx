@@ -21,6 +21,8 @@ export default function BuyData() {
   const [showPINInput, setShowPINInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [variations, setVariations] = useState<any[]>([]);
+  const [variationCode, setVariationCode] = useState('');
 
   const getProviderInitials = (name: string) =>
     name
@@ -33,6 +35,16 @@ export default function BuyData() {
   useEffect(() => {
     loadProviders();
   }, []);
+
+  useEffect(() => {
+    if (!formData.network) return;
+    setVariationCode('');
+    setFormData((prev) => ({ ...prev, amount: '' }));
+    billsAPI
+      .getVariations(formData.network)
+      .then((data) => setVariations(data?.variations || []))
+      .catch(() => setVariations([]));
+  }, [formData.network]);
 
   const detectNetwork = (raw: string) => {
     const digits = raw.replace(/\D/g, '');
@@ -56,7 +68,7 @@ export default function BuyData() {
     if (mtn.has(prefix5) || mtn.has(prefix4) || mtn.has(prefix3)) return 'mtn-data';
     if (airtel.has(prefix4) || airtel.has(prefix3)) return 'airtel-data';
     if (glo.has(prefix4) || glo.has(prefix3)) return 'glo-data';
-    if (etisalat.has(prefix4) || etisalat.has(prefix3)) return '9mobile-data';
+    if (etisalat.has(prefix4) || etisalat.has(prefix3)) return 'etisalat-data';
     return '';
   };
 
@@ -97,6 +109,7 @@ export default function BuyData() {
         providerCode: formData.network,
         amount: parseFloat(formData.amount),
         account: formData.phone,
+        variationCode: variationCode || undefined,
       });
       if (response?.checkoutUrl) {
         window.location.href = response.checkoutUrl;
@@ -125,6 +138,8 @@ export default function BuyData() {
         amount: parseFloat(formData.amount),
         account: formData.phone,
         pin,
+        variationCode: variationCode || undefined,
+        phone: formData.phone,
       });
 
       navigate('/transaction-success', {
@@ -239,12 +254,49 @@ export default function BuyData() {
                   type="number"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  disabled={variations.length > 0}
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
                   placeholder="Enter amount"
                   required
                 />
               </div>
+              {variations.length > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Amount is set by the selected data plan.
+                </p>
+              )}
             </div>
+
+            {variations.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Data Plan
+                </label>
+                <select
+                  value={variationCode}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setVariationCode(code);
+                    const selected = variations.find((v) => v.variation_code === code);
+                    if (selected?.variation_amount) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        amount: String(selected.variation_amount),
+                      }));
+                    }
+                  }}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  required
+                >
+                  <option value="">Select plan</option>
+                  {variations.map((plan) => (
+                    <option key={plan.variation_code} value={plan.variation_code}>
+                      {plan.name} - ₦{plan.variation_amount}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

@@ -7,6 +7,11 @@ import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
 
+type Variation = {
+  variation_code?: string;
+  variation_amount?: string | number;
+};
+
 export default function PayElectricity() {
   const navigate = useNavigate();
   const { verifyPin } = useAuth();
@@ -19,6 +24,8 @@ export default function PayElectricity() {
   const [loading, setLoading] = useState(false);
   const [showPINInput, setShowPINInput] = useState(false);
   const [error, setError] = useState('');
+  const [variations, setVariations] = useState<any[]>([]);
+  const [variationCode, setVariationCode] = useState('');
 
   const getProviderInitials = (name: string) =>
     name
@@ -35,6 +42,25 @@ export default function PayElectricity() {
       .catch(() => null);
   }, []);
 
+  useEffect(() => {
+    if (!selectedProvider) return;
+    setVariationCode('');
+    billsAPI
+      .getVariations(selectedProvider)
+      .then((data) => {
+        const list = (data?.variations || []) as Variation[];
+        setVariations(list);
+        const auto = list.find((v: Variation) =>
+          String(v.variation_code || '').toLowerCase().includes(meterType)
+        );
+        if (auto) {
+          setVariationCode(auto.variation_code ?? '');
+          if (auto.variation_amount) setAmount(String(auto.variation_amount));
+        }
+      })
+      .catch(() => setVariations([]));
+  }, [selectedProvider, meterType]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (paymentMethod === 'card') {
@@ -50,7 +76,8 @@ export default function PayElectricity() {
       const response = await billsAPI.payWithCard({
         providerCode: selectedProvider,
         amount: parseFloat(amount),
-        account: `${meterType}:${meterNumber}`,
+        account: meterNumber,
+        variationCode: variationCode || undefined,
       });
       if (response?.checkoutUrl) {
         window.location.href = response.checkoutUrl;
@@ -171,24 +198,52 @@ export default function PayElectricity() {
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                disabled={variations.length > 0}
                 className="w-full pl-8 pr-4 py-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[#373f46] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
                 placeholder="0.00"
                 required
               />
             </div>
             <div className="grid grid-cols-4 gap-2 mt-3">
-              {['1000', '2000', '5000', '10000'].map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setAmount(preset)}
-                  className="py-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm text-[#3a3c4c] dark:text-white hover:bg-[#235697] hover:text-white transition-colors"
-                >
-                  ₦{preset}
-                </button>
-              ))}
+              {variations.length === 0 &&
+                ['1000', '2000', '5000', '10000'].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAmount(preset)}
+                    className="py-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm text-[#3a3c4c] dark:text-white hover:bg-[#235697] hover:text-white transition-colors"
+                  >
+                    ₦{preset}
+                  </button>
+                ))}
             </div>
           </div>
+
+          {variations.length > 0 && (
+            <div>
+              <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+                Select Tariff
+              </label>
+              <select
+                value={variationCode}
+                onChange={(e) => {
+                  const code = e.target.value;
+                  setVariationCode(code);
+                  const selected = variations.find((v) => v.variation_code === code);
+                  if (selected?.variation_amount) setAmount(String(selected.variation_amount));
+                }}
+                className="w-full px-4 py-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[#373f46] dark:text-white"
+                required
+              >
+                <option value="">Select tariff</option>
+                {variations.map((plan) => (
+                  <option key={plan.variation_code} value={plan.variation_code}>
+                    {plan.name} {plan.variation_amount ? `- ₦${plan.variation_amount}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
@@ -248,8 +303,10 @@ export default function PayElectricity() {
               const response = await billsAPI.pay({
                 providerCode: selectedProvider,
                 amount: parseFloat(amount),
-                account: `${meterType}:${meterNumber}`,
+                account: meterNumber,
                 pin,
+                variationCode: variationCode || undefined,
+                phone: meterNumber,
               });
               navigate('/transaction-success', {
                 state: {

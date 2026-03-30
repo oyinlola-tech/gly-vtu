@@ -27,3 +27,10 @@ export const adminAuthLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const billsLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_BILLS_MAX || 60),
+  standardHeaders: true,
+  legacyHeaders: false,
+});

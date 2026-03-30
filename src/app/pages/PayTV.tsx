@@ -18,6 +18,8 @@ export default function PayTV() {
   const [loading, setLoading] = useState(false);
   const [showPINInput, setShowPINInput] = useState(false);
   const [error, setError] = useState('');
+  const [variations, setVariations] = useState<any[]>([]);
+  const [variationCode, setVariationCode] = useState('');
 
   const getProviderInitials = (name: string) =>
     name
@@ -33,6 +35,16 @@ export default function PayTV() {
       .then((data) => setProviders(data || []))
       .catch(() => null);
   }, []);
+
+  useEffect(() => {
+    if (!selectedProvider) return;
+    setVariationCode('');
+    setAmount('');
+    billsAPI
+      .getVariations(selectedProvider)
+      .then((data) => setVariations(data?.variations || []))
+      .catch(() => setVariations([]));
+  }, [selectedProvider]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +62,8 @@ export default function PayTV() {
         providerCode: selectedProvider,
         amount: parseFloat(amount),
         account: smartCardNumber,
+        variationCode: variationCode || undefined,
+        subscriptionType: 'renew',
       });
       if (response?.checkoutUrl) {
         window.location.href = response.checkoutUrl;
@@ -140,12 +154,44 @@ export default function PayTV() {
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                disabled={variations.length > 0}
                 className="w-full pl-10 pr-4 py-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[#373f46] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
                 placeholder="Enter amount"
                 required
               />
             </div>
+            {variations.length > 0 && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Amount is set by the selected bouquet.
+              </p>
+            )}
           </div>
+
+          {variations.length > 0 && (
+            <div>
+              <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+                Select Bouquet
+              </label>
+              <select
+                value={variationCode}
+                onChange={(e) => {
+                  const code = e.target.value;
+                  setVariationCode(code);
+                  const selected = variations.find((v) => v.variation_code === code);
+                  if (selected?.variation_amount) setAmount(String(selected.variation_amount));
+                }}
+                className="w-full px-4 py-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[#373f46] dark:text-white"
+                required
+              >
+                <option value="">Select bouquet</option>
+                {variations.map((plan) => (
+                  <option key={plan.variation_code} value={plan.variation_code}>
+                    {plan.name} - ₦{plan.variation_amount}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
@@ -207,6 +253,9 @@ export default function PayTV() {
                 amount: parseFloat(amount),
                 account: smartCardNumber,
                 pin,
+                variationCode: variationCode || undefined,
+                phone: smartCardNumber,
+                subscriptionType: 'renew',
               });
               navigate('/transaction-success', {
                 state: {
