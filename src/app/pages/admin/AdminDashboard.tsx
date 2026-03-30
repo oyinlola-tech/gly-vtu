@@ -10,10 +10,12 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { adminAPI } from '../../../services/api';
+import { useAdminAuth } from '../../../contexts/AdminAuthContext';
 import type { AdminBillPricing, AdminBillProvider } from '../../../types/bills';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { logout } = useAdminAuth();
   const [stats, setStats] = useState({
     walletBalance: 0,
     users: 0,
@@ -116,7 +118,7 @@ export default function AdminDashboard() {
   }, [selectedConversation?.id]);
 
   const handleLogout = () => {
-    adminAPI.logout().catch(() => null);
+    logout();
     navigate('/admin/login');
   };
 

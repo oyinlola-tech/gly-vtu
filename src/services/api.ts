@@ -103,6 +103,23 @@ async function refreshAccessToken() {
   return true;
 }
 
+async function refreshAdminAccessToken() {
+  const csrfToken = await ensureAdminCsrfToken();
+  const res = await fetch(`${ADMIN_API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    },
+    credentials: 'include',
+    body: JSON.stringify({ deviceId: getDeviceId() }),
+  });
+  const data = await parseResponse(res);
+  if (!res.ok) throw new Error(data?.error || 'Session expired');
+  if (data?.csrfToken) setStoredToken(ADMIN_CSRF_TOKEN_KEY, data.csrfToken);
+  return true;
+}
+
 async function request<T>(
   base: string,
   path: string,
@@ -126,6 +143,22 @@ async function request<T>(
   if (response.status === 401 && auth && !admin) {
     try {
       await refreshAccessToken();
+      const retryHeaders = { ...headers };
+      const retry = await fetch(`${base}${path}`, {
+        ...options,
+        headers: retryHeaders,
+        credentials: 'include',
+      });
+      const retryData = await parseResponse(retry);
+      if (!retry.ok) throw new Error(retryData?.error || 'Request failed');
+      return retryData as T;
+    } catch (err) {
+      throw err;
+    }
+  }
+  if (response.status === 401 && auth && admin) {
+    try {
+      await refreshAdminAccessToken();
       const retryHeaders = { ...headers };
       const retry = await fetch(`${base}${path}`, {
         ...options,

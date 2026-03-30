@@ -7,9 +7,10 @@ import { useAuth } from '../../contexts/AuthContext';
 export default function SetPIN() {
   const navigate = useNavigate();
   const { user, setUser } = useAuth();
+  const PIN_LENGTH = 6;
   const [step, setStep] = useState<'set' | 'confirm'>('set');
-  const [pin, setPin] = useState(['', '', '', '']);
-  const [confirmPin, setConfirmPin] = useState(['', '', '', '']);
+  const [pin, setPin] = useState(Array(PIN_LENGTH).fill(''));
+  const [confirmPin, setConfirmPin] = useState(Array(PIN_LENGTH).fill(''));
   const [error, setError] = useState('');
   const inputRefs: (HTMLInputElement | null)[] = [];
 
@@ -23,7 +24,7 @@ export default function SetPIN() {
     newPin[index] = value;
     setCurrentPin(newPin);
 
-    if (value && index < 3) {
+    if (value && index < PIN_LENGTH - 1) {
       inputRefs[index + 1]?.focus();
     }
 
@@ -39,7 +40,7 @@ export default function SetPIN() {
     } else {
       if (completedPin !== pin.join('')) {
         setError('PINs do not match');
-        setConfirmPin(['', '', '', '']);
+        setConfirmPin(Array(PIN_LENGTH).fill(''));
         setTimeout(() => inputRefs[0]?.focus(), 100);
         return;
       }
@@ -86,7 +87,7 @@ export default function SetPIN() {
           </h1>
           <p className="text-white/80">
             {step === 'set'
-              ? 'Create a 4-digit PIN to secure your transactions'
+              ? 'Create a 6-digit PIN to secure your transactions'
               : 'Re-enter your PIN to confirm'}
           </p>
         </div>
@@ -126,8 +127,8 @@ export default function SetPIN() {
           <button
             onClick={() => {
               setStep('set');
-              setPin(['', '', '', '']);
-              setConfirmPin(['', '', '', '']);
+              setPin(Array(PIN_LENGTH).fill(''));
+              setConfirmPin(Array(PIN_LENGTH).fill(''));
               setError('');
             }}
             className="mt-6 w-full py-4 text-white font-medium hover:bg-white/10 rounded-xl transition-colors"

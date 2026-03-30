@@ -5,8 +5,8 @@ import { hashToken, pool } from '../config/db.js';
 const ACCESS_TTL = process.env.JWT_ACCESS_TTL || '15m';
 const REFRESH_TTL_DAYS = Number(process.env.JWT_REFRESH_DAYS || 14);
 const ACCESS_COOKIE_MINUTES = Number(process.env.JWT_ACCESS_COOKIE_MINUTES || 15);
-const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'auth_token';
-const ADMIN_AUTH_COOKIE_NAME = process.env.ADMIN_AUTH_COOKIE_NAME || 'admin_auth_token';
+export const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'auth_token';
+export const ADMIN_AUTH_COOKIE_NAME = process.env.ADMIN_AUTH_COOKIE_NAME || 'admin_auth_token';
 const isProd = process.env.NODE_ENV === 'production';
 const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
 

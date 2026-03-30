@@ -54,7 +54,7 @@ function setRefreshCookie(res, token, expiresAt) {
     sameSite: 'lax',
     secure: isProd,
     expires: expiresAt,
-    path: '/app/api/auth',
+    path: '/',
     domain: process.env.COOKIE_DOMAIN || undefined,
   });
 }

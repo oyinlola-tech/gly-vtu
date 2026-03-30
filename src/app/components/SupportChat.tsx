@@ -85,7 +85,7 @@ export default function SupportChat({ onClose }: SupportChatProps) {
       mounted = false;
       wsRef.current?.close();
     };
-  }, []);
+  }, [user?.id]);
 
   const handleSend = () => {
     if (!inputText.trim()) return;

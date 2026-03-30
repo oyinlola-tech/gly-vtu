@@ -87,28 +87,25 @@ const doc = {
         email: { type: 'string', description: 'Email address' },
         password: { type: 'string', description: 'Password' },
         deviceId: { type: 'string', description: 'Client device identifier' },
+        totp: { type: 'string', description: 'TOTP code (admin MFA)' },
+        backupCode: { type: 'string', description: 'Backup code (admin MFA fallback)' },
       },
       example: { email: 'ada@example.com', password: 'StrongPassword1!', deviceId: 'device-xyz' },
     },
     AuthTokensResponse: {
       type: 'object',
       properties: {
-        accessToken: { type: 'string', description: 'JWT access token' },
-        refreshToken: { type: 'string', description: 'Refresh token (may be null if cookie-based)' },
         csrfToken: { type: 'string', description: 'CSRF token for state-changing requests' },
       },
       example: {
-        accessToken: 'eyJhbGciOi...',
-        refreshToken: 'rft_12345',
         csrfToken: 'csrf_12345',
       },
     },
     AuthLoginResponse: {
       type: 'object',
       properties: {
-        accessToken: { type: 'string', description: 'JWT access token' },
-        refreshToken: { type: 'string', description: 'Refresh token (may be null if cookie-based)' },
         csrfToken: { type: 'string', description: 'CSRF token for state-changing requests' },
+        totpRequired: { type: 'boolean', description: 'Whether admin/user must provide TOTP' },
         user: {
           type: 'object',
           properties: {
@@ -120,8 +117,6 @@ const doc = {
         },
       },
       example: {
-        accessToken: 'eyJhbGciOi...',
-        refreshToken: 'rft_12345',
         csrfToken: 'csrf_12345',
         user: { id: 'uuid', fullName: 'Ada Lovelace', email: 'ada@example.com', phone: '+2348012345678' },
       },
@@ -129,9 +124,8 @@ const doc = {
     AdminLoginResponse: {
       type: 'object',
       properties: {
-        accessToken: { type: 'string', description: 'JWT access token' },
-        refreshToken: { type: 'string', description: 'Refresh token (may be null if cookie-based)' },
         csrfToken: { type: 'string', description: 'CSRF token for state-changing requests' },
+        totpRequired: { type: 'boolean', description: 'Whether admin must provide TOTP' },
         admin: {
           type: 'object',
           properties: {
@@ -143,16 +137,14 @@ const doc = {
         },
       },
       example: {
-        accessToken: 'eyJhbGciOi...',
-        refreshToken: 'rft_admin_123',
         csrfToken: 'csrf_admin_123',
         admin: { id: 'uuid', name: 'Admin User', email: 'admin@example.com', role: 'super_admin' },
       },
     },
     RefreshRequest: {
       type: 'object',
-      properties: { refreshToken: { type: 'string', description: 'Refresh token' } },
-      example: { refreshToken: 'rft_12345' },
+      properties: { deviceId: { type: 'string', description: 'Client device identifier' } },
+      example: { deviceId: 'device-xyz' },
     },
     VerifyDeviceRequest: {
       type: 'object',
@@ -237,22 +229,22 @@ const doc = {
     PinSetupRequest: {
       type: 'object',
       required: ['pin'],
-      properties: { pin: { type: 'string', description: '4-6 digit PIN' } },
+      properties: { pin: { type: 'string', description: '6-digit PIN' } },
       example: { pin: '1234' },
     },
     PinChangeRequest: {
       type: 'object',
       required: ['currentPin', 'newPin'],
       properties: {
-        currentPin: { type: 'string', description: 'Current 4-6 digit PIN' },
-        newPin: { type: 'string', description: 'New 4-6 digit PIN' },
+        currentPin: { type: 'string', description: 'Current 6-digit PIN' },
+        newPin: { type: 'string', description: 'New 6-digit PIN' },
       },
       example: { currentPin: '1234', newPin: '4321' },
     },
     PinVerifyRequest: {
       type: 'object',
       required: ['pin'],
-      properties: { pin: { type: 'string', description: '4-6 digit PIN' } },
+      properties: { pin: { type: 'string', description: '6-digit PIN' } },
       example: { pin: '1234' },
     },
     BiometricRequest: {

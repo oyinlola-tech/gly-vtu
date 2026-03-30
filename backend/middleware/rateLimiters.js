@@ -1,36 +1,64 @@
 import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+import { createClient } from 'redis';
 
-export const authLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_AUTH_MAX || 30),
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+const REDIS_URL = process.env.REDIS_URL || '';
+let redisClient = null;
+let redisStore = null;
 
-export const otpLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_OTP_MAX || 10),
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+if (REDIS_URL) {
+  redisClient = createClient({ url: REDIS_URL });
+  redisClient.on('error', (err) => {
+    console.error('Redis rate limiter error:', err.message);
+  });
+  redisClient.connect().catch((err) => {
+    console.error('Redis connection failed:', err.message);
+  });
+  redisStore = new RedisStore({
+    sendCommand: (...args) => redisClient.sendCommand(args),
+  });
+}
 
-export const webhookLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_WEBHOOK_MAX || 120),
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+function limiterOptions(extra) {
+  return {
+    standardHeaders: true,
+    legacyHeaders: false,
+    ...(redisStore ? { store: redisStore } : {}),
+    ...extra,
+  };
+}
 
-export const adminAuthLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_ADMIN_AUTH_MAX || 20),
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+export const authLimiter = rateLimit(
+  limiterOptions({
+    windowMs: 10 * 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_AUTH_MAX || 30),
+  })
+);
 
-export const billsLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_BILLS_MAX || 60),
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+export const otpLimiter = rateLimit(
+  limiterOptions({
+    windowMs: 10 * 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_OTP_MAX || 10),
+  })
+);
+
+export const webhookLimiter = rateLimit(
+  limiterOptions({
+    windowMs: 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_WEBHOOK_MAX || 120),
+  })
+);
+
+export const adminAuthLimiter = rateLimit(
+  limiterOptions({
+    windowMs: 10 * 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_ADMIN_AUTH_MAX || 20),
+  })
+);
+
+export const billsLimiter = rateLimit(
+  limiterOptions({
+    windowMs: 5 * 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_BILLS_MAX || 60),
+  })
+);

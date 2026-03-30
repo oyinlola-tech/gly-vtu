@@ -102,6 +102,7 @@ export default function Security() {
                   type="password"
                   value={pinForm.currentPin}
                   onChange={(e) => setPinForm({ ...pinForm, currentPin: e.target.value })}
+                  maxLength={6}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
                   required
                 />
@@ -115,6 +116,7 @@ export default function Security() {
                 type="password"
                 value={pinForm.newPin}
                 onChange={(e) => setPinForm({ ...pinForm, newPin: e.target.value })}
+                maxLength={6}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
                 required
               />

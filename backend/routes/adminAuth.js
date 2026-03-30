@@ -19,6 +19,13 @@ import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js
 import zxcvbn from 'zxcvbn';
 import { checkFailedLoginAnomaly } from '../utils/anomalies.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import {
+  generateTotpSecret,
+  generateTotpQr,
+  verifyTotp,
+  generateBackupCodes,
+  hashBackupCode,
+} from '../utils/totp.js';
 
 const router = express.Router();
 
@@ -39,6 +46,15 @@ function validatePasswordStrength(password) {
   return null;
 }
 
+function parseJson(value, fallback) {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function setRefreshCookie(res, token, expiresAt) {
   if (!USE_COOKIE_REFRESH) return;
   const encrypted = encryptCookieValue(token);
@@ -47,7 +63,7 @@ function setRefreshCookie(res, token, expiresAt) {
     sameSite: 'lax',
     secure: isProd,
     expires: expiresAt,
-    path: '/app/admin/api/auth',
+    path: '/',
     domain: process.env.COOKIE_DOMAIN || undefined,
   });
 }
@@ -112,6 +128,45 @@ router.post('/login', otpLimiter, async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  if (admin.totp_enabled) {
+    if (!admin.totp_secret) {
+      return res.status(500).json({ error: 'TOTP not configured' });
+    }
+    const totpToken = req.body?.totp || null;
+    const backupCode = req.body?.backupCode || null;
+    if (!totpToken && !backupCode) {
+      return res.json({ totpRequired: true });
+    }
+    let totpValid = false;
+    if (totpToken) {
+      totpValid = verifyTotp({ token: totpToken, secret: admin.totp_secret });
+    }
+    if (!totpValid && backupCode) {
+      const backupCodes = parseJson(admin.totp_backup_codes, []);
+      const usedCodes = new Set(parseJson(admin.backup_codes_used, []));
+      const hashed = hashBackupCode(backupCode);
+      if (backupCodes.includes(hashed) && !usedCodes.has(hashed)) {
+        usedCodes.add(hashed);
+        await pool.query('UPDATE admin_users SET backup_codes_used = ? WHERE id = ?', [
+          JSON.stringify([...usedCodes]),
+          admin.id,
+        ]);
+        totpValid = true;
+      }
+    }
+    if (!totpValid) {
+      logSecurityEvent({
+        type: 'admin.login.totp_failed',
+        severity: 'medium',
+        actorType: 'admin',
+        actorId: admin.id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      }).catch(() => null);
+      return res.status(401).json({ error: 'Invalid TOTP code' });
+    }
+  }
+
   const accessToken = signAccessToken({ type: 'admin', sub: admin.id }, JWT_ADMIN_SECRET);
   setAccessCookie(res, accessToken, 'admin');
   const refresh = await issueRefreshToken({
@@ -136,6 +191,85 @@ router.post('/login', otpLimiter, async (req, res) => {
     csrfToken,
     admin: { id: admin.id, name: admin.name, email: admin.email, role: admin.role },
   });
+});
+
+router.post('/totp/setup', requireAdmin, async (req, res) => {
+  const [[admin]] = await pool.query(
+    'SELECT id, email, name FROM admin_users WHERE id = ? LIMIT 1',
+    [req.admin.sub]
+  );
+  if (!admin) return res.status(404).json({ error: 'Admin not found' });
+
+  const secret = generateTotpSecret(admin.email || admin.name || 'admin');
+  const qrCode = await generateTotpQr(secret.otpauth_url);
+
+  await pool.query(
+    'UPDATE admin_users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?',
+    [secret.base32, admin.id]
+  );
+
+  return res.json({
+    secret: secret.base32,
+    otpauthUrl: secret.otpauth_url,
+    qrCode,
+  });
+});
+
+router.post('/totp/enable', requireAdmin, async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: 'TOTP code required' });
+  const [[admin]] = await pool.query(
+    'SELECT id, totp_secret FROM admin_users WHERE id = ? LIMIT 1',
+    [req.admin.sub]
+  );
+  if (!admin?.totp_secret) return res.status(400).json({ error: 'TOTP not set up' });
+
+  const valid = verifyTotp({ token, secret: admin.totp_secret });
+  if (!valid) return res.status(400).json({ error: 'Invalid TOTP code' });
+
+  const backupCodes = generateBackupCodes();
+  const hashed = backupCodes.map((code) => hashBackupCode(code));
+  await pool.query(
+    'UPDATE admin_users SET totp_enabled = 1, totp_backup_codes = ?, backup_codes_used = ? WHERE id = ?',
+    [JSON.stringify(hashed), JSON.stringify([]), admin.id]
+  );
+
+  return res.json({ enabled: true, backupCodes });
+});
+
+router.post('/totp/disable', requireAdmin, async (req, res) => {
+  const { token, backupCode } = req.body || {};
+  const [[admin]] = await pool.query(
+    'SELECT id, totp_secret, totp_backup_codes, backup_codes_used FROM admin_users WHERE id = ? LIMIT 1',
+    [req.admin.sub]
+  );
+  if (!admin) return res.status(404).json({ error: 'Admin not found' });
+
+  let valid = false;
+  if (token && admin.totp_secret) {
+    valid = verifyTotp({ token, secret: admin.totp_secret });
+  }
+  if (!valid && backupCode) {
+    const backupCodes = parseJson(admin.totp_backup_codes, []);
+    const usedCodes = new Set(parseJson(admin.backup_codes_used, []));
+    const hashed = hashBackupCode(backupCode);
+    if (backupCodes.includes(hashed) && !usedCodes.has(hashed)) {
+      usedCodes.add(hashed);
+      await pool.query('UPDATE admin_users SET backup_codes_used = ? WHERE id = ?', [
+        JSON.stringify([...usedCodes]),
+        admin.id,
+      ]);
+      valid = true;
+    }
+  }
+  if (!valid) return res.status(400).json({ error: 'Invalid TOTP or backup code' });
+
+  await pool.query(
+    'UPDATE admin_users SET totp_enabled = 0, totp_secret = NULL, totp_backup_codes = NULL, backup_codes_used = NULL WHERE id = ?',
+    [admin.id]
+  );
+
+  return res.json({ disabled: true });
 });
 
 router.post('/refresh', async (req, res) => {

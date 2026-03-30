@@ -11,7 +11,7 @@ interface PINInputProps {
 }
 
 export default function PINInput({
-  length = 4,
+  length = 6,
   onComplete,
   onCancel,
   title = 'Enter PIN',
