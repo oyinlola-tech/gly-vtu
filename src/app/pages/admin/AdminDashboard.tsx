@@ -22,6 +22,10 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [conversations, setConversations] = useState<any[]>([]);
+  const [pricing, setPricing] = useState<any[]>([]);
+  const [providers, setProviders] = useState<any[]>([]);
+  const [providerSaving, setProviderSaving] = useState<string | number | null>(null);
+  const [pricingSaving, setPricingSaving] = useState<string | number | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<any | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [reply, setReply] = useState('');
@@ -30,6 +34,9 @@ export default function AdminDashboard() {
     body: '',
     force: true,
   });
+  const [monnifyEvents, setMonnifyEvents] = useState<any[]>([]);
+  const [monnifyStatus, setMonnifyStatus] = useState('all');
+  const [monnifyLoading, setMonnifyLoading] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -62,11 +69,13 @@ export default function AdminDashboard() {
 
   const loadDashboard = async () => {
     try {
-      const [overview, usersRes, txRes, convoRes] = await Promise.all([
+      const [overview, usersRes, txRes, convoRes, pricingRes, providerRes] = await Promise.all([
         adminAPI.getFinanceOverview(),
         adminAPI.getUsers(),
         adminAPI.getTransactions(),
         adminAPI.getConversations(),
+        adminAPI.getBillPricing(),
+        adminAPI.getBillProviders(),
       ]);
       setStats({
         walletBalance: Number(overview.walletBalance || 0),
@@ -77,6 +86,8 @@ export default function AdminDashboard() {
       setUsers(usersRes || []);
       setTransactions(txRes || []);
       setConversations(convoRes || []);
+      setPricing(pricingRes || []);
+      setProviders(providerRes || []);
       if (convoRes?.length && !selectedConversation) {
         setSelectedConversation(convoRes[0]);
       }
@@ -148,6 +159,10 @@ export default function AdminDashboard() {
 
   const recentUsers = useMemo(() => users.slice(0, 5), [users]);
   const recentTransactions = useMemo(() => transactions.slice(0, 5), [transactions]);
+  const dataPricing = useMemo(
+    () => pricing.filter((row) => row.category_code === 'data'),
+    [pricing]
+  );
 
   const sendNotification = async () => {
     if (!notification.title || !notification.body) return;
@@ -183,6 +198,68 @@ export default function AdminDashboard() {
       setMessages(data || []);
     }
   };
+
+  const handlePricingChange = (id: string, field: string, value: any) => {
+    setPricing((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const savePricing = async (row: any) => {
+    setPricingSaving(row.id);
+    try {
+      await adminAPI.updateBillPricing(String(row.id), {
+        baseFee: Number(row.base_fee || 0),
+        markupType: row.markup_type || 'flat',
+        markupValue: Number(row.markup_value || 0),
+        currency: row.currency || 'NGN',
+        active: !!row.active,
+      });
+    } catch {
+      // ignore
+    } finally {
+      setPricingSaving(null);
+    }
+  };
+
+  const handleProviderChange = (id: string, field: string, value: any) => {
+    setProviders((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const saveProvider = async (row: any) => {
+    setProviderSaving(row.id);
+    try {
+      await adminAPI.updateBillProvider(String(row.id), {
+        name: row.name,
+        code: row.code,
+        logoUrl: row.logo_url || '',
+        active: !!row.active,
+      });
+    } catch {
+      // ignore
+    } finally {
+      setProviderSaving(null);
+    }
+  };
+
+  const loadMonnifyEvents = async () => {
+    setMonnifyLoading(true);
+    try {
+      const status = monnifyStatus === 'all' ? undefined : monnifyStatus;
+      const rows = await adminAPI.getMonnifyEvents({ limit: 50, status });
+      setMonnifyEvents(rows || []);
+    } catch {
+      setMonnifyEvents([]);
+    } finally {
+      setMonnifyLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMonnifyEvents();
+  }, [monnifyStatus]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -370,6 +447,211 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Bill Providers</h2>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Update provider name, code, logo and availability
+            </span>
+          </div>
+          {providers.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No providers found.</p>
+          ) : (
+            <div className="space-y-4">
+              {providers.map((row) => (
+                <div
+                  key={row.id}
+                  className="border border-gray-200 dark:border-gray-800 rounded-xl p-4 grid grid-cols-1 lg:grid-cols-6 gap-3 items-center"
+                >
+                  <div className="lg:col-span-2">
+                    <input
+                      value={row.name}
+                      onChange={(e) => handleProviderChange(row.id, 'name', e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-semibold"
+                      placeholder="Provider name"
+                    />
+                    <input
+                      value={row.code}
+                      onChange={(e) => handleProviderChange(row.id, 'code', e.target.value)}
+                      className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+                      placeholder="Provider code"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{row.category_name}</p>
+                  </div>
+                  <div className="lg:col-span-3">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Logo URL</label>
+                    <input
+                      value={row.logo_url || ''}
+                      onChange={(e) => handleProviderChange(row.id, 'logo_url', e.target.value)}
+                      className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                      <input
+                        type="checkbox"
+                        checked={!!row.active}
+                        onChange={(e) => handleProviderChange(row.id, 'active', e.target.checked)}
+                      />
+                      Active
+                    </label>
+                    <button
+                      onClick={() => saveProvider(row)}
+                      className="ml-auto bg-[#235697] text-white px-4 py-2 rounded-lg text-xs font-semibold"
+                      disabled={providerSaving === row.id}
+                    >
+                      {providerSaving === row.id ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Data Pricing</h2>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Manage data bundle pricing and markups
+            </span>
+          </div>
+          {dataPricing.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No data pricing rules yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {dataPricing.map((row) => (
+                <div
+                  key={row.id}
+                  className="border border-gray-200 dark:border-gray-800 rounded-xl p-4 grid grid-cols-1 lg:grid-cols-6 gap-3 items-center"
+                >
+                  <div className="lg:col-span-2">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{row.provider}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{row.provider_code}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Base Fee</label>
+                    <input
+                      type="number"
+                      value={row.base_fee}
+                      onChange={(e) =>
+                        handlePricingChange(row.id, 'base_fee', e.target.value)
+                      }
+                      className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Markup Type</label>
+                    <select
+                      value={row.markup_type}
+                      onChange={(e) =>
+                        handlePricingChange(row.id, 'markup_type', e.target.value)
+                      }
+                      className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                    >
+                      <option value="flat">Flat</option>
+                      <option value="percent">Percent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Markup Value</label>
+                    <input
+                      type="number"
+                      value={row.markup_value}
+                      onChange={(e) =>
+                        handlePricingChange(row.id, 'markup_value', e.target.value)
+                      }
+                      className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                      <input
+                        type="checkbox"
+                        checked={!!row.active}
+                        onChange={(e) =>
+                          handlePricingChange(row.id, 'active', e.target.checked)
+                        }
+                      />
+                      Active
+                    </label>
+                    <button
+                      onClick={() => savePricing(row)}
+                      className="ml-auto bg-[#235697] text-white px-4 py-2 rounded-lg text-xs font-semibold"
+                      disabled={pricingSaving === row.id}
+                    >
+                      {pricingSaving === row.id ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Monnify Webhooks</h2>
+            <div className="flex items-center gap-2">
+              <select
+                value={monnifyStatus}
+                onChange={(e) => setMonnifyStatus(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+              >
+                <option value="all">All</option>
+                <option value="received">Received</option>
+                <option value="processed">Processed</option>
+                <option value="failed">Failed</option>
+              </select>
+              <button
+                onClick={loadMonnifyEvents}
+                className="bg-[#235697] text-white px-3 py-2 rounded-lg text-xs font-semibold"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+          {monnifyLoading ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Loading events...</p>
+          ) : monnifyEvents.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No webhook events yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {monnifyEvents.map((event) => (
+                <div
+                  key={event.payment_reference}
+                  className="border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center gap-3"
+                >
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {event.payment_reference}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {event.account_reference || 'Account: N/A'} · {event.currency} {Number(event.amount || 0).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Status: <span className="font-semibold">{event.status}</span>
+                      {event.last_error ? ` · Error: ${event.last_error}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {event.updated_at ? new Date(event.updated_at).toLocaleString() : ''}
+                  </div>
+                  {event.status === 'failed' && (
+                    <button
+                      onClick={() => adminAPI.retryMonnifyEvent(event.payment_reference).then(loadMonnifyEvents)}
+                      className="bg-red-500 text-white px-3 py-2 rounded-lg text-xs font-semibold"
+                    >
+                      Retry
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

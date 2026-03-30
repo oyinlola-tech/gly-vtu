@@ -14,6 +14,7 @@ export default function PayTV() {
   const [selectedProvider, setSelectedProvider] = useState('');
   const [smartCardNumber, setSmartCardNumber] = useState('');
   const [amount, setAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'card'>('wallet');
   const [loading, setLoading] = useState(false);
   const [showPINInput, setShowPINInput] = useState(false);
   const [error, setError] = useState('');
@@ -35,7 +36,29 @@ export default function PayTV() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (paymentMethod === 'card') {
+      handleCardPayment();
+      return;
+    }
     setShowPINInput(true);
+  };
+
+  const handleCardPayment = async () => {
+    setLoading(true);
+    try {
+      const response = await billsAPI.payWithCard({
+        providerCode: selectedProvider,
+        amount: parseFloat(amount),
+        account: smartCardNumber,
+      });
+      if (response?.checkoutUrl) {
+        window.location.href = response.checkoutUrl;
+      }
+    } catch (err) {
+      setError('Card payment failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -122,6 +145,39 @@ export default function PayTV() {
                 required
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+              Payment Method
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('wallet')}
+                className={`py-3 rounded-lg font-semibold transition-all ${
+                  paymentMethod === 'wallet'
+                    ? 'bg-[#235697] text-white'
+                    : 'bg-white dark:bg-gray-900 text-[#3a3c4c] dark:text-white border border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                Wallet Balance
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('card')}
+                className={`py-3 rounded-lg font-semibold transition-all ${
+                  paymentMethod === 'card'
+                    ? 'bg-[#235697] text-white'
+                    : 'bg-white dark:bg-gray-900 text-[#3a3c4c] dark:text-white border border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                Pay with Card
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Card payments will open a secure checkout page.
+            </p>
           </div>
 
           <button

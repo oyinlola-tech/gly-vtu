@@ -15,7 +15,9 @@ export default function BuyAirtime() {
     network: '',
     phone: '',
     amount: '',
+    paymentMethod: 'wallet',
   });
+  const [manualNetwork, setManualNetwork] = useState(false);
   const [showPINInput, setShowPINInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,6 +25,44 @@ export default function BuyAirtime() {
   useEffect(() => {
     loadProviders();
   }, []);
+
+  const detectNetwork = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length < 4) return '';
+    const prefix4 = digits.slice(0, 4);
+    const prefix3 = digits.slice(0, 3);
+    const prefix5 = digits.slice(0, 5);
+    const mtn = new Set([
+      '0703','0704','0706','0803','0806','0810','0813','0814','0816','0903','0906','0913','0916',
+      '07025','07026'
+    ]);
+    const airtel = new Set([
+      '0701','0708','0802','0808','0812','0901','0902','0904','0907','0912'
+    ]);
+    const glo = new Set([
+      '0705','0805','0807','0811','0815','0905','0915'
+    ]);
+    const etisalat = new Set([
+      '0809','0817','0818','0908','0909'
+    ]);
+    if (mtn.has(prefix5) || mtn.has(prefix4) || mtn.has(prefix3)) return 'mtn';
+    if (airtel.has(prefix4) || airtel.has(prefix3)) return 'airtel';
+    if (glo.has(prefix4) || glo.has(prefix3)) return 'glo';
+    if (etisalat.has(prefix4) || etisalat.has(prefix3)) return '9mobile';
+    return '';
+  };
+
+  useEffect(() => {
+    if (manualNetwork) return;
+    const detected = detectNetwork(formData.phone);
+    if (!detected) return;
+    if (formData.network !== detected) {
+      setFormData((prev) => ({ ...prev, network: detected }));
+    }
+  }, [formData.phone, manualNetwork]);
+
+  const providerName =
+    providers.find((p) => p.code === formData.network)?.name || formData.network.toUpperCase();
 
   const loadProviders = async () => {
     try {
@@ -45,7 +85,29 @@ export default function BuyAirtime() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.paymentMethod === 'card') {
+      handleCardPayment();
+      return;
+    }
     setShowPINInput(true);
+  };
+
+  const handleCardPayment = async () => {
+    setLoading(true);
+    try {
+      const response = await billsAPI.payWithCard({
+        providerCode: formData.network,
+        amount: parseFloat(formData.amount),
+        account: formData.phone,
+      });
+      if (response?.checkoutUrl) {
+        window.location.href = response.checkoutUrl;
+      }
+    } catch (err) {
+      setError('Card payment failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePINVerified = async (pin: string) => {
@@ -107,37 +169,44 @@ export default function BuyAirtime() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                 Select Network
               </label>
-              <div className="grid grid-cols-4 gap-3">
-                {providers.map((provider) => (
-                  <button
-                    key={provider.code}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, network: provider.code })}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                      formData.network === provider.code
-                        ? 'border-[#235697] bg-[#235697]/5'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="relative w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-300">
-                      {getProviderInitials(provider.name || '---')}
-                      {provider.logo_url && (
-                        <img
-                          src={provider.logo_url}
-                          alt={provider.name}
-                          className="absolute inset-0 w-full h-full object-contain rounded-full"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      )}
-                    </div>
-                    <span className="text-xs font-medium text-gray-900 dark:text-white">
+              {!manualNetwork ? (
+                <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                  <div className="relative w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-300">
+                    {getProviderInitials(providerName || '---')}
+                    {providers.find((p) => p.code === formData.network)?.logo_url && (
+                      <img
+                        src={providers.find((p) => p.code === formData.network)?.logo_url}
+                        alt={providerName}
+                        className="absolute inset-0 w-full h-full object-contain rounded-full"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {providerName || 'Detecting network...'}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Network detected automatically
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <select
+                  value={formData.network}
+                  onChange={(e) => setFormData({ ...formData, network: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                >
+                  <option value="">Select network</option>
+                  {providers.map((provider) => (
+                    <option key={provider.code} value={provider.code}>
                       {provider.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>
@@ -152,6 +221,14 @@ export default function BuyAirtime() {
                 placeholder="080 0000 0000"
                 required
               />
+              <label className="mt-3 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={manualNetwork}
+                  onChange={(e) => setManualNetwork(e.target.checked)}
+                />
+                Not your network? Choose manually
+              </label>
             </div>
 
             <div>
@@ -185,6 +262,39 @@ export default function BuyAirtime() {
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Payment Method
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, paymentMethod: 'wallet' })}
+                  className={`py-3 rounded-xl text-sm font-semibold border ${
+                    formData.paymentMethod === 'wallet'
+                      ? 'bg-[#235697] text-white border-[#235697]'
+                      : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700'
+                  }`}
+                >
+                  Wallet Balance
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, paymentMethod: 'card' })}
+                  className={`py-3 rounded-xl text-sm font-semibold border ${
+                    formData.paymentMethod === 'card'
+                      ? 'bg-[#235697] text-white border-[#235697]'
+                      : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700'
+                  }`}
+                >
+                  Pay with Card
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Card payments will open a secure checkout page.
+              </p>
             </div>
 
             <button

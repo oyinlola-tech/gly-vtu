@@ -225,4 +225,80 @@ router.post('/pay', requireUser, async (req, res) => {
   }
 });
 
+router.post('/pay-card', requireUser, async (req, res) => {
+  /*
+    #swagger.tags = ['Bills']
+    #swagger.summary = 'Pay a bill with external card'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/BillsPayRequest' } }
+    #swagger.responses[200] = { description: 'Checkout created', schema: { type: 'object' } }
+    #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  const { providerCode, amount, account } = req.body || {};
+  const numericAmount = Number(amount);
+  if (!providerCode || !numericAmount || numericAmount <= 0 || !account) {
+    return res.status(400).json({ error: 'Invalid request' });
+  }
+
+  const checkoutBase = (process.env.CARD_CHECKOUT_URL || '').trim();
+  if (!checkoutBase) {
+    return res.status(400).json({ error: 'Card payments not configured' });
+  }
+
+  const [rows] = await pool.query(
+    `SELECT p.id, p.name, pr.base_fee, pr.markup_type, pr.markup_value, pr.currency
+     FROM bill_providers p
+     JOIN bill_pricing pr ON pr.provider_id = p.id
+     WHERE p.code = ? AND p.active = 1 AND pr.active = 1`,
+    [providerCode]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Provider not found' });
+
+  const pricing = rows[0];
+  const markup =
+    pricing.markup_type === 'percent'
+      ? (numericAmount * Number(pricing.markup_value)) / 100
+      : Number(pricing.markup_value);
+  const fee = Number(pricing.base_fee) + markup;
+  const total = numericAmount + fee;
+
+  const reference = `BILL-CARD-${nanoid(10)}`;
+  const provider = process.env.CARD_PROVIDER || 'external_card';
+
+  await pool.query(
+    'INSERT INTO bill_orders (id, user_id, provider_id, amount, fee, total, status, reference) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)',
+    [req.user.sub, pricing.id, numericAmount, fee, total, 'pending', reference]
+  );
+  await pool.query(
+    'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      req.user.sub,
+      'bill',
+      numericAmount,
+      fee,
+      total,
+      'pending',
+      reference,
+      JSON.stringify({
+        provider: pricing.name,
+        account,
+        channel: 'card',
+        cardProvider: provider,
+      }),
+    ]
+  );
+
+  const checkoutUrl = `${checkoutBase}?reference=${encodeURIComponent(
+    reference
+  )}&amount=${encodeURIComponent(total)}&currency=${encodeURIComponent(pricing.currency)}`;
+
+  return res.json({
+    message: 'Card checkout created',
+    reference,
+    total,
+    currency: pricing.currency,
+    checkoutUrl,
+  });
+});
+
 export default router;

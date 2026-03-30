@@ -394,4 +394,31 @@ async function ensureBillProviderLogoColumn(conn) {
   if (!existing.has('logo_url')) {
     await conn.query('ALTER TABLE bill_providers ADD COLUMN logo_url VARCHAR(255) NULL');
   }
+  await conn.query(
+    `UPDATE bill_providers
+     SET logo_url = CASE code
+       WHEN 'mtn' THEN 'https://logo.clearbit.com/mtn.ng'
+       WHEN 'airtel' THEN 'https://logo.clearbit.com/airtel.com.ng'
+       WHEN 'glo' THEN 'https://logo.clearbit.com/gloworld.com'
+       WHEN '9mobile' THEN 'https://logo.clearbit.com/9mobile.com.ng'
+       WHEN 'mtn-data' THEN 'https://logo.clearbit.com/mtn.ng'
+       WHEN 'airtel-data' THEN 'https://logo.clearbit.com/airtel.com.ng'
+       WHEN 'glo-data' THEN 'https://logo.clearbit.com/gloworld.com'
+       WHEN '9mobile-data' THEN 'https://logo.clearbit.com/9mobile.com.ng'
+       WHEN 'dstv' THEN 'https://logo.clearbit.com/dstv.com'
+       WHEN 'gotv' THEN 'https://logo.clearbit.com/gotvafrica.com'
+       WHEN 'startimes' THEN 'https://logo.clearbit.com/startimestv.com'
+       WHEN 'ikedc' THEN 'https://logo.clearbit.com/ikedc.com'
+       WHEN 'ekedc' THEN 'https://logo.clearbit.com/ekedp.com'
+       WHEN 'aedc' THEN 'https://logo.clearbit.com/aedc.com.ng'
+       WHEN 'waec' THEN 'https://logo.clearbit.com/waecnigeria.org'
+       WHEN 'jamb' THEN 'https://logo.clearbit.com/jamb.gov.ng'
+       WHEN 'bet9ja' THEN 'https://logo.clearbit.com/bet9ja.com'
+       WHEN 'sportybet' THEN 'https://logo.clearbit.com/sportybet.com'
+       WHEN 'spectranet' THEN 'https://logo.clearbit.com/spectranet.com.ng'
+       WHEN 'smile' THEN 'https://logo.clearbit.com/smile.com.ng'
+       ELSE logo_url
+     END
+     WHERE logo_url IS NULL`
+  );
 }

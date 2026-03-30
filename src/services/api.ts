@@ -389,6 +389,13 @@ export const billsAPI = {
       body: JSON.stringify(data),
     });
   },
+
+  payWithCard: async (data: { providerCode: string; amount: number; account: string }) => {
+    return request<any>(API_BASE_URL, '/bills/pay-card', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 // ============= BANKS APIs =============
@@ -549,6 +556,40 @@ export const adminAPI = {
       ADMIN_API_BASE_URL,
       `/bills/pricing/${id}`,
       { method: 'PUT', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  getBillProviders: async () => {
+    return request<any[]>(ADMIN_API_BASE_URL, '/bills/providers', {}, { admin: true });
+  },
+
+  updateBillProvider: async (
+    id: string,
+    payload: { name: string; code: string; logoUrl?: string; active: boolean }
+  ) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/bills/providers/${id}`,
+      { method: 'PUT', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  getMonnifyEvents: async (params?: { limit?: number; offset?: number; status?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    if (params?.status) search.set('status', params.status);
+    const query = search.toString();
+    return request<any[]>(ADMIN_API_BASE_URL, `/monnify/events${query ? `?${query}` : ''}`, {}, { admin: true });
+  },
+
+  retryMonnifyEvent: async (paymentReference: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/monnify/retry',
+      { method: 'POST', body: JSON.stringify({ paymentReference }) },
       { admin: true }
     );
   },
