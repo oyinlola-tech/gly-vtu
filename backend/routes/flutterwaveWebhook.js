@@ -4,11 +4,20 @@ import { verifyFlutterwaveWebhook } from '../utils/flutterwave.js';
 import { sanitizeFlutterwaveWebhook } from '../utils/sanitize.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { sendReceiptEmail } from '../utils/email.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
 
 const router = express.Router();
 
 router.post('/', async (req, res) => {
   if (!verifyFlutterwaveWebhook(req)) {
+    logSecurityEvent({
+      type: 'webhook.flutterwave.invalid',
+      severity: 'high',
+      actorType: 'system',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { signature: Boolean(req.headers['verif-hash']) },
+    }).catch(() => null);
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
@@ -36,6 +45,14 @@ router.post('/', async (req, res) => {
     return res.json({ message: 'Ignored' });
   }
   if (String(data.currency || '').toUpperCase() !== 'NGN') {
+    logSecurityEvent({
+      type: 'webhook.flutterwave.currency_mismatch',
+      severity: 'medium',
+      actorType: 'system',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { currency: data.currency, tx_ref: data.tx_ref },
+    }).catch(() => null);
     return res.json({ message: 'Ignored' });
   }
 
@@ -81,6 +98,17 @@ router.post('/', async (req, res) => {
         JSON.stringify({ provider: 'flutterwave', reason: 'kyc_limit' }),
       ]
     );
+    logSecurityEvent({
+      type: 'kyc.limit.topup_hold',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: account.user_id,
+      entityType: 'transaction',
+      entityId: reference,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { amount, message: limitCheck.message },
+    }).catch(() => null);
     return res.json({ message: 'Held for KYC limits' });
   }
 

@@ -7,7 +7,7 @@ import {
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { walletAPI } from '../../services/api';
+import { walletAPI, userAPI } from '../../services/api';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [balance, setBalance] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [kycInfo, setKycInfo] = useState<any>(null);
 
   useEffect(() => {
     loadDashboard();
@@ -23,9 +24,10 @@ export default function Dashboard() {
 
   const loadDashboard = async () => {
     try {
-      const [balanceRes, txns] = await Promise.all([
+      const [balanceRes, txns, kyc] = await Promise.all([
         walletAPI.getBalance(),
         walletAPI.getTransactions(),
+        userAPI.getKycLimits(),
       ]);
       setBalance(Number(balanceRes?.balance || 0));
       setLastUpdated(new Date().toISOString());
@@ -63,6 +65,7 @@ export default function Dashboard() {
           };
         })
       );
+      setKycInfo(kyc);
     } catch (err) {
       console.error('Failed to load dashboard data');
     }
@@ -143,6 +146,25 @@ export default function Dashboard() {
       </div>
 
       <div className="px-6 -mt-16">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">KYC Tier</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                Level {kycInfo?.level || 1}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Status: {kycInfo?.status || 'pending'}
+              </p>
+            </div>
+            <Link
+              to="/kyc-status"
+              className="text-xs text-[#235697] font-semibold"
+            >
+              View limits
+            </Link>
+          </div>
+        </div>
         {/* Quick Actions */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 mb-6">
           <div className="flex items-center justify-around">

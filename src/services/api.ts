@@ -19,6 +19,8 @@ const ACCESS_TOKEN_KEY = 'gly_access_token';
 const REFRESH_TOKEN_KEY = 'gly_refresh_token';
 const ADMIN_TOKEN_KEY = 'gly_admin_token';
 const DEVICE_ID_KEY = 'gly_device_id';
+const CSRF_TOKEN_KEY = 'gly_csrf_token';
+const ADMIN_CSRF_TOKEN_KEY = 'gly_admin_csrf_token';
 
 function getStoredToken(key: string) {
   try {
@@ -49,6 +51,36 @@ function getDeviceId() {
   return deviceId;
 }
 
+function createIdempotencyKey() {
+  return crypto.randomUUID();
+}
+
+async function ensureCsrfToken() {
+  let token = getStoredToken(CSRF_TOKEN_KEY);
+  if (!token) {
+    const res = await fetch(`${API_BASE_URL}/auth/csrf`, { credentials: 'include' });
+    const data = await parseResponse(res);
+    if (res.ok && data?.csrfToken) {
+      token = data.csrfToken;
+      setStoredToken(CSRF_TOKEN_KEY, token);
+    }
+  }
+  return token;
+}
+
+async function ensureAdminCsrfToken() {
+  let token = getStoredToken(ADMIN_CSRF_TOKEN_KEY);
+  if (!token) {
+    const res = await fetch(`${ADMIN_API_BASE_URL}/auth/csrf`, { credentials: 'include' });
+    const data = await parseResponse(res);
+    if (res.ok && data?.csrfToken) {
+      token = data.csrfToken;
+      setStoredToken(ADMIN_CSRF_TOKEN_KEY, token);
+    }
+  }
+  return token;
+}
+
 async function parseResponse(res: Response) {
   const contentType = res.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
@@ -59,16 +91,21 @@ async function parseResponse(res: Response) {
 
 async function refreshAccessToken() {
   const refreshToken = getStoredToken(REFRESH_TOKEN_KEY);
+  const csrfToken = await ensureCsrfToken();
   const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    },
     credentials: 'include',
-    body: JSON.stringify({ refreshToken }),
+    body: JSON.stringify({ refreshToken, deviceId: getDeviceId() }),
   });
   const data = await parseResponse(res);
   if (!res.ok) throw new Error(data?.error || 'Session expired');
   if (data?.accessToken) setStoredToken(ACCESS_TOKEN_KEY, data.accessToken);
   if (data?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, data.refreshToken);
+  if (data?.csrfToken) setStoredToken(CSRF_TOKEN_KEY, data.csrfToken);
   return data?.accessToken;
 }
 
@@ -165,6 +202,7 @@ export const authAPI = {
     );
     if (response?.accessToken) setStoredToken(ACCESS_TOKEN_KEY, response.accessToken);
     if (response?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, response.refreshToken);
+    if (response?.csrfToken) setStoredToken(CSRF_TOKEN_KEY, response.csrfToken);
     return response;
   },
 
@@ -192,6 +230,7 @@ export const authAPI = {
     );
     if (response?.accessToken) setStoredToken(ACCESS_TOKEN_KEY, response.accessToken);
     if (response?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, response.refreshToken);
+    if (response?.csrfToken) setStoredToken(CSRF_TOKEN_KEY, response.csrfToken);
     return response;
   },
 
@@ -223,6 +262,7 @@ export const authAPI = {
     );
     setStoredToken(ACCESS_TOKEN_KEY, null);
     setStoredToken(REFRESH_TOKEN_KEY, null);
+    setStoredToken(CSRF_TOKEN_KEY, null);
   },
 
   me: async () => {
@@ -258,6 +298,30 @@ export const userAPI = {
       API_BASE_URL,
       '/user/profile',
       { method: 'PUT', body: JSON.stringify(data) }
+    );
+  },
+
+  getKycLimits: async () => {
+    return request<any>(API_BASE_URL, '/user/kyc/limits');
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/password/change',
+      { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }
+    );
+  },
+
+  getSessions: async () => {
+    return request<any[]>(API_BASE_URL, '/user/sessions');
+  },
+
+  revokeSession: async (id: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      `/user/sessions/${id}/revoke`,
+      { method: 'POST' }
     );
   },
 
@@ -339,6 +403,7 @@ export const walletAPI = {
   }) => {
     return request<any>(API_BASE_URL, '/wallet/send', {
       method: 'POST',
+      headers: { 'X-Idempotency-Key': createIdempotencyKey() },
       body: JSON.stringify(data),
     });
   },
@@ -414,6 +479,7 @@ export const billsAPI = {
   pay: async (data: BillsPayRequest) => {
     return request<BillsPayResponse>(API_BASE_URL, '/bills/pay', {
       method: 'POST',
+      headers: { 'X-Idempotency-Key': createIdempotencyKey() },
       body: JSON.stringify(data),
     });
   },
@@ -421,6 +487,7 @@ export const billsAPI = {
   payWithCard: async (data: BillsPayCardRequest) => {
     return request<BillsPayCardResponse>(API_BASE_URL, '/bills/pay-card', {
       method: 'POST',
+      headers: { 'X-Idempotency-Key': createIdempotencyKey() },
       body: JSON.stringify(data),
     });
   },
@@ -482,6 +549,7 @@ export const cardsAPI = {
   create: async (amount: number, currency = 'NGN') => {
     return request<any>(API_BASE_URL, '/cards', {
       method: 'POST',
+      headers: { 'X-Idempotency-Key': createIdempotencyKey() },
       body: JSON.stringify({ amount, currency }),
     });
   },
@@ -512,24 +580,31 @@ export const adminAPI = {
     const response = await request<any>(
       ADMIN_API_BASE_URL,
       '/auth/login',
-      { method: 'POST', body: JSON.stringify(data) },
+      { method: 'POST', body: JSON.stringify({ ...data, deviceId: getDeviceId() }) },
       { auth: false, admin: true }
     );
     if (response?.accessToken) setStoredToken(ADMIN_TOKEN_KEY, response.accessToken);
     if (response?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, response.refreshToken);
+    if (response?.csrfToken) setStoredToken(ADMIN_CSRF_TOKEN_KEY, response.csrfToken);
     return response;
   },
 
   refresh: async () => {
     const refreshToken = getStoredToken(REFRESH_TOKEN_KEY);
+    const csrfToken = await ensureAdminCsrfToken();
     const response = await request<any>(
       ADMIN_API_BASE_URL,
       '/auth/refresh',
-      { method: 'POST', body: JSON.stringify({ refreshToken }) },
+      {
+        method: 'POST',
+        headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+        body: JSON.stringify({ refreshToken, deviceId: getDeviceId() }),
+      },
       { auth: false, admin: true }
     );
     if (response?.accessToken) setStoredToken(ADMIN_TOKEN_KEY, response.accessToken);
     if (response?.refreshToken) setStoredToken(REFRESH_TOKEN_KEY, response.refreshToken);
+    if (response?.csrfToken) setStoredToken(ADMIN_CSRF_TOKEN_KEY, response.csrfToken);
     return response;
   },
 
@@ -542,6 +617,7 @@ export const adminAPI = {
       { auth: false, admin: true }
     );
     setStoredToken(ADMIN_TOKEN_KEY, null);
+    setStoredToken(ADMIN_CSRF_TOKEN_KEY, null);
   },
 
   getFinanceOverview: async () => {
@@ -558,6 +634,93 @@ export const adminAPI = {
 
   getAudit: async () => {
     return request<any[]>(ADMIN_API_BASE_URL, '/audit', {}, { admin: true });
+  },
+
+  getAuditLogs: async (params?: {
+    limit?: number;
+    offset?: number;
+    actorType?: string;
+    actorId?: string;
+    action?: string;
+    entityType?: string;
+    from?: string;
+    to?: string;
+  }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    if (params?.actorType) search.set('actorType', params.actorType);
+    if (params?.actorId) search.set('actorId', params.actorId);
+    if (params?.action) search.set('action', params.action);
+    if (params?.entityType) search.set('entityType', params.entityType);
+    if (params?.from) search.set('from', params.from);
+    if (params?.to) search.set('to', params.to);
+    const query = search.toString();
+    return request<any[]>(
+      ADMIN_API_BASE_URL,
+      `/audit${query ? `?${query}` : ''}`,
+      {},
+      { admin: true }
+    );
+  },
+
+  getHeldTopups: async () => {
+    return request<any[]>(ADMIN_API_BASE_URL, '/transactions/held-topups', {}, { admin: true });
+  },
+
+  approveHeldTopup: async (reference: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/transactions/held-topups/${reference}/approve`,
+      { method: 'POST', headers: { 'X-Idempotency-Key': createIdempotencyKey() } },
+      { admin: true }
+    );
+  },
+
+  rejectHeldTopup: async (reference: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/transactions/held-topups/${reference}/reject`,
+      { method: 'POST' },
+      { admin: true }
+    );
+  },
+
+  getAdminAdjustments: async (status?: string) => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return request<any[]>(ADMIN_API_BASE_URL, `/finance/adjustments${query}`, {}, { admin: true });
+  },
+
+  requestAdminAdjustment: async (payload: {
+    userId: string;
+    type: 'credit' | 'debit';
+    amount: number;
+    reason?: string;
+  }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/finance/adjustments',
+      { method: 'POST', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  approveAdminAdjustment: async (id: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/finance/adjustments/${id}/approve`,
+      { method: 'POST', headers: { 'X-Idempotency-Key': createIdempotencyKey() } },
+      { admin: true }
+    );
+  },
+
+  rejectAdminAdjustment: async (id: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/finance/adjustments/${id}/reject`,
+      { method: 'POST' },
+      { admin: true }
+    );
   },
 
   getConversations: async () => {
@@ -671,6 +834,8 @@ export const tokenStore = {
     setStoredToken(ACCESS_TOKEN_KEY, null);
     setStoredToken(REFRESH_TOKEN_KEY, null);
     setStoredToken(ADMIN_TOKEN_KEY, null);
+    setStoredToken(CSRF_TOKEN_KEY, null);
+    setStoredToken(ADMIN_CSRF_TOKEN_KEY, null);
   },
   getDeviceId,
 };

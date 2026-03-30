@@ -162,6 +162,23 @@ export async function initDatabase() {
         INDEX idx_audit_entity (entity_type, entity_id)
       );
 
+      CREATE TABLE IF NOT EXISTS security_events (
+        id CHAR(36) PRIMARY KEY,
+        event_type VARCHAR(120) NOT NULL,
+        severity ENUM('low','medium','high','critical') NOT NULL DEFAULT 'medium',
+        actor_type ENUM('user','admin','system') NOT NULL DEFAULT 'system',
+        actor_id CHAR(36) NULL,
+        entity_type VARCHAR(80) NULL,
+        entity_id VARCHAR(120) NULL,
+        ip_address VARCHAR(60) NULL,
+        user_agent VARCHAR(255) NULL,
+        metadata JSON NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_severity (severity),
+        INDEX idx_event_type (event_type),
+        INDEX idx_event_actor (actor_type, actor_id)
+      );
+
       CREATE TABLE IF NOT EXISTS admin_adjustments (
         id CHAR(36) PRIMARY KEY,
         user_id CHAR(36) NOT NULL,
@@ -450,6 +467,7 @@ export async function initDatabase() {
     await ensureAdminAdjustmentsTable(conn);
     await ensureBillProviderLogoColumn(conn);
     await ensureBillOrderProviderNullable(conn);
+    await ensureSecurityEventsTable(conn);
   } finally {
     conn.release();
   }
@@ -640,4 +658,25 @@ async function ensureBillOrderProviderNullable(conn) {
   if (cols.length && cols[0].IS_NULLABLE === 'NO') {
     await conn.query('ALTER TABLE bill_orders MODIFY COLUMN provider_id INT NULL');
   }
+}
+
+async function ensureSecurityEventsTable(conn) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS security_events (
+      id CHAR(36) PRIMARY KEY,
+      event_type VARCHAR(120) NOT NULL,
+      severity ENUM('low','medium','high','critical') NOT NULL DEFAULT 'medium',
+      actor_type ENUM('user','admin','system') NOT NULL DEFAULT 'system',
+      actor_id CHAR(36) NULL,
+      entity_type VARCHAR(80) NULL,
+      entity_id VARCHAR(120) NULL,
+      ip_address VARCHAR(60) NULL,
+      user_agent VARCHAR(255) NULL,
+      metadata JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_severity (severity),
+      INDEX idx_event_type (event_type),
+      INDEX idx_event_actor (actor_type, actor_id)
+    )
+  `);
 }

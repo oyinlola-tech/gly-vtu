@@ -15,6 +15,9 @@ export default function SendMoney() {
       </div>
 
       <div className="px-6 -mt-16">
+        <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-4 rounded-2xl text-sm mb-6">
+          Transfers are monitored for fraud. Keep your transaction PIN secure and verify recipients.
+        </div>
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 space-y-4">
           <Link
             to="/send/swift-pay"

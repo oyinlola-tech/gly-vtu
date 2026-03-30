@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { pool } from '../config/db.js';
 import { sendReceiptEmail } from '../utils/email.js';
 import { sanitizeVtpassPayload } from '../utils/sanitize.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
 
 const router = express.Router();
 
@@ -36,6 +37,17 @@ function ipAllowed(req) {
 
 router.post('/', async (req, res) => {
   if (!verifyVtpassWebhook(req) || !ipAllowed(req)) {
+    logSecurityEvent({
+      type: 'webhook.vtpass.invalid',
+      severity: 'high',
+      actorType: 'system',
+      ip: getRequestIp(req),
+      userAgent: req.headers['user-agent'],
+      metadata: {
+        signature: Boolean(req.headers['x-vtpass-signature']),
+        ipAllowed: ipAllowed(req),
+      },
+    }).catch(() => null);
     return res.status(401).json({ error: 'Invalid signature' });
   }
   const payload = req.body || {};

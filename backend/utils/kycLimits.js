@@ -25,6 +25,14 @@ function getOverride(level, period, type) {
   return raw ? Number(raw) : null;
 }
 
+export function getKycLimitConfig(level, type) {
+  const cfg = getKycLimits(level);
+  if (!cfg) return null;
+  const daily = getOverride(level, 'daily', type) ?? cfg.daily;
+  const monthly = getOverride(level, 'monthly', type) ?? cfg.monthly;
+  return { daily, monthly };
+}
+
 export async function enforceKycLimits({ userId, level, amount, types }) {
   const cfg = getKycLimits(level);
   if (!cfg) return { ok: true };

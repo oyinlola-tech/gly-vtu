@@ -49,7 +49,7 @@ export default function SupportChat({ onClose }: SupportChatProps) {
     const token = tokenStore.getAccessToken();
     const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
     if (token) {
-      const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}&role=user`);
+      const ws = new WebSocket(`${wsUrl}?role=user`, [token]);
       wsRef.current = ws;
       ws.onmessage = (event) => {
         try {

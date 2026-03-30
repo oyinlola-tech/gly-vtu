@@ -6,6 +6,8 @@ import { sanitizeFlutterwaveCard } from '../utils/sanitize.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { logAudit } from '../utils/audit.js';
 import { isValidAmount, isNonEmptyString } from '../utils/validation.js';
+import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
 
 const router = express.Router();
 
@@ -20,28 +22,65 @@ router.get('/', requireUser, async (req, res) => {
 
 router.post('/', requireUser, async (req, res) => {
   const { amount, currency = 'NGN' } = req.body || {};
+  const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
+  const idem = await checkIdempotency({
+    userId: req.user.sub,
+    key: idemKey,
+    route: 'cards.create',
+    body: req.body,
+  });
+  if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
+  if (idem.hit) return res.json(idem.response || {});
+
+  async function respond(status, payload) {
+    await completeIdempotency({
+      userId: req.user.sub,
+      key: idemKey,
+      route: 'cards.create',
+      response: payload,
+    });
+    return res.status(status).json(payload);
+  }
   const numericAmount = Number(amount);
   if (!isValidAmount(numericAmount, 100, 5_000_000)) {
-    return res.status(400).json({ error: 'Invalid amount' });
+    return respond(400, { error: 'Invalid amount' });
   }
 
   const [[user]] = await pool.query(
     'SELECT full_name, email, kyc_level, kyc_status, kyc_payload FROM users WHERE id = ?',
     [req.user.sub]
   );
-  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!user) return respond(404, { error: 'User not found' });
   if (Number(user.kyc_level || 1) < 3) {
-    return res.status(403).json({ error: 'Level 3 KYC required to create a virtual card' });
+    logSecurityEvent({
+      type: 'kyc.insufficient.card',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: req.user.sub,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { level: user.kyc_level || 1 },
+    }).catch(() => null);
+    return respond(403, { error: 'Level 3 KYC required to create a virtual card' });
   }
   if (String(user.kyc_status || 'pending') !== 'verified') {
-    return res.status(403).json({ error: 'KYC must be verified to create a virtual card' });
+    logSecurityEvent({
+      type: 'kyc.unverified.card',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: req.user.sub,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { status: user.kyc_status || 'pending' },
+    }).catch(() => null);
+    return respond(403, { error: 'KYC must be verified to create a virtual card' });
   }
   const payload = user?.kyc_payload ? JSON.parse(user.kyc_payload) : {};
   if (!payload?.bvn && !payload?.nin) {
-    return res.status(400).json({ error: 'BVN or NIN required to create a virtual card' });
+    return respond(400, { error: 'BVN or NIN required to create a virtual card' });
   }
   if (!payload?.address) {
-    return res.status(400).json({ error: 'KYC address required to create a virtual card' });
+    return respond(400, { error: 'KYC address required to create a virtual card' });
   }
   const limitCheck = await enforceKycLimits({
     userId: req.user.sub,
@@ -50,7 +89,16 @@ router.post('/', requireUser, async (req, res) => {
     types: ['send'],
   });
   if (!limitCheck.ok) {
-    return res.status(403).json({ error: limitCheck.message });
+    logSecurityEvent({
+      type: 'kyc.limit.card',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: req.user.sub,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { amount: numericAmount, message: limitCheck.message },
+    }).catch(() => null);
+    return respond(403, { error: limitCheck.message });
   }
 
   const conn = await pool.getConnection();
@@ -63,7 +111,7 @@ router.post('/', requireUser, async (req, res) => {
     if (!walletRows.length) throw new Error('Wallet missing');
     if (Number(walletRows[0].balance) < numericAmount) {
       await conn.rollback();
-      return res.status(400).json({ error: 'Insufficient wallet balance' });
+      return respond(400, { error: 'Insufficient wallet balance' });
     }
 
     const flwPayload = {
@@ -122,10 +170,10 @@ router.post('/', requireUser, async (req, res) => {
       userAgent: req.headers['user-agent'],
     }).catch(console.error);
 
-    return res.status(201).json({ message: 'Card created', card });
+    return respond(201, { message: 'Card created', card });
   } catch (err) {
     await conn.rollback();
-    return res.status(500).json({ error: 'Card creation failed' });
+    return respond(500, { error: 'Card creation failed' });
   } finally {
     conn.release();
   }

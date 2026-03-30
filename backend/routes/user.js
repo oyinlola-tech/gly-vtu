@@ -8,8 +8,24 @@ import { isValidPin, setTransactionPin, verifyTransactionPin, getPinStatus } fro
 import { logAudit } from '../utils/audit.js';
 import bcrypt from 'bcryptjs';
 import { QUESTIONS, normalizeAnswer } from '../utils/securityQuestions.js';
+import zxcvbn from 'zxcvbn';
+import { getKycLimitConfig } from '../utils/kycLimits.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
 
 const router = express.Router();
+const MIN_PASSWORD_LENGTH = 10;
+const MIN_ZXCVBN_SCORE = 3;
+
+function validatePasswordStrength(password) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+  }
+  const score = zxcvbn(password).score;
+  if (score < MIN_ZXCVBN_SCORE) {
+    return 'Password is too weak';
+  }
+  return null;
+}
 
 router.get('/profile', requireUser, async (req, res) => {
   /*
@@ -96,14 +112,41 @@ router.put('/kyc', requireUser, async (req, res) => {
 
   if (targetLevel === 2) {
     if (!payload.bvn && !payload.nin) {
+      logSecurityEvent({
+        type: 'kyc.validation.failed',
+        severity: 'low',
+        actorType: 'user',
+        actorId: req.user.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { level: targetLevel, reason: 'missing_bvn_nin' },
+      }).catch(() => null);
       return res.status(400).json({ error: 'BVN or NIN is required for Level 2' });
     }
     if (!payload.dob) {
+      logSecurityEvent({
+        type: 'kyc.validation.failed',
+        severity: 'low',
+        actorType: 'user',
+        actorId: req.user.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { level: targetLevel, reason: 'missing_dob' },
+      }).catch(() => null);
       return res.status(400).json({ error: 'Date of birth is required for Level 2' });
     }
   }
   if (targetLevel === 3) {
     if (!payload.address) {
+      logSecurityEvent({
+        type: 'kyc.validation.failed',
+        severity: 'low',
+        actorType: 'user',
+        actorId: req.user.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { level: targetLevel, reason: 'missing_address' },
+      }).catch(() => null);
       return res.status(400).json({ error: 'Address is required for Level 3' });
     }
     if (Number(user.kyc_level || 1) < 2) {
@@ -205,6 +248,104 @@ router.get('/security', requireUser, async (req, res) => {
     [req.user.sub]
   );
   return res.json({ ...status, securityQuestionEnabled: Boolean(row?.security_question_enabled) });
+});
+
+router.get('/kyc/limits', requireUser, async (req, res) => {
+  const [[user]] = await pool.query(
+    'SELECT kyc_level, kyc_status FROM users WHERE id = ? LIMIT 1',
+    [req.user.sub]
+  );
+  if (!user) return res.status(404).json({ error: 'Not found' });
+  const level = Number(user.kyc_level || 1);
+  return res.json({
+    level,
+    status: user.kyc_status || 'pending',
+    limits: {
+      send: getKycLimitConfig(level, 'send'),
+      bill: getKycLimitConfig(level, 'bill'),
+      topup: getKycLimitConfig(level, 'topup'),
+    },
+  });
+});
+
+router.get('/sessions', requireUser, async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT id, device_id, label, last_seen, ip_address, user_agent, trusted
+     FROM user_devices WHERE user_id = ? ORDER BY last_seen DESC`,
+    [req.user.sub]
+  );
+  return res.json(rows);
+});
+
+router.post('/sessions/:id/revoke', requireUser, async (req, res) => {
+  const [deviceRows] = await pool.query(
+    'SELECT device_id FROM user_devices WHERE id = ? AND user_id = ? LIMIT 1',
+    [req.params.id, req.user.sub]
+  );
+  const device = deviceRows?.[0];
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+  await pool.query('UPDATE user_devices SET trusted = 0 WHERE id = ? AND user_id = ?', [
+    req.params.id,
+    req.user.sub,
+  ]);
+  await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ? AND device_id = ?', [
+    req.user.sub,
+    device.device_id,
+  ]);
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: 'device.revoked',
+    entityType: 'device',
+    entityId: device.device_id,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  return res.json({ message: 'Session revoked' });
+});
+
+router.post('/password/change', requireUser, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Missing fields' });
+  }
+  const passwordError = validatePasswordStrength(newPassword);
+  if (passwordError) return res.status(400).json({ error: passwordError });
+  const [[user]] = await pool.query(
+    'SELECT id, password_hash, email FROM users WHERE id = ? LIMIT 1',
+    [req.user.sub]
+  );
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const ok = await bcrypt.compare(currentPassword, user.password_hash);
+  if (!ok) {
+    logSecurityEvent({
+      type: 'password.change.failed',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: req.user.sub,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => null);
+    return res.status(400).json({ error: 'Invalid password' });
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [
+    passwordHash,
+    req.user.sub,
+  ]);
+  await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ?', [
+    req.user.sub,
+  ]);
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: 'user.password.change',
+    entityType: 'user',
+    entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  return res.json({ message: 'Password updated' });
 });
 
 router.post('/pin/setup', requireUser, async (req, res) => {

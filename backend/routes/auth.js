@@ -14,6 +14,8 @@ import { otpLimiter } from '../middleware/rateLimiters.js';
 import { enforceSecurityQuestion } from '../utils/securityQuestionGuard.js';
 import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js';
 import zxcvbn from 'zxcvbn';
+import { checkFailedLoginAnomaly } from '../utils/anomalies.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
 
 const router = express.Router();
 
@@ -223,7 +225,23 @@ router.post('/login', otpLimiter, async (req, res) => {
       'UPDATE users SET login_failed_attempts = ?, login_locked_until = ?, last_login_failed_at = NOW() WHERE id = ?',
       [nextAttempts, lockedUntil, user.id]
     );
+    checkFailedLoginAnomaly({
+      actorId: user.id,
+      actorType: 'user',
+      attempts: nextAttempts,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
     if (lockedUntil) {
+      logSecurityEvent({
+        type: 'account.locked.failed_login',
+        severity: 'high',
+        actorType: 'user',
+        actorId: user.id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { lockedUntil },
+      }).catch(() => null);
       return res.status(403).json({ error: 'Account locked due to failed attempts. Try later.' });
     }
     sendLoginFailedEmail({
@@ -500,6 +518,12 @@ router.post('/refresh', async (req, res) => {
     [incoming]
   );
   if (!tokenRow.length) return res.status(401).json({ error: 'Invalid token' });
+  if (tokenRow[0].device_id && !deviceId) {
+    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE refresh_family_id = ?', [
+      tokenRow[0].refresh_family_id,
+    ]);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
   if (deviceId && tokenRow[0].device_id && tokenRow[0].device_id !== deviceId) {
     await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE refresh_family_id = ?', [
       tokenRow[0].refresh_family_id,

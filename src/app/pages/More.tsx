@@ -34,8 +34,10 @@ export default function More() {
       title: 'Account',
       items: [
         { icon: User, label: 'Profile Settings', path: '/profile', badge: null },
+        { icon: Shield, label: 'Security Center', path: '/security-center', badge: null },
         { icon: Lock, label: 'Security & PIN', path: '/security', badge: null },
         { icon: Shield, label: 'KYC Verification', path: '/kyc', badge: null },
+        { icon: Shield, label: 'KYC Status & Limits', path: '/kyc-status', badge: null },
         { icon: Bell, label: 'Notifications', path: '/notifications', badge: null },
       ],
     },
@@ -56,13 +58,15 @@ export default function More() {
       items: [
         { icon: MessageCircle, label: 'Live Chat Support', action: () => setShowChat(true) },
         { icon: HelpCircle, label: 'Help Center', path: '/help' },
-        { icon: FileText, label: 'Terms & Privacy', path: '/terms' },
+        { icon: FileText, label: 'Compliance & Policies', path: '/compliance' },
+        { icon: FileText, label: 'Disputes & Chargebacks', path: '/disputes' },
       ],
     },
     {
       title: 'About',
       items: [
         { icon: Shield, label: 'Security Tips', path: '/security-tips' },
+        { icon: FileText, label: 'Terms & Privacy', path: '/terms' },
         { icon: FileText, label: 'App Version', path: '#', badge: 'v1.0.0' },
       ],
     },

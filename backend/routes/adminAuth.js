@@ -10,6 +10,8 @@ import { generateCsrfToken } from '../middleware/csrf.js';
 import { otpLimiter } from '../middleware/rateLimiters.js';
 import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js';
 import zxcvbn from 'zxcvbn';
+import { checkFailedLoginAnomaly } from '../utils/anomalies.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
 
 const router = express.Router();
 
@@ -72,7 +74,7 @@ router.post('/login', otpLimiter, async (req, res) => {
     #swagger.responses[200] = { description: 'Logged in', schema: { $ref: '#/definitions/AdminLoginResponse' } }
     #swagger.responses[401] = { description: 'Invalid credentials', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { email, password } = req.body || {};
+  const { email, password, deviceId } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
 
   const [rows] = await pool.query('SELECT * FROM admin_users WHERE email = ? LIMIT 1', [email]);
@@ -80,11 +82,29 @@ router.post('/login', otpLimiter, async (req, res) => {
 
   const admin = rows[0];
   const ok = await bcrypt.compare(password, admin.password_hash);
-  if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!ok) {
+    checkFailedLoginAnomaly({
+      actorId: admin.id,
+      actorType: 'admin',
+      attempts: 1,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    logSecurityEvent({
+      type: 'admin.login.failed',
+      severity: 'medium',
+      actorType: 'admin',
+      actorId: admin.id,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => null);
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
 
   const accessToken = signAccessToken({ type: 'admin', sub: admin.id }, JWT_ADMIN_SECRET);
   const refresh = await issueRefreshToken({
     adminId: admin.id,
+    deviceId: deviceId || null,
     ipAddress: req.ip,
     userAgent: req.headers['user-agent'] || null,
   });
@@ -119,6 +139,7 @@ router.post('/refresh', async (req, res) => {
   if (!requireCsrfForCookieRefresh(req)) {
     return res.status(403).json({ error: 'CSRF validation failed' });
   }
+  const deviceId = req.body?.deviceId || null;
   const incoming = cookieToken ? decryptCookieValue(cookieToken) : req.body?.refreshToken;
   if (!incoming) return res.status(400).json({ error: 'Refresh token required' });
 
@@ -127,6 +148,18 @@ router.post('/refresh', async (req, res) => {
     [incoming]
   );
   if (!tokenRow.length) return res.status(401).json({ error: 'Invalid token' });
+  if (tokenRow[0].device_id && !deviceId) {
+    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE refresh_family_id = ?', [
+      tokenRow[0].refresh_family_id,
+    ]);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  if (deviceId && tokenRow[0].device_id && tokenRow[0].device_id !== deviceId) {
+    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE refresh_family_id = ?', [
+      tokenRow[0].refresh_family_id,
+    ]);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
   const currentIp = req.ip;
   const currentUa = req.headers['user-agent'] || '';
   if (

@@ -149,6 +149,9 @@ export default function SendToBank() {
       </div>
 
       <div className="px-6 -mt-16 pb-8">
+        <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-4 rounded-2xl text-sm mb-6">
+          Bank transfers require verified Level 2 KYC. Large transfers may be held for review.
+        </div>
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (

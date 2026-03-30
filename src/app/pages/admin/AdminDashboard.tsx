@@ -50,7 +50,7 @@ export default function AdminDashboard() {
     const token = tokenStore.getAdminToken();
     if (!token) return;
     const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
-    const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}&role=admin`);
+    const ws = new WebSocket(`${wsUrl}?role=admin`, [token]);
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {
@@ -306,6 +306,23 @@ export default function AdminDashboard() {
               <p className="text-white text-xl font-bold">{card.value}</p>
             </div>
           ))}
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Link
+            to="/admin/review"
+            className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
+          >
+            Review Queue
+            <p className="text-white/70 text-xs mt-1">Held topups and adjustments</p>
+          </Link>
+          <Link
+            to="/admin/audit"
+            className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
+          >
+            Audit Logs
+            <p className="text-white/70 text-xs mt-1">Monitor admin activity</p>
+          </Link>
         </div>
       </div>
 

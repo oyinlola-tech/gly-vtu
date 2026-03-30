@@ -7,6 +7,8 @@ export default function TransactionSuccess() {
   const navigate = useNavigate();
   const { transaction, recipientName, recipientBank } = location.state || {};
   const amountValue = transaction?.amount ?? transaction?.total ?? location.state?.amount ?? 0;
+  const feeValue = transaction?.fee ?? 0;
+  const totalValue = transaction?.total ?? amountValue;
 
   if (!transaction) {
     navigate('/dashboard');
@@ -97,6 +99,29 @@ export default function TransactionSuccess() {
             transition={{ delay: 0.6 }}
             className="mt-8 bg-white/10 backdrop-blur-sm rounded-2xl p-4 text-left"
           >
+            <div className="text-xs text-white/70 mb-3">Transaction Breakdown</div>
+            <div className="flex items-center justify-between text-sm text-white/80">
+              <span>Amount</span>
+              <span>₦{Number(amountValue).toLocaleString('en-NG', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-white/80 mt-1">
+              <span>Fee</span>
+              <span>₦{Number(feeValue).toLocaleString('en-NG', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-white mt-2 font-semibold">
+              <span>Total</span>
+              <span>₦{Number(totalValue).toLocaleString('en-NG', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}</span>
+            </div>
+            <div className="border-t border-white/20 my-3" />
             <p className="text-white/60 text-xs mb-2">Transaction Reference</p>
             <p className="text-white text-sm font-mono">{transaction.reference || transaction?.reference}</p>
           </motion.div>

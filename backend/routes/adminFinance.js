@@ -4,6 +4,9 @@ import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
+import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
+import { checkAdminAdjustmentAnomaly } from '../utils/anomalies.js';
 
 const router = express.Router();
 const ADMIN_ADJUSTMENT_MAX = Number(process.env.ADMIN_ADJUSTMENT_MAX || 1000000);
@@ -179,6 +182,23 @@ router.post(
        VALUES (UUID(), ?, ?, ?, ?, ?)`,
       [userId, type, numericAmount, reason || null, req.admin.sub]
     );
+    logSecurityEvent({
+      type: 'admin.adjustment.requested',
+      severity: 'medium',
+      actorType: 'admin',
+      actorId: req.admin.sub,
+      entityType: 'adjustment',
+      entityId: userId,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { type, amount: numericAmount, reason: reason || null },
+    }).catch(() => null);
+    checkAdminAdjustmentAnomaly({
+      adminId: req.admin.sub,
+      amount: numericAmount,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
     logAudit({
       actorType: 'admin',
       actorId: req.admin.sub,
@@ -199,12 +219,31 @@ router.post(
   requirePermission('transactions:write'),
   async (req, res) => {
     const id = req.params.id;
+    const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
+    const idem = await checkIdempotency({
+      userId: req.admin.sub,
+      key: idemKey,
+      route: 'admin.adjustments.approve',
+      body: req.body,
+    });
+    if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
+    if (idem.hit) return res.json(idem.response || {});
+
+    async function respond(status, payload) {
+      await completeIdempotency({
+        userId: req.admin.sub,
+        key: idemKey,
+        route: 'admin.adjustments.approve',
+        response: payload,
+      });
+      return res.status(status).json(payload);
+    }
     const [[adj]] = await pool.query(
       'SELECT id, user_id, type, amount, status FROM admin_adjustments WHERE id = ? LIMIT 1',
       [id]
     );
-    if (!adj) return res.status(404).json({ error: 'Adjustment not found' });
-    if (adj.status !== 'pending') return res.status(400).json({ error: 'Not pending' });
+    if (!adj) return respond(404, { error: 'Adjustment not found' });
+    if (adj.status !== 'pending') return respond(400, { error: 'Not pending' });
 
     const conn = await pool.getConnection();
     try {
@@ -216,7 +255,7 @@ router.post(
       if (!walletRows.length) throw new Error('Wallet missing');
       if (adj.type === 'debit' && Number(walletRows[0].balance) < Number(adj.amount)) {
         await conn.rollback();
-        return res.status(400).json({ error: 'Insufficient balance' });
+        return respond(400, { error: 'Insufficient balance' });
       }
       if (adj.type === 'credit') {
         await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
@@ -250,11 +289,28 @@ router.post(
       await conn.commit();
     } catch (err) {
       await conn.rollback();
-      return res.status(500).json({ error: 'Approval failed' });
+      return respond(500, { error: 'Approval failed' });
     } finally {
       conn.release();
     }
 
+    logSecurityEvent({
+      type: 'admin.adjustment.approved',
+      severity: 'high',
+      actorType: 'admin',
+      actorId: req.admin.sub,
+      entityType: 'adjustment',
+      entityId: id,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { amount: adj.amount, type: adj.type },
+    }).catch(() => null);
+    checkAdminAdjustmentAnomaly({
+      adminId: req.admin.sub,
+      amount: adj.amount,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
     logAudit({
       actorType: 'admin',
       actorId: req.admin.sub,
@@ -264,7 +320,7 @@ router.post(
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     }).catch(() => null);
-    return res.json({ message: 'Adjustment approved', id });
+    return respond(200, { message: 'Adjustment approved', id });
   }
 );
 

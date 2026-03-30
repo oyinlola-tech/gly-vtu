@@ -24,6 +24,7 @@ import { billsLimiter } from '../middleware/rateLimiters.js';
 import { sanitizeVtpassPayload } from '../utils/sanitize.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
 
 const router = express.Router();
 
@@ -272,6 +273,15 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
     types: ['bill'],
   });
   if (!limitCheck.ok) {
+    logSecurityEvent({
+      type: 'kyc.limit.bill',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: req.user.sub,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { amount: numericAmount, message: limitCheck.message },
+    }).catch(() => null);
     return respond(403, { error: limitCheck.message });
   }
 

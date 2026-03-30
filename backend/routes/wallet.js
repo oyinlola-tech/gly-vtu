@@ -7,6 +7,8 @@ import { logAudit } from '../utils/audit.js';
 import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
+import { checkWithdrawalAnomaly } from '../utils/anomalies.js';
 
 const router = express.Router();
 
@@ -74,9 +76,27 @@ router.post('/send', requireUser, async (req, res) => {
   const isBank = channel === 'bank' || accountNumber || bankCode;
   if (isBank) {
     if (Number(user.kyc_level || 1) < 2) {
+      logSecurityEvent({
+        type: 'kyc.insufficient.bank_transfer',
+        severity: 'medium',
+        actorType: 'user',
+        actorId: req.user.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { level: user.kyc_level || 1 },
+      }).catch(() => null);
       return respond(403, { error: 'Level 2 KYC required for bank transfers' });
     }
     if (String(user.kyc_status || 'pending') !== 'verified') {
+      logSecurityEvent({
+        type: 'kyc.unverified.bank_transfer',
+        severity: 'medium',
+        actorType: 'user',
+        actorId: req.user.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { status: user.kyc_status || 'pending' },
+      }).catch(() => null);
       return respond(403, { error: 'KYC must be verified for bank transfers' });
     }
   }
@@ -87,6 +107,15 @@ router.post('/send', requireUser, async (req, res) => {
     types: ['send'],
   });
   if (!limitCheck.ok) {
+    logSecurityEvent({
+      type: 'kyc.limit.send',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: req.user.sub,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { amount: numericAmount, message: limitCheck.message },
+    }).catch(() => null);
     return respond(403, { error: limitCheck.message });
   }
   let recipientId = null;
@@ -222,6 +251,14 @@ router.post('/send', requireUser, async (req, res) => {
       userAgent: req.headers['user-agent'],
       metadata: isBank ? { bankCode, bankName, accountNumber } : { to },
     }).catch(console.error);
+    if (isBank) {
+      checkWithdrawalAnomaly({
+        userId: req.user.sub,
+        amount: numericAmount,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      }).catch(() => null);
+    }
     return respond(200, {
       message: isBank ? 'Transfer initiated' : 'Transfer completed',
       reference,

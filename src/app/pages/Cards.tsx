@@ -132,6 +132,9 @@ export default function Cards() {
       </div>
 
       <div className="px-6 -mt-24">
+        <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-4 rounded-2xl text-sm mb-6">
+          Virtual cards require verified Level 3 KYC. Keep your card limits updated for safety.
+        </div>
         {cards.length === 0 ? (
           <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 shadow-2xl mb-6 text-center">
             <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4">

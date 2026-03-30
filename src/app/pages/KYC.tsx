@@ -63,6 +63,10 @@ export default function KYC() {
           </div>
         )}
 
+        <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-4 rounded-2xl text-sm">
+          Complete higher KYC levels to unlock higher limits, card issuance, and bank transfers.
+        </div>
+
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6">
           {message && (
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 p-3 rounded-xl text-sm mb-4">

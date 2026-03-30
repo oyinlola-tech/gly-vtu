@@ -32,16 +32,22 @@ import More from './pages/More';
 import AddMoney from './pages/AddMoney';
 import Profile from './pages/Profile';
 import Security from './pages/Security';
+import SecurityCenter from './pages/SecurityCenter';
 import Notifications from './pages/Notifications';
 import HelpCenter from './pages/HelpCenter';
 import TermsPrivacy from './pages/TermsPrivacy';
 import SecurityTips from './pages/SecurityTips';
 import KYC from './pages/KYC';
+import KycStatusLimits from './pages/KycStatusLimits';
+import CompliancePolicies from './pages/CompliancePolicies';
+import Disputes from './pages/Disputes';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminTransactions from './pages/admin/AdminTransactions';
+import AdminReview from './pages/admin/AdminReview';
+import AdminAuditLogs from './pages/admin/AdminAuditLogs';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -197,6 +203,14 @@ function AppContent() {
             }
           />
           <Route
+            path="/security-center"
+            element={
+              <PrivateRoute>
+                <SecurityCenter />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/notifications"
             element={
               <PrivateRoute>
@@ -221,6 +235,22 @@ function AppContent() {
             }
           />
           <Route
+            path="/compliance"
+            element={
+              <PrivateRoute>
+                <CompliancePolicies />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/disputes"
+            element={
+              <PrivateRoute>
+                <Disputes />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/security-tips"
             element={
               <PrivateRoute>
@@ -233,6 +263,14 @@ function AppContent() {
             element={
               <PrivateRoute>
                 <KYC />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/kyc-status"
+            element={
+              <PrivateRoute>
+                <KycStatusLimits />
               </PrivateRoute>
             }
           />
@@ -275,6 +313,22 @@ function AppContent() {
             element={
               <AdminRoute>
                 <AdminTransactions />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/review"
+            element={
+              <AdminRoute>
+                <AdminReview />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/audit"
+            element={
+              <AdminRoute>
+                <AdminAuditLogs />
               </AdminRoute>
             }
           />

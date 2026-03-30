@@ -3,6 +3,8 @@ import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
+import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
 
 const router = express.Router();
 
@@ -71,12 +73,31 @@ router.post(
   requirePermission('transactions:write'),
   async (req, res) => {
     const reference = req.params.reference;
+    const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
+    const idem = await checkIdempotency({
+      userId: req.admin.sub,
+      key: idemKey,
+      route: 'admin.topup.approve',
+      body: req.body,
+    });
+    if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
+    if (idem.hit) return res.json(idem.response || {});
+
+    async function respond(status, payload) {
+      await completeIdempotency({
+        userId: req.admin.sub,
+        key: idemKey,
+        route: 'admin.topup.approve',
+        response: payload,
+      });
+      return res.status(status).json(payload);
+    }
     const [[tx]] = await pool.query(
       'SELECT user_id, amount, status FROM transactions WHERE reference = ? AND type = ? LIMIT 1',
       [reference, 'topup']
     );
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
-    if (tx.status !== 'pending') return res.status(400).json({ error: 'Not pending' });
+    if (!tx) return respond(404, { error: 'Transaction not found' });
+    if (tx.status !== 'pending') return respond(400, { error: 'Not pending' });
 
     const conn = await pool.getConnection();
     try {
@@ -92,11 +113,22 @@ router.post(
       await conn.commit();
     } catch (err) {
       await conn.rollback();
-      return res.status(500).json({ error: 'Approval failed' });
+      return respond(500, { error: 'Approval failed' });
     } finally {
       conn.release();
     }
 
+    logSecurityEvent({
+      type: 'admin.topup.approved',
+      severity: 'medium',
+      actorType: 'admin',
+      actorId: req.admin.sub,
+      entityType: 'transaction',
+      entityId: reference,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { amount: tx.amount },
+    }).catch(() => null);
     logAudit({
       actorType: 'admin',
       actorId: req.admin.sub,
@@ -107,7 +139,7 @@ router.post(
       userAgent: req.headers['user-agent'],
     }).catch(() => null);
 
-    return res.json({ message: 'Topup approved', reference });
+    return respond(200, { message: 'Topup approved', reference });
   }
 );
 
