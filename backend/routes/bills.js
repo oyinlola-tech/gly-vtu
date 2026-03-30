@@ -1,0 +1,228 @@
+import express from 'express';
+import { pool } from '../config/db.js';
+import { requireUser } from '../middleware/auth.js';
+import { nanoid } from 'nanoid';
+import { sendReceiptEmail, sendBillFailedEmail } from '../utils/email.js';
+import { logAudit } from '../utils/audit.js';
+import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
+
+const router = express.Router();
+
+router.get('/categories', async (req, res) => {
+  /*
+    #swagger.tags = ['Bills']
+    #swagger.summary = 'List active bill categories'
+    #swagger.responses[200] = {
+      description: 'Categories',
+      schema: { type: 'array', items: { $ref: '#/definitions/BillCategory' } }
+    }
+  */
+  const [rows] = await pool.query(
+    'SELECT id, code, name, description FROM bill_categories WHERE active = 1 ORDER BY name'
+  );
+  return res.json(rows);
+});
+
+router.get('/providers', async (req, res) => {
+  /*
+    #swagger.tags = ['Bills']
+    #swagger.summary = 'List bill providers by category code'
+    #swagger.parameters['category'] = {
+      in: 'query',
+      required: true,
+      type: 'string'
+    }
+    #swagger.responses[200] = {
+      description: 'Providers',
+      schema: { type: 'array', items: { $ref: '#/definitions/BillProvider' } }
+    }
+    #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  const { category } = req.query;
+  if (!category) return res.status(400).json({ error: 'Category required' });
+
+  const [rows] = await pool.query(
+    `SELECT p.id, p.name, p.code, c.code as category_code
+     FROM bill_providers p
+     JOIN bill_categories c ON c.id = p.category_id
+     WHERE c.code = ? AND p.active = 1`,
+    [category]
+  );
+  return res.json(rows);
+});
+
+router.post('/quote', requireUser, async (req, res) => {
+  /*
+    #swagger.tags = ['Bills']
+    #swagger.summary = 'Get bill payment quote'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/BillsQuoteRequest' } }
+    #swagger.responses[200] = {
+      description: 'Quote',
+      schema: { $ref: '#/definitions/BillQuoteResponse' }
+    }
+  */
+  const { providerCode, amount } = req.body || {};
+  const numericAmount = Number(amount);
+  if (!providerCode || !numericAmount || numericAmount <= 0) {
+    return res.status(400).json({ error: 'Invalid request' });
+  }
+
+  const [rows] = await pool.query(
+    `SELECT p.id, p.name, pr.base_fee, pr.markup_type, pr.markup_value, pr.currency
+     FROM bill_providers p
+     JOIN bill_pricing pr ON pr.provider_id = p.id
+     WHERE p.code = ? AND p.active = 1 AND pr.active = 1`,
+    [providerCode]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Provider not found' });
+
+  const pricing = rows[0];
+  const markup =
+    pricing.markup_type === 'percent'
+      ? (numericAmount * Number(pricing.markup_value)) / 100
+      : Number(pricing.markup_value);
+  const fee = Number(pricing.base_fee) + markup;
+  const total = numericAmount + fee;
+
+  return res.json({
+    provider: pricing.name,
+    amount: numericAmount,
+    fee,
+    total,
+    currency: pricing.currency,
+  });
+});
+
+router.post('/pay', requireUser, async (req, res) => {
+  /*
+    #swagger.tags = ['Bills']
+    #swagger.summary = 'Pay a bill'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/BillsPayRequest' } }
+    #swagger.responses[200] = { description: 'Payment success', schema: { $ref: '#/definitions/BillsPayResponse' } }
+    #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  const { providerCode, amount, account, pin } = req.body || {};
+  const numericAmount = Number(amount);
+  if (!providerCode || !numericAmount || numericAmount <= 0 || !account) {
+    return res.status(400).json({ error: 'Invalid request' });
+  }
+  if (!isValidPin(pin)) return res.status(400).json({ error: 'Invalid transaction PIN' });
+  try {
+    await verifyTransactionPin(req.user.sub, pin);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const [rows] = await pool.query(
+    `SELECT p.id, p.name, pr.base_fee, pr.markup_type, pr.markup_value, pr.currency
+     FROM bill_providers p
+     JOIN bill_pricing pr ON pr.provider_id = p.id
+     WHERE p.code = ? AND p.active = 1 AND pr.active = 1`,
+    [providerCode]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Provider not found' });
+
+  const pricing = rows[0];
+  const markup =
+    pricing.markup_type === 'percent'
+      ? (numericAmount * Number(pricing.markup_value)) / 100
+      : Number(pricing.markup_value);
+  const fee = Number(pricing.base_fee) + markup;
+  const total = numericAmount + fee;
+
+  const [[user]] = await pool.query('SELECT full_name, email FROM users WHERE id = ?', [
+    req.user.sub,
+  ]);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [walletRows] = await conn.query(
+      'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      [req.user.sub]
+    );
+    if (!walletRows.length) throw new Error('Wallet missing');
+    if (Number(walletRows[0].balance) < total) {
+      await conn.rollback();
+      if (user?.email) {
+        sendBillFailedEmail({
+          to: user.email,
+          name: user.full_name,
+          details: [
+            `Service: ${pricing.name}`,
+            `Amount: NGN ${numericAmount.toFixed(2)}`,
+            `Reason: Insufficient balance`,
+          ],
+        }).catch(console.error);
+      }
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
+
+    await conn.query('UPDATE wallets SET balance = balance - ? WHERE user_id = ?', [
+      total,
+      req.user.sub,
+    ]);
+
+    const reference = `BILL-${nanoid(10)}`;
+    await conn.query(
+      'INSERT INTO bill_orders (id, user_id, provider_id, amount, fee, total, status, reference) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)',
+      [req.user.sub, pricing.id, numericAmount, fee, total, 'success', reference]
+    );
+    await conn.query(
+      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        req.user.sub,
+        'bill',
+        numericAmount,
+        fee,
+        total,
+        'success',
+        reference,
+        JSON.stringify({ provider: pricing.name, account }),
+      ]
+    );
+    await conn.commit();
+    sendReceiptEmail({
+      to: user.email,
+      name: user.full_name,
+      title: 'Bill Payment Successful',
+      details: [
+        `Service: ${pricing.name}`,
+        `Amount: NGN ${numericAmount.toFixed(2)}`,
+        `Fee: NGN ${fee.toFixed(2)}`,
+        `Total: NGN ${total.toFixed(2)}`,
+        `Reference: ${reference}`,
+      ],
+    }).catch(console.error);
+    logAudit({
+      actorType: 'user',
+      actorId: req.user.sub,
+      action: 'bill.paid',
+      entityType: 'bill_order',
+      entityId: reference,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { provider: pricing.name, account },
+    }).catch(console.error);
+    return res.json({ message: 'Bill paid', reference, total });
+  } catch (err) {
+    await conn.rollback();
+    if (user?.email) {
+      sendBillFailedEmail({
+        to: user.email,
+        name: user.full_name,
+        details: [
+          `Service: ${pricing?.name || providerCode}`,
+          `Amount: NGN ${numericAmount.toFixed(2)}`,
+          `Reason: ${err.message || 'Processing error'}`,
+        ],
+      }).catch(console.error);
+    }
+    return res.status(500).json({ error: 'Payment failed' });
+  } finally {
+    conn.release();
+  }
+});
+
+export default router;
