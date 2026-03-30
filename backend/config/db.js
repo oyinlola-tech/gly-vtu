@@ -210,7 +210,7 @@ export async function initDatabase() {
       CREATE TABLE IF NOT EXISTS reserved_accounts (
         id CHAR(36) PRIMARY KEY,
         user_id CHAR(36) NOT NULL,
-        provider VARCHAR(40) NOT NULL DEFAULT 'monnify',
+        provider VARCHAR(40) NOT NULL DEFAULT 'flutterwave',
         account_reference VARCHAR(120) NOT NULL UNIQUE,
         reservation_reference VARCHAR(120) NULL,
         account_name VARCHAR(120) NOT NULL,
@@ -223,21 +223,6 @@ export async function initDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_reserved_user (user_id),
         FOREIGN KEY (user_id) REFERENCES users(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS monnify_events (
-        id CHAR(36) PRIMARY KEY,
-        payment_reference VARCHAR(120) NOT NULL UNIQUE,
-        account_reference VARCHAR(120) NULL,
-        amount DECIMAL(14,2) NOT NULL,
-        currency VARCHAR(10) NOT NULL DEFAULT 'NGN',
-        paid_on TIMESTAMP NULL,
-        raw_payload JSON NULL,
-        status ENUM('received','processed','failed') NOT NULL DEFAULT 'received',
-        attempts INT NOT NULL DEFAULT 0,
-        last_error VARCHAR(255) NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS transactions (

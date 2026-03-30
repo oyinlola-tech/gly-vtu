@@ -1,5 +1,5 @@
 import { pool } from '../config/db.js';
-import { fetchBanks } from './monnify.js';
+import { getBanks } from './flutterwave.js';
 
 const CACHE_TTL_MINUTES = Number(process.env.BANKS_CACHE_TTL_MINUTES || 1440);
 
@@ -13,7 +13,8 @@ async function setLastRefresh() {
 }
 
 export async function refreshBankCache() {
-  const banks = await fetchBanks();
+  const res = await getBanks('NG');
+  const banks = res?.data || res?.banks || [];
   if (!Array.isArray(banks) || !banks.length) return 0;
   const conn = await pool.getConnection();
   try {

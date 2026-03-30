@@ -2,7 +2,7 @@ import express from 'express';
 import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
 import { getCachedBanks } from '../utils/bankCache.js';
-import { validateBankAccount } from '../utils/monnify.js';
+import { resolveBankAccount } from '../utils/flutterwave.js';
 
 const router = express.Router();
 
@@ -43,11 +43,15 @@ router.post('/resolve', requireUser, async (req, res) => {
     ]);
     if (!bank) return res.status(400).json({ error: 'Invalid bank selected' });
     try {
-      const result = await validateBankAccount({ accountNumber, bankCode });
-      if (result?.accountName) {
+      const result = await resolveBankAccount({
+        account_number: accountNumber,
+        account_bank: bankCode,
+      });
+      const accountName = result?.data?.account_name || result?.data?.accountName;
+      if (accountName) {
         return res.json({
           found: true,
-          accountName: result.accountName,
+          accountName,
           bankName: bank.name,
           bankCode,
         });

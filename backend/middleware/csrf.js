@@ -9,7 +9,8 @@ export function csrfMiddleware(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return next();
 
   const csrfExemptPaths = [
-    '/api/monnify/webhook',
+    '/api/flutterwave/webhook',
+    '/api/vtpass/webhook',
     '/api/auth/login',
     '/api/auth/register',
     '/api/auth/verify-device',

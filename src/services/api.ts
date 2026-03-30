@@ -474,6 +474,29 @@ export const conversationsAPI = {
   },
 };
 
+// ============= VIRTUAL CARDS APIs =============
+export const cardsAPI = {
+  list: async () => {
+    return request<any[]>(API_BASE_URL, '/cards');
+  },
+  create: async (amount: number, currency = 'NGN') => {
+    return request<any>(API_BASE_URL, '/cards', {
+      method: 'POST',
+      body: JSON.stringify({ amount, currency }),
+    });
+  },
+  freeze: async (cardId: string) => {
+    return request<{ message: string }>(API_BASE_URL, `/cards/${cardId}/freeze`, {
+      method: 'POST',
+    });
+  },
+  unfreeze: async (cardId: string) => {
+    return request<{ message: string }>(API_BASE_URL, `/cards/${cardId}/unfreeze`, {
+      method: 'POST',
+    });
+  },
+};
+
 // ============= ADMIN APIs =============
 export const adminAPI = {
   login: async (data: { email: string; password: string }) => {
@@ -604,24 +627,6 @@ export const adminAPI = {
     );
   },
 
-  getMonnifyEvents: async (params?: { limit?: number; offset?: number; status?: string }) => {
-    const search = new URLSearchParams();
-    if (params?.limit) search.set('limit', String(params.limit));
-    if (params?.offset) search.set('offset', String(params.offset));
-    if (params?.status) search.set('status', params.status);
-    const query = search.toString();
-    return request<any[]>(ADMIN_API_BASE_URL, `/monnify/events${query ? `?${query}` : ''}`, {}, { admin: true });
-  },
-
-  retryMonnifyEvent: async (paymentReference: string) => {
-    return request<{ message: string }>(
-      ADMIN_API_BASE_URL,
-      '/monnify/retry',
-      { method: 'POST', body: JSON.stringify({ paymentReference }) },
-      { admin: true }
-    );
-  },
-
   getVtpassEvents: async (params?: { limit?: number; offset?: number; status?: string }) => {
     const search = new URLSearchParams();
     if (params?.limit) search.set('limit', String(params.limit));
@@ -636,6 +641,15 @@ export const adminAPI = {
       ADMIN_API_BASE_URL,
       '/vtpass/requery',
       { method: 'POST', body: JSON.stringify({ requestId }) },
+      { admin: true }
+    );
+  },
+
+  requeryFlutterwaveVirtualAccount: async (payload: { userId?: string; accountReference?: string }) => {
+    return request<any>(
+      ADMIN_API_BASE_URL,
+      '/flutterwave/virtual-accounts/requery',
+      { method: 'POST', body: JSON.stringify(payload) },
       { admin: true }
     );
   },

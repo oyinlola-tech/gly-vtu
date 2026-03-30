@@ -6,14 +6,13 @@ const rolePermissions = {
     'transactions:read',
     'bills:read',
     'bills:write',
+    'accounts:read',
     'accounts:write',
-    'monnify:read',
-    'monnify:retry',
     'notify:send',
     'support:chat',
   ],
-  support: ['users:read', 'users:kyc', 'support:chat'],
-  finance: ['transactions:read', 'pricing:read', 'pricing:write', 'bills:read', 'finance:read', 'monnify:read'],
+  support: ['users:read', 'users:kyc', 'support:chat', 'accounts:read'],
+  finance: ['transactions:read', 'pricing:read', 'pricing:write', 'bills:read', 'finance:read'],
   compliance: ['audit:read', 'users:read'],
 };
 

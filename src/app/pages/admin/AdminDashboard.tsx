@@ -159,7 +159,19 @@ export default function AdminDashboard() {
   ];
 
   const recentUsers = useMemo(() => users.slice(0, 5), [users]);
-  const recentTransactions = useMemo(() => transactions.slice(0, 5), [transactions]);
+  const recentTransactions = useMemo(() => transactions.slice(0, 10), [transactions]);
+  const [expandedTx, setExpandedTx] = useState<string | null>(null);
+  const getTxnMeta = (meta: any) => {
+    if (!meta) return null;
+    if (typeof meta === 'string') {
+      try {
+        return JSON.parse(meta);
+      } catch {
+        return meta;
+      }
+    }
+    return meta;
+  };
   const dataPricing = useMemo(
     () => pricing.filter((row) => row.category_code === 'data'),
     [pricing]
@@ -308,20 +320,55 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {recentTransactions.map((txn) => (
-                  <div key={txn.id} className="flex items-center justify-between text-sm">
-                    <div>
-                      <p className="font-semibold text-gray-900 dark:text-white">{txn.reference}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{txn.type}</p>
+                  <div key={txn.id} className="border border-gray-200 dark:border-gray-800 rounded-xl p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">{txn.reference}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{txn.type}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-gray-900 dark:text-white">
+                          ₦{Number(txn.total || txn.amount || 0).toLocaleString('en-NG', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{txn.status}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        ₦{Number(txn.total || txn.amount || 0).toLocaleString('en-NG', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{txn.status}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => setExpandedTx(expandedTx === txn.id ? null : txn.id)}
+                        className="text-xs text-[#235697] font-semibold"
+                      >
+                        {expandedTx === txn.id ? 'Hide details' : 'View details'}
+                      </button>
+                      {txn.reference?.startsWith('BILL-') && (
+                        <button
+                          onClick={() =>
+                            adminAPI
+                              .requeryVtpass(txn.reference.replace('BILL-', ''))
+                              .then(loadDashboard)
+                          }
+                          className="text-xs text-white bg-[#235697] px-2 py-1 rounded-lg"
+                        >
+                          Requery
+                        </button>
+                      )}
                     </div>
+                    {expandedTx === txn.id && (
+                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                        <p>Customer: {txn.full_name}</p>
+                        {txn.vtpass_status && (
+                          <p>VTpass status: {txn.vtpass_status}</p>
+                        )}
+                        {txn.metadata && (
+                          <pre className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg overflow-x-auto">
+                            {JSON.stringify(getTxnMeta(txn.metadata), null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

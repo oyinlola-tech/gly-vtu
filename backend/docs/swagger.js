@@ -38,8 +38,8 @@ const doc = {
     { name: 'Admin Finance', description: 'Finance metrics and exports.' },
     { name: 'Admin Audit', description: 'Audit logs.' },
     { name: 'Admin Management', description: 'Admin roles and permissions.' },
-    { name: 'Admin Monnify', description: 'Monnify event monitoring.' },
-    { name: 'Monnify Webhook', description: 'Monnify webhook endpoint.' },
+    { name: 'Admin VTpass', description: 'VTpass transaction monitoring.' },
+    { name: 'VTpass Webhook', description: 'VTpass webhook endpoint.' },
   ],
   host: process.env.SWAGGER_HOST || `localhost:${port}`,
   schemes: [process.env.SWAGGER_SCHEME || 'http'],
@@ -445,12 +445,6 @@ const doc = {
       },
       example: { baseFee: 20, markupType: 'flat', markupValue: 10, currency: 'NGN', active: true },
     },
-    AdminMonnifyRetryRequest: {
-      type: 'object',
-      required: ['paymentReference'],
-      properties: { paymentReference: { type: 'string', description: 'Monnify payment reference' } },
-      example: { paymentReference: 'MNFY-123456' },
-    },
     Bank: {
       type: 'object',
       properties: {
@@ -577,31 +571,6 @@ const doc = {
         created_at: '2026-03-27T10:00:00Z',
       },
     },
-    MonnifyEvent: {
-      type: 'object',
-      properties: {
-        payment_reference: { type: 'string' },
-        account_reference: { type: 'string' },
-        amount: { type: 'number' },
-        currency: { type: 'string' },
-        paid_on: { type: 'string' },
-        status: { type: 'string', enum: ['received', 'success', 'failed'] },
-        attempts: { type: 'number' },
-        last_error: { type: 'string' },
-        updated_at: { type: 'string' },
-      },
-      example: {
-        payment_reference: 'MNFY-123456',
-        account_reference: 'GLY-uuid',
-        amount: 2000,
-        currency: 'NGN',
-        paid_on: '2026-03-27T10:00:00Z',
-        status: 'success',
-        attempts: 1,
-        last_error: '',
-        updated_at: '2026-03-27T10:00:00Z',
-      },
-    },
     FinanceOverview: {
       type: 'object',
       properties: {
@@ -719,8 +688,8 @@ function buildFallbackSpec() {
     '/api/admin/manage': 'Admin Management',
     '/api/admin/audit': 'Admin Audit',
     '/api/admin/finance': 'Admin Finance',
-    '/api/monnify/webhook': 'Monnify Webhook',
-    '/api/admin/monnify': 'Admin Monnify',
+    '/api/vtpass/webhook': 'VTpass Webhook',
+    '/api/admin/vtpass': 'Admin VTpass',
   };
 
   const paths = {};

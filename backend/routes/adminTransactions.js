@@ -13,9 +13,11 @@ router.get('/', requireAdmin, requirePermission('transactions:read'), async (req
     #swagger.responses[200] = { description: 'Transactions', schema: { type: 'array', items: { $ref: '#/definitions/AdminTransaction' } } }
   */
   const [rows] = await pool.query(
-    `SELECT t.id, u.full_name, t.type, t.amount, t.fee, t.total, t.status, t.reference, t.created_at
+    `SELECT t.id, u.full_name, t.type, t.amount, t.fee, t.total, t.status, t.reference, t.created_at,
+        t.metadata, v.status as vtpass_status, v.updated_at as vtpass_updated_at
      FROM transactions t
      JOIN users u ON u.id = t.user_id
+     LEFT JOIN vtpass_events v ON v.request_id = SUBSTRING(t.reference, 6)
      ORDER BY t.created_at DESC
      LIMIT 200`
   );

@@ -42,6 +42,22 @@ export async function createVirtualAccount({ email, bvn, tx_ref, firstName, last
   return flwRequest('POST', '/v3/virtual-account-numbers', payload);
 }
 
+export async function fetchVirtualAccount(orderRef) {
+  if (!orderRef) throw new Error('order_ref required');
+  return flwRequest('GET', `/v3/virtual-account-numbers/${orderRef}`);
+}
+
+export async function getBanks(country = 'NG') {
+  return flwRequest('GET', `/v3/banks/${country}`);
+}
+
+export async function resolveBankAccount({ account_number, account_bank }) {
+  return flwRequest('POST', '/v3/accounts/resolve', {
+    account_number,
+    account_bank,
+  });
+}
+
 export async function listVirtualCards() {
   return flwRequest('GET', '/v3/virtual-cards');
 }

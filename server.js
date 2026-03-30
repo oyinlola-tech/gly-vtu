@@ -22,8 +22,11 @@ import adminTransactionsRoutes from './backend/routes/adminTransactions.js';
 import adminManagementRoutes from './backend/routes/adminManagement.js';
 import adminAuditRoutes from './backend/routes/adminAudit.js';
 import adminFinanceRoutes from './backend/routes/adminFinance.js';
-import monnifyWebhookRoutes from './backend/routes/monnifyWebhook.js';
-import adminMonnifyRoutes from './backend/routes/adminMonnify.js';
+import flutterwaveWebhookRoutes from './backend/routes/flutterwaveWebhook.js';
+import vtpassWebhookRoutes from './backend/routes/vtpassWebhook.js';
+import adminVtpassRoutes from './backend/routes/adminVtpass.js';
+import adminFlutterwaveRoutes from './backend/routes/adminFlutterwave.js';
+import cardsRoutes from './backend/routes/cards.js';
 import flutterwaveWebhookRoutes from './backend/routes/flutterwaveWebhook.js';
 import vtpassWebhookRoutes from './backend/routes/vtpassWebhook.js';
 import adminVtpassRoutes from './backend/routes/adminVtpass.js';
@@ -35,7 +38,6 @@ import conversationsRoutes from './backend/routes/conversations.js';
 import adminConversationsRoutes from './backend/routes/adminConversations.js';
 import { refreshBankCache } from './backend/utils/bankCache.js';
 import { pool } from './backend/config/db.js';
-import { processMonnifyEvent } from './backend/utils/monnifyProcessor.js';
 import { authLimiter, adminAuthLimiter, webhookLimiter } from './backend/middleware/rateLimiters.js';
 import { csrfMiddleware } from './backend/middleware/csrf.js';
 import { attachRealtime } from './backend/utils/realtime.js';
@@ -217,6 +219,7 @@ app.use('/api/banks', banksRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/cards', cardsRoutes);
+app.use('/api/cards', cardsRoutes);
 
 app.use('/api/admin/auth', adminAuthLimiter, adminAuthRoutes);
 app.use('/api/admin/users', adminUsersRoutes);
@@ -227,9 +230,8 @@ app.use('/api/admin/audit', adminAuditRoutes);
 app.use('/api/admin/finance', adminFinanceRoutes);
 app.use('/api/admin/notifications', adminNotificationsRoutes);
 app.use('/api/admin/conversations', adminConversationsRoutes);
-app.use('/api/monnify/webhook', webhookLimiter, monnifyWebhookRoutes);
-app.use('/api/admin/monnify', adminMonnifyRoutes);
 app.use('/api/admin/vtpass', adminVtpassRoutes);
+app.use('/api/admin/flutterwave', adminFlutterwaveRoutes);
 app.use('/api/flutterwave/webhook', webhookLimiter, flutterwaveWebhookRoutes);
 app.use('/api/vtpass/webhook', webhookLimiter, vtpassWebhookRoutes);
 
@@ -243,6 +245,7 @@ app.use('/app/api/banks', banksRoutes);
 app.use('/app/api/notifications', notificationsRoutes);
 app.use('/app/api/conversations', conversationsRoutes);
 app.use('/app/api/cards', cardsRoutes);
+app.use('/app/api/cards', cardsRoutes);
 
 app.use('/app/admin/api/auth', adminAuthLimiter, adminAuthRoutes);
 app.use('/app/admin/api/users', adminUsersRoutes);
@@ -253,8 +256,8 @@ app.use('/app/admin/api/audit', adminAuditRoutes);
 app.use('/app/admin/api/finance', adminFinanceRoutes);
 app.use('/app/admin/api/notifications', adminNotificationsRoutes);
 app.use('/app/admin/api/conversations', adminConversationsRoutes);
-app.use('/app/admin/api/monnify', adminMonnifyRoutes);
 app.use('/app/admin/api/vtpass', adminVtpassRoutes);
+app.use('/app/admin/api/flutterwave', adminFlutterwaveRoutes);
 app.use('/app/api/flutterwave/webhook', webhookLimiter, flutterwaveWebhookRoutes);
 app.use('/app/api/vtpass/webhook', webhookLimiter, vtpassWebhookRoutes);
 
@@ -346,28 +349,7 @@ async function startServer() {
     console.error('Bank cache initial refresh failed:', err.message)
   );
 
-  const retryInterval = Number(process.env.MONNIFY_RETRY_INTERVAL_MS || 60000);
-  const retryBatch = Number(process.env.MONNIFY_RETRY_BATCH || 20);
-  const retryMax = Number(process.env.MONNIFY_RETRY_MAX_ATTEMPTS || 5);
-  setInterval(async () => {
-    try {
-      const [rows] = await pool.query(
-        `SELECT payment_reference, raw_payload, attempts
-         FROM monnify_events
-         WHERE status = 'failed' AND attempts < ?
-         ORDER BY updated_at ASC
-         LIMIT ?`,
-        [retryMax, retryBatch]
-      );
-      for (const row of rows) {
-        if (!row.raw_payload) continue;
-        const payload = JSON.parse(row.raw_payload);
-        await processMonnifyEvent(payload, { ip: 'system', userAgent: 'retry-job' });
-      }
-    } catch (err) {
-      console.error('Monnify retry job error:', err.message);
-    }
-  }, retryInterval);
+  // VTpass and Flutterwave webhooks handle async updates
 }
 
 startServer();

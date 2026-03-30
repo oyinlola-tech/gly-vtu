@@ -1,11 +1,58 @@
 import { Link } from 'react-router';
+import { useEffect, useState } from 'react';
 import { ChevronLeft, CreditCard, Plus, Lock, MoreVertical, Eye } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
+import { cardsAPI } from '../../services/api';
 
 export default function Cards() {
   const virtualCardProvider = (import.meta.env.VITE_VIRTUAL_CARD_PROVIDER || '').trim();
   const virtualCardStatus = (import.meta.env.VITE_VIRTUAL_CARD_STATUS || 'coming_soon').toLowerCase();
   const virtualCardReady = virtualCardStatus === 'live';
+  const [cards, setCards] = useState<any[]>([]);
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const loadCards = async () => {
+    try {
+      const data = await cardsAPI.list();
+      setCards(data || []);
+    } catch {
+      setCards([]);
+    }
+  };
+
+  useEffect(() => {
+    loadCards();
+  }, []);
+
+  const handleCreate = async () => {
+    if (!amount) return;
+    setLoading(true);
+    setError('');
+    try {
+      await cardsAPI.create(Number(amount));
+      setAmount('');
+      await loadCards();
+    } catch (err) {
+      setError('Unable to create card. Complete KYC and ensure enough balance.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleFreeze = async (card: any) => {
+    try {
+      if (card.status === 'frozen') {
+        await cardsAPI.unfreeze(card.card_id);
+      } else {
+        await cardsAPI.freeze(card.card_id);
+      }
+      await loadCards();
+    } catch {
+      // ignore
+    }
+  };
 
   const cardFeatures = [
     {
@@ -45,18 +92,56 @@ export default function Cards() {
       </div>
 
       <div className="px-6 -mt-24">
-        {/* Empty State */}
-        <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 shadow-2xl mb-6 text-center">
-          <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CreditCard size={28} className="text-[#235697]" />
+        {cards.length === 0 ? (
+          <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 shadow-2xl mb-6 text-center">
+            <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CreditCard size={28} className="text-[#235697]" />
+            </div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+              No virtual cards yet
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Create a virtual card to start online payments and subscriptions.
+            </p>
           </div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-            No virtual cards yet
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Create a virtual card to start online payments and subscriptions.
-          </p>
-        </div>
+        ) : (
+          <div className="space-y-4 mb-6">
+            {cards.map((card) => (
+              <div
+                key={card.id}
+                className="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-2xl"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Virtual Card</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">
+                      {card.masked_pan || '**** **** **** ****'}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-xs px-3 py-1 rounded-full ${
+                      card.status === 'frozen'
+                        ? 'bg-red-100 text-red-600'
+                        : 'bg-green-100 text-green-700'
+                    }`}
+                  >
+                    {card.status === 'frozen' ? 'Frozen' : 'Active'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
+                  <span>Expiry: {card.expiry || '—'}</span>
+                  <span>Balance: ₦{Number(card.balance || 0).toLocaleString('en-NG')}</span>
+                </div>
+                <button
+                  onClick={() => toggleFreeze(card)}
+                  className="mt-4 w-full bg-[#235697] text-white py-2 rounded-xl text-sm font-semibold"
+                >
+                  {card.status === 'frozen' ? 'Unfreeze Card' : 'Freeze Card'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Card Actions */}
         <div className="grid grid-cols-3 gap-3 mb-6">
@@ -119,13 +204,38 @@ export default function Cards() {
         </div>
 
         {/* Create New Card */}
-        <button
-          disabled={!virtualCardReady}
-          className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity mb-6 disabled:opacity-50"
-        >
-          <Plus size={20} />
-          <span>{virtualCardReady ? 'Create New Virtual Card' : 'Virtual Cards Coming Soon'}</span>
-        </button>
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow mb-6">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+            Fund & Create Card
+          </p>
+          {error && (
+            <p className="text-xs text-red-500 mb-2">{error}</p>
+          )}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full pl-8 pr-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                placeholder="Enter amount"
+              />
+            </div>
+            <button
+              onClick={handleCreate}
+              disabled={!virtualCardReady || loading || !amount}
+              className="bg-gradient-to-r from-[#235697] to-[#114280] text-white px-4 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
+            >
+              {loading ? 'Creating...' : 'Create'}
+            </button>
+          </div>
+          {!virtualCardReady && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Virtual cards are coming soon. We’ll enable this after Flutterwave setup.
+            </p>
+          )}
+        </div>
 
         {/* Coming Soon Section */}
         <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-3xl p-8 text-center">
