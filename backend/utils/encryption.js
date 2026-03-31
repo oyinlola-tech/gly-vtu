@@ -8,12 +8,17 @@ const ITERATIONS = 100000; // NIST recommended minimum
 /**
  * Derive encryption key from master secret using PBKDF2
  * This is more secure than SHA256 for key derivation
+ * IMPORTANT: PII_ENCRYPTION_KEY must be a separate, strong secret (≥32 chars)
+ * DO NOT use JWT_SECRET as fallback - each secret serves a different purpose
  */
 function getEncryptionKey() {
-  const masterSecret = process.env.PII_ENCRYPTION_KEY || process.env.JWT_SECRET;
+  const masterSecret = process.env.PII_ENCRYPTION_KEY;
 
   if (!masterSecret) {
-    throw new Error('PII_ENCRYPTION_KEY or JWT_SECRET required for encryption');
+    throw new Error(
+      'PII_ENCRYPTION_KEY environment variable is required and must not fall back to JWT_SECRET. ' +
+      'Generate a strong 32+ character random string and set it separately.'
+    );
   }
 
   return crypto.pbkdf2Sync(

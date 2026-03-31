@@ -21,7 +21,10 @@ const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefin
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [admin, setAdmin] = useState<Admin | null>(() => {
-    const saved = localStorage.getItem('admin');
+    // NOTE: Admin profile data is now stored in sessionStorage (not localStorage)
+    // sessionStorage is cleared when the browser tab closes, reducing XSS attack surface
+    // Admin permissions and role will be fetched from /api/admin/me on app load
+    const saved = sessionStorage.getItem('admin');
     return saved ? (JSON.parse(saved) as Admin) : null;
   });
   const [checking, setChecking] = useState(true);
@@ -43,9 +46,11 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (admin) {
-      localStorage.setItem('admin', JSON.stringify(admin));
+      // SECURITY: Store in sessionStorage (cleared on tab close) instead of localStorage
+      // This prevents XSS attacks from accessing admin permissions and user data
+      sessionStorage.setItem('admin', JSON.stringify(admin));
     } else {
-      localStorage.removeItem('admin');
+      sessionStorage.removeItem('admin');
     }
   }, [admin]);
 

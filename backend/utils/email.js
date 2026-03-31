@@ -416,6 +416,62 @@ export async function sendSecurityEmail({ to, title, message }) {
   await sendEmail({ to, subject: `${BRAND} Security Alert`, html });
 }
 
+export async function sendAnomalyAlertEmail({ to, anomalyType, details, severity = 'medium' }) {
+  // Map anomaly types to human-readable descriptions
+  const anomalyLabels = {
+    'anomaly.withdrawal.amount': {
+      title: 'Large Withdrawal Detected',
+      description: 'An unusually large withdrawal was attempted from your account.',
+      recommendedAction: 'Verify this was you. If not, change your password immediately.'
+    },
+    'anomaly.withdrawal.frequency': {
+      title: 'Multiple Withdrawals Detected',
+      description: 'Multiple withdrawals were made in a short period.',
+      recommendedAction: 'Monitor your account for suspicious activity.'
+    },
+    'anomaly.devices.count': {
+      title: 'Multiple Devices Detected',
+      description: 'Your account is logged in on 5 or more devices.',
+      recommendedAction: 'Review your active sessions and remove any unfamiliar devices.'
+    },
+    'anomaly.login.failed': {
+      title: 'Failed Login Attempts',
+      description: 'Multiple failed login attempts were detected on your account.',
+      recommendedAction: 'If this was not you, reset your password immediately.'
+    },
+    'anomaly.admin.adjustment': {
+      title: 'Large Account Adjustment',
+      description: 'A large adjustment was made to your account by our administrators.',
+      recommendedAction: 'Contact support if you did not authorize this action.'
+    },
+  };
+
+  const anomalyInfo = anomalyLabels[anomalyType] || {
+    title: 'Unusual Activity Detected',
+    description: 'Unusual activity was detected on your account.',
+    recommendedAction: 'Review your account security settings immediately.'
+  };
+
+  const severityColor = severity === 'high' ? '#dc2626' : severity === 'medium' ? '#ea580c' : '#f59e0b';
+  const severityLabel = severity === 'high' ? 'HIGH' : severity === 'medium' ? 'MEDIUM' : 'LOW';
+
+  const html = baseTemplate({
+    title: anomalyInfo.title,
+    highlight: `<div style="background: ${severityColor}; color: white; padding: 12px; border-radius: 4px; margin-bottom: 16px;"><strong>SEVERITY: ${severityLabel}</strong></div>`,
+    body: `<p>Hello,</p>
+      <p>${anomalyInfo.description}</p>
+      ${details ? `<p><strong>Details:</strong></p><ul style="padding-left:18px;line-height:1.8;">${
+        Object.entries(details)
+          .map(([key, value]) => `<li><strong>${escapeHtml(String(key))}:</strong> ${escapeHtml(String(value))}</li>`)
+          .join('')
+      }</ul>` : ''}
+      <p><strong>Recommended Action:</strong> ${anomalyInfo.recommendedAction}</p>
+      <p style="margin-top:24px;"><a href="${BRAND_URL}/security" style="background: ${WINE}; color: white; padding: 10px 20px; border-radius: 4px; text-decoration: none; display: inline-block;">Review Account Security</a></p>`,
+    footer: 'If you did not authorize this activity, please secure your account immediately.',
+  });
+  await sendEmail({ to, subject: `${BRAND} Security Alert: ${anomalyInfo.title}`, html });
+}
+
 export async function sendKycStatusEmail({ to, name, status, reason = '' }) {
   const pretty = status === 'verified' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending';
   const html = baseTemplate({

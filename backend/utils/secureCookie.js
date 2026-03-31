@@ -1,8 +1,13 @@
 import crypto from 'crypto';
 
-const DEFAULT_SECRET = process.env.COOKIE_ENC_SECRET || process.env.JWT_SECRET;
+// CRITICAL: COOKIE_ENC_SECRET must be a separate, strong secret (≥32 chars)
+// DO NOT fall back to JWT_SECRET - each secret serves a different purpose
+const DEFAULT_SECRET = process.env.COOKIE_ENC_SECRET;
 if (!DEFAULT_SECRET) {
-  throw new Error('COOKIE_ENC_SECRET or JWT_SECRET is required');
+  throw new Error(
+    'COOKIE_ENC_SECRET environment variable is required and must not fall back to JWT_SECRET. ' +
+    'Generate a strong 32+ character random string and set it separately.'
+  );
 }
 
 function getKey() {

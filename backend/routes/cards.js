@@ -9,6 +9,7 @@ import { isValidAmount, isNonEmptyString } from '../utils/validation.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII, decryptJson } from '../utils/encryption.js';
+import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
 
 const router = express.Router();
 
@@ -42,9 +43,18 @@ router.post('/', requireUser, async (req, res) => {
     });
     return res.status(status).json(payload);
   }
+  const { pin } = req.body || {};
   const numericAmount = Number(amount);
   if (!isValidAmount(numericAmount, 100, 5_000_000)) {
     return respond(400, { error: 'Invalid amount' });
+  }
+  
+  // PIN verification required for card funding (financial transaction security)
+  if (!isValidPin(pin)) return respond(400, { error: 'PIN must be exactly 6 digits' });
+  try {
+    await verifyTransactionPin(req.user.sub, pin);
+  } catch (err) {
+    return respond(400, { error: err.message });
   }
 
   const [[userRaw]] = await pool.query(

@@ -55,15 +55,45 @@ const isProd = process.env.NODE_ENV === 'production';
 let dbReady = false;
 let dbCheckedAt = null;
 let dbError = null;
+// CRITICAL: Validate all required secrets are set and strong in production
 if (isProd) {
-  const jwtSecret = process.env.JWT_SECRET;
-  const jwtAdminSecret = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET;
-  if (!jwtSecret || jwtSecret === 'dev_secret_change_me') {
-    console.error('JWT_SECRET must be set to a strong value in production.');
+  const validateSecret = (name, value) => {
+    if (!value || value === 'dev_secret_change_me' || value.length < 32) {
+      console.error(
+        `${name} must be set to a strong value (≥32 chars) in production. ` +
+        `Do not use default values or short strings.`
+      );
+      process.exit(1);
+    }
+  };
+
+  // Validate all 4 critical secrets are separate and strong
+  validateSecret('JWT_SECRET', process.env.JWT_SECRET);
+  validateSecret('JWT_ADMIN_SECRET', process.env.JWT_ADMIN_SECRET);
+  validateSecret('PII_ENCRYPTION_KEY', process.env.PII_ENCRYPTION_KEY);
+  validateSecret('COOKIE_ENC_SECRET', process.env.COOKIE_ENC_SECRET);
+  
+  // Webhook IP whitelist is mandatory in production
+  if (!process.env.FLW_WEBHOOK_IPS) {
+    console.error(
+      'FLW_WEBHOOK_IPS must be set in production. ' +
+      'Obtain Flutterwave webhook IP whitelists from webhook docs and set as comma-separated values.'
+    );
     process.exit(1);
   }
-  if (!jwtAdminSecret || jwtAdminSecret === 'dev_secret_change_me') {
-    console.error('JWT_ADMIN_SECRET must be set to a strong value in production.');
+
+  // Verify secrets are unique (defense in depth)
+  const secretsArray = [
+    process.env.JWT_SECRET,
+    process.env.JWT_ADMIN_SECRET,
+    process.env.PII_ENCRYPTION_KEY,
+    process.env.COOKIE_ENC_SECRET
+  ];
+  if (new Set(secretsArray).size < secretsArray.length) {
+    console.error(
+      'ERROR: Multiple secrets must have different values in production. ' +
+      'Each secret serves a different purpose: JWT_SECRET, JWT_ADMIN_SECRET, PII_ENCRYPTION_KEY, COOKIE_ENC_SECRET'
+    );
     process.exit(1);
   }
 }
@@ -81,6 +111,26 @@ const allowedOrigins = process.env.CORS_ORIGIN
       .filter((o) => o.length > 0)
   : [...defaultOrigins, ...extraOrigins];
 const normalizedOrigins = allowedOrigins.filter((o) => o !== '*');
+
+// SECURITY: Validate CORS configuration in production
+if (isProd) {
+  if (!normalizedOrigins.length) {
+    console.error(
+      'CORS_ORIGIN must be set to specific domain(s) in production (not wildcard). ' +
+      'Example: CORS_ORIGIN=https://example.com,https://admin.example.com'
+    );
+    process.exit(1);
+  }
+  
+  // Warn about HTTP origins in production (should use HTTPS)
+  const httpOrigins = normalizedOrigins.filter((o) => o.startsWith('http://'));
+  if (httpOrigins.length) {
+    console.warn(
+      `WARNING: HTTP origins detected in production CORS config: ${httpOrigins.join(', ')}. ` +
+      `For production, use HTTPS origins only.`
+    );
+  }
+}
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -110,11 +160,24 @@ const helmetConfig = isProd
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'"],
+          // SECURITY: Removed 'unsafe-inline' from scriptSrc to prevent XSS attacks
+          // All scripts must be loaded from the app origin (Vite builds generate unique hashes)
+          scriptSrc: ["'self'"],
+          // SECURITY: Keep unsafe-inline for styles (Tailwind builds inline critical CSS)
+          // Consider moving to external stylesheet + nonce in future
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:'],
+          imgSrc: ["'self'", 'data:', 'https:'],
           fontSrc: ["'self'", 'data:'],
           connectSrc: ["'self'", ...cspOrigins, ...wsOrigins],
+          // SECURITY: Disallow plugins and object embedding (reduces attack surface)
+          objectSrc: ["'none'"],
+          baseSrc: ["'self'"],
+          // SECURITY: Require iframe to be same-origin for 3D Secure and payment flows
+          frameSrc: ["'self'"],
+          // SECURITY: Restrict form submission to same-origin
+          formAction: ["'self'"],
+          // SECURITY: Disable Web Worker loading from external sources
+          workerSrc: ["'self'"],
         },
       },
       hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },

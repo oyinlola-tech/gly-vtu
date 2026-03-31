@@ -39,7 +39,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('user');
+    // NOTE: User data is now stored in sessionStorage (not localStorage)
+    // sessionStorage is cleared when the browser tab closes, reducing XSS attack surface
+    // Full profile will be fetched from /api/user/profile on app load
+    const saved = sessionStorage.getItem('user');
     return saved ? (JSON.parse(saved) as Omit<User, 'accountNumber'>) : null;
   });
 
@@ -69,9 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user) {
       const safeUser = getPersistableUser(user);
-      localStorage.setItem('user', JSON.stringify(safeUser));
+      // SECURITY: Store in sessionStorage (cleared on tab close) instead of localStorage
+      // This reduces the window of opportunity for XSS attacks to steal user data
+      sessionStorage.setItem('user', JSON.stringify(safeUser));
     } else {
-      localStorage.removeItem('user');
+      sessionStorage.removeItem('user');
     }
   }, [user]);
 

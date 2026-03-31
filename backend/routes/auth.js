@@ -706,6 +706,90 @@ router.post('/logout', async (req, res) => {
   return res.json({ message: 'Logged out' });
 });
 
+router.post('/logout-all', requireUser, async (req, res) => {
+  /*
+    #swagger.tags = ['Auth']
+    #swagger.summary = 'Logout from all devices - revoke all sessions'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = {
+      in: 'body',
+      required: false,
+      schema: { type: 'object', properties: { confirmPassword: { type: 'string' } } }
+    }
+    #swagger.responses[200] = { description: 'All sessions revoked', schema: { $ref: '#/definitions/MessageResponse' } }
+    #swagger.responses[401] = { description: 'Invalid password', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  // SECURITY: Require password confirmation for logout-all (prevents attacker from logging out victim)
+  const { confirmPassword } = req.body || {};
+  if (!confirmPassword) {
+    return res.status(400).json({ error: 'Password confirmation required' });
+  }
+
+  // Get current user password hash
+  const [[userRow]] = await pool.query(
+    'SELECT password_hash FROM users WHERE id = ? LIMIT 1',
+    [req.user.sub]
+  );
+  if (!userRow) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  // Verify password
+  const passwordValid = await bcrypt.compare(confirmPassword, userRow.password_hash);
+  if (!passwordValid) {
+    logSecurityEvent({
+      type: 'logout_all.failed',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: req.user.sub,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { reason: 'invalid_password' }
+    }).catch(() => null);
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  // Revoke all refresh tokens for this user
+  const [[result]] = await pool.query(
+    'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL',
+    [req.user.sub]
+  );
+  const sessionsRevoked = result?.affectedRows || 0;
+
+  // Log security event
+  logSecurityEvent({
+    type: 'logout_all.success',
+    severity: 'medium',
+    actorType: 'user',
+    actorId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    metadata: { sessions_revoked: sessionsRevoked }
+  }).catch(() => null);
+
+  // Log audit event
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: 'logout_all',
+    entityType: 'user',
+    entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    metadata: { sessions_revoked: sessionsRevoked }
+  }).catch(() => null);
+
+  // Clear cookies
+  res.clearCookie('refresh_token');
+  res.clearCookie('csrf_token');
+  clearAccessCookie(res, 'user');
+
+  return res.json({
+    message: 'Logged out from all devices',
+    sessionsRevoked
+  });
+});
+
 router.get('/csrf', (req, res) => {
   /*
     #swagger.tags = ['Auth']

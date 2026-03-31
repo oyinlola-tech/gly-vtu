@@ -5,6 +5,7 @@ import { sanitizeFlutterwaveWebhook } from '../utils/sanitize.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { sendReceiptEmail } from '../utils/email.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { logger } from '../utils/logger.js';
 import { webhookLimiter } from '../middleware/rateLimiters.js';
 import { applyUserPII } from '../utils/encryption.js';
 
@@ -19,20 +20,35 @@ function getRequestIp(req) {
   return req.ip;
 }
 
-// IP whitelist validation for Flutterwave webhooks
+// IP whitelist validation for Flutterwave webhooks - MANDATORY in production
 function isIpAllowed(req) {
   const list = (process.env.FLW_WEBHOOK_IPS || '')
     .split(',')
     .map((ip) => ip.trim())
     .filter(Boolean);
   
-  // If no IP list configured, allow in non-production or deny in production
+  // In production, IP whitelist MUST be configured
+  if (process.env.NODE_ENV === 'production' && !list.length) {
+    logger.error('FLW_WEBHOOK_IPS not configured in production', {
+      severity: 'critical',
+      remedy: 'Set FLW_WEBHOOK_IPS environment variable with comma-separated Flutterwave IPs'
+    });
+    return false;
+  }
+  
+  // If no IP list configured in non-production, allow (for testing)
   if (!list.length) {
-    return process.env.NODE_ENV !== 'production';
+    return true;
   }
   
   const ip = getRequestIp(req);
-  return list.includes(ip);
+  const allowed = list.includes(ip);
+  
+  if (!allowed && process.env.NODE_ENV === 'production') {
+    logger.warn('Webhook IP rejected (not in whitelist)', { ip });
+  }
+  
+  return allowed;
 }
 
 router.post('/', webhookLimiter, async (req, res) => {
@@ -66,6 +82,26 @@ router.post('/', webhookLimiter, async (req, res) => {
   const event = payload.event || '';
   const data = payload.data || {};
   const status = data.status || '';
+  
+  // SECURITY: Deduplicate webhook events using Flutterwave's unique event ID
+  // This prevents double-crediting if Flutterwave retries webhook delivery
+  // Each webhook has a unique id field that identifies it across retries
+  const eventId = data.id || data.event_id;
+  if (eventId) {
+    // Check if this event was already processed in the last 5 minutes
+    const [[existing]] = await pool.query(
+      'SELECT id, processed_at FROM flutterwave_events WHERE event_id = ? AND processed_at > ? LIMIT 1',
+      [eventId, new Date(Date.now() - 5 * 60 * 1000)]
+    );
+    if (existing && existing.processed_at) {
+      // Duplicate event - return success without reprocessing
+      logger.debug('Webhook duplicate detected and ignored', { 
+        eventId, 
+        originalTime: existing.processed_at 
+      });
+      return res.json({ message: 'OK' }); // Return OK so Flutterwave doesn't retry
+    }
+  }
 
   await pool.query(
     `INSERT INTO flutterwave_events (id, event_id, tx_ref, flw_ref, status, raw_payload)

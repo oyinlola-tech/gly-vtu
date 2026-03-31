@@ -14,6 +14,79 @@ export function kycProviderEnabled() {
   return Boolean(BASE_URL);
 }
 
+// SECURITY: Sanitize and validate KYC provider responses
+function sanitizeString(value, maxLength = 255) {
+  if (value === null || value === undefined) return null;
+  const str = String(value).trim();
+  if (!str) return null;
+  // Remove control characters and limit length
+  const sanitized = str.replace(/[\x00-\x1F\x7F]/g, '').slice(0, maxLength);
+  return sanitized || null;
+}
+
+function sanitizeName(value) {
+  const name = sanitizeString(value, 100);
+  if (!name) return null;
+  // Names should be alphanumeric + spaces, hyphens, apostrophes only
+  const valid = /^[a-zA-Z\s'-]+$/.test(name);
+  if (!valid) {
+    logger.warn('KYC: Potentially malicious name detected', { name: name.slice(0, 20) });
+    return null;
+  }
+  return name;
+}
+
+function sanitizePhone(value) {
+  if (value === null || value === undefined) return null;
+  const str = String(value).trim();
+  // Extract only digits
+  const digitsOnly = str.replace(/\D/g, '');
+  // Nigerian phone numbers are typically 11 digits
+  if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+    logger.warn('KYC: Invalid phone length', { length: digitsOnly.length });
+    return null;
+  }
+  return digitsOnly;
+}
+
+function validateDate(value) {
+  if (!value) return null;
+  const str = String(value).trim();
+  // Validate ISO date format YYYY-MM-DD
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(str)) return null;
+  
+  const date = new Date(str);
+  if (isNaN(date.getTime())) return null;
+  // Reject future dates (birth dates must be in past)
+  if (date > new Date()) return null;
+  // Reject dates before year 1900
+  if (date.getFullYear() < 1900) return null;
+  
+  return str;
+}
+
+function validateGender(value) {
+  if (!value) return null;
+  const normalized = String(value).toLowerCase().trim();
+  if (['male', 'female', 'other'].includes(normalized)) {
+    return normalized;
+  }
+  logger.warn('KYC: Invalid gender value', { value: normalized });
+  return null;
+}
+
+function validateConfidenceScore(value) {
+  if (value === null || value === undefined) return 0;
+  const num = Number(value);
+  if (isNaN(num)) return 0;
+  if (num < 0 || num > 100) {
+    logger.warn('KYC: Invalid confidence score', { value: num });
+    return 0;
+  }
+  return Math.round(num);
+}
+
 function normalizeName(name) {
   if (!name) return '';
   return String(name)
@@ -197,14 +270,45 @@ export async function verifyIdentity({ type, payload }) {
     throw err;
   }
 
+  // SECURITY: Sanitize and validate all KYC provider response data
+  // This prevents injection attacks if the provider is compromised or MITM'd
   const verified = parseVerifiedFlag(raw);
-  const name = parseNameFromResponse(raw);
+  const rawName = parseNameFromResponse(raw);
+  
+  // Sanitize name fields
+  const fullName = sanitizeName(rawName.fullName);
+  const firstName = sanitizeName(rawName.firstName);
+  const lastName = sanitizeName(rawName.lastName);
+  
+  // Validate other fields
+  const dob = validateDate(parseDobFromResponse(raw));
+  const phone = sanitizePhone(parsePhoneFromResponse(raw));
+  const gender = validateGender(parseGenderFromResponse(raw));
+  const reference = sanitizeString(parseReferenceFromResponse(raw), 100);
+  
+  // Log if any validation failed
+  if (!fullName && rawName.fullName) {
+    logger.warn('KYC: Full name validation failed', { 
+      rawName: String(rawName.fullName).slice(0, 20),
+      reason: 'Contains invalid characters or is empty after sanitization'
+    });
+  }
+
   const result = {
     provider,
     verified: verified === null ? false : verified,
     status: verified === null ? 'unknown' : verified ? 'verified' : 'failed',
-    fullName: name.fullName,
-    firstName: name.firstName,
+    fullName,
+    firstName,
+    lastName,
+    dob,
+    phone,
+    gender,
+    reference,
+    raw, // Keep raw for audit logging (but don't use for any security decisions)
+  };
+
+  return result;
     lastName: name.lastName,
     dob: parseDobFromResponse(raw),
     phone: parsePhoneFromResponse(raw),

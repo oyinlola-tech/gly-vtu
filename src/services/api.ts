@@ -19,11 +19,14 @@ const DEVICE_ID_KEY = 'gly_device_id';
 let csrfToken: string | null = null;
 
 function getDeviceId() {
-  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  // SECURITY: Store device ID in sessionStorage (not localStorage)
+  // Reduces XSS attack surface - device ID is cleared when browser tab closes
+  // In per-session mode, device ID changes per login/session (more secure for anomaly detection)
+  let deviceId = sessionStorage.getItem(DEVICE_ID_KEY);
   if (!deviceId) {
     deviceId = crypto.randomUUID();
     try {
-      localStorage.setItem(DEVICE_ID_KEY, deviceId);
+      sessionStorage.setItem(DEVICE_ID_KEY, deviceId);
     } catch {
       // ignore storage errors
     }
