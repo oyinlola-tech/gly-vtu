@@ -39,7 +39,12 @@ function ipAllowed(req) {
     .split(',')
     .map((ip) => ip.trim())
     .filter(Boolean);
-  if (!list.length) return process.env.NODE_ENV !== 'production';
+  if (!list.length) {
+    if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_ANY_WEBHOOK_IP === 'true') {
+      return true;
+    }
+    return false;
+  }
   const ip = getRequestIp(req);
   return list.includes(ip);
 }

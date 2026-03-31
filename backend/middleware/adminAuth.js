@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { ADMIN_AUTH_COOKIE_NAME } from '../utils/tokens.js';
 import { logger } from '../utils/logger.js';
 
-const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET;
+const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET;
 if (!JWT_ADMIN_SECRET) {
   throw new Error('JWT_ADMIN_SECRET is required');
 }

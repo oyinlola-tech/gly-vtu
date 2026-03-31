@@ -74,10 +74,13 @@ router.get('/', requireUser, async (req, res) => {
     'SELECT id, type, amount, fee, total, status, reference, metadata, metadata_encrypted, created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
     [req.user.sub]
   );
-  const mapped = rows.map((row) => ({
-    ...row,
-    metadata: hydrateTransactionMetadata(row, req.user.sub),
-  }));
+  const mapped = rows.map((row) => {
+    const { metadata_encrypted, ...rest } = row;
+    return {
+      ...rest,
+      metadata: hydrateTransactionMetadata(row, req.user.sub),
+    };
+  });
   return res.json(mapped);
 });
 
@@ -88,8 +91,9 @@ router.get('/:id', requireUser, async (req, res) => {
   );
   if (!rows.length) return res.status(404).json({ error: 'Transaction not found' });
 
-  const tx = rows[0];
-  const meta = hydrateTransactionMetadata(tx, req.user.sub) || {};
+  const row = rows[0];
+  const meta = hydrateTransactionMetadata(row, req.user.sub) || {};
+  const { metadata_encrypted, ...tx } = row;
 
   const recipient = {
     name:
@@ -119,8 +123,9 @@ router.get('/:id/receipt', requireUser, async (req, res) => {
   );
   if (!rows.length) return res.status(404).json({ error: 'Transaction not found' });
 
-  const tx = rows[0];
-  const meta = hydrateTransactionMetadata(tx, req.user.sub) || {};
+  const row = rows[0];
+  const meta = hydrateTransactionMetadata(row, req.user.sub) || {};
+  const { metadata_encrypted, ...tx } = row;
 
   const [[userRaw]] = await pool.query(
     'SELECT id, full_name, full_name_encrypted FROM users WHERE id = ?',

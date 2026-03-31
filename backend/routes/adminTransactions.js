@@ -26,9 +26,11 @@ router.get('/', requireAdmin, requirePermission('transactions:read'), async (req
      ORDER BY t.created_at DESC
      LIMIT 200`
   );
-  const mapped = rows.map((row) =>
-    applyUserPII({ ...row, metadata: hydrateTransactionMetadata(row, row.user_id) })
-  );
+  const mapped = rows.map((row) => {
+    const meta = hydrateTransactionMetadata(row, row.user_id);
+    const { metadata_encrypted, ...rest } = row;
+    return applyUserPII({ ...rest, metadata: meta });
+  });
   return res.json(mapped);
 });
 
@@ -69,9 +71,11 @@ router.get('/held-topups', requireAdmin, requirePermission('transactions:read'),
      ORDER BY t.created_at DESC
      LIMIT 200`
   );
-  const mapped = rows.map((row) =>
-    applyUserPII({ ...row, metadata: hydrateTransactionMetadata(row, row.user_id) })
-  );
+  const mapped = rows.map((row) => {
+    const meta = hydrateTransactionMetadata(row, row.user_id);
+    const { metadata_encrypted, ...rest } = row;
+    return applyUserPII({ ...rest, metadata: meta });
+  });
   return res.json(mapped);
 });
 

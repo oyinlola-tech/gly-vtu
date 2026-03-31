@@ -15,6 +15,17 @@ const limits = {
   },
 };
 
+const ALLOWED_TYPES = new Set([
+  'send',
+  'bill',
+  'topup',
+  'receive',
+  'request',
+  'virtual_card',
+  'international_transfer',
+  'wire_transfer',
+]);
+
 export function getKycLimits(level) {
   return limits[Number(level)] || null;
 }
@@ -37,25 +48,30 @@ export async function enforceKycLimits({ userId, level, amount, types }) {
   const cfg = getKycLimits(level);
   if (!cfg) return { ok: true };
   const typeList = Array.isArray(types) && types.length ? types : ['send', 'bill'];
-  const overrideDaily = typeList.length === 1 ? getOverride(level, 'daily', typeList[0]) : null;
-  const overrideMonthly = typeList.length === 1 ? getOverride(level, 'monthly', typeList[0]) : null;
+  const filtered = typeList.filter((type) => ALLOWED_TYPES.has(type));
+  if (!filtered.length) {
+    return { ok: false, message: 'Invalid transaction type' };
+  }
+  const overrideDaily = filtered.length === 1 ? getOverride(level, 'daily', filtered[0]) : null;
+  const overrideMonthly = filtered.length === 1 ? getOverride(level, 'monthly', filtered[0]) : null;
+  const placeholders = filtered.map(() => '?').join(',');
   const [dailyRows] = await pool.query(
     `SELECT COALESCE(SUM(total), 0) AS total
      FROM transactions
      WHERE user_id = ?
        AND status IN ('pending','success')
-       AND type IN (?)
+       AND type IN (${placeholders})
        AND created_at >= CURDATE()`,
-    [userId, typeList]
+    [userId, ...filtered]
   );
   const [monthlyRows] = await pool.query(
     `SELECT COALESCE(SUM(total), 0) AS total
      FROM transactions
      WHERE user_id = ?
        AND status IN ('pending','success')
-       AND type IN (?)
+       AND type IN (${placeholders})
        AND created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')`,
-    [userId, typeList]
+    [userId, ...filtered]
   );
   const dailyTotal = Number(dailyRows[0]?.total || 0) + Number(amount || 0);
   const monthlyTotal = Number(monthlyRows[0]?.total || 0) + Number(amount || 0);

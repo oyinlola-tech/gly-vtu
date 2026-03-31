@@ -24,12 +24,13 @@ import {
   generateTotpQr,
   verifyTotp,
   generateBackupCodes,
-  hashBackupCode,
+  hashBackupCodes,
+  verifyBackupCode,
 } from '../utils/totp.js';
 
 const router = express.Router();
 
-const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET;
+const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET;
 if (!JWT_ADMIN_SECRET) {
   throw new Error('JWT_ADMIN_SECRET is required');
 }
@@ -161,9 +162,9 @@ router.post('/login', adminLoginLimiter, otpLimiter, async (req, res) => {
   if (!totpValid && backupCode) {
     const backupCodes = parseJson(admin.totp_backup_codes, []);
     const usedCodes = new Set(parseJson(admin.backup_codes_used, []));
-    const hashed = hashBackupCode(backupCode);
-    if (backupCodes.includes(hashed) && !usedCodes.has(hashed)) {
-      usedCodes.add(hashed);
+    const matched = await verifyBackupCode(backupCode, backupCodes);
+    if (matched && !usedCodes.has(matched)) {
+      usedCodes.add(matched);
       await pool.query('UPDATE admin_users SET backup_codes_used = ? WHERE id = ?', [
         JSON.stringify([...usedCodes]),
         admin.id,
@@ -245,7 +246,7 @@ router.post('/totp/enable', requireAdmin, async (req, res) => {
   if (!valid) return res.status(400).json({ error: 'Invalid TOTP code' });
 
   const backupCodes = generateBackupCodes();
-  const hashed = backupCodes.map((code) => hashBackupCode(code));
+  const hashed = await hashBackupCodes(backupCodes);
   await pool.query(
     'UPDATE admin_users SET totp_enabled = 1, totp_backup_codes = ?, backup_codes_used = ? WHERE id = ?',
     [JSON.stringify(hashed), JSON.stringify([]), admin.id]
@@ -269,9 +270,9 @@ router.post('/totp/disable', requireAdmin, async (req, res) => {
   if (!valid && backupCode) {
     const backupCodes = parseJson(admin.totp_backup_codes, []);
     const usedCodes = new Set(parseJson(admin.backup_codes_used, []));
-    const hashed = hashBackupCode(backupCode);
-    if (backupCodes.includes(hashed) && !usedCodes.has(hashed)) {
-      usedCodes.add(hashed);
+    const matched = await verifyBackupCode(backupCode, backupCodes);
+    if (matched && !usedCodes.has(matched)) {
+      usedCodes.add(matched);
       await pool.query('UPDATE admin_users SET backup_codes_used = ? WHERE id = ?', [
         JSON.stringify([...usedCodes]),
         admin.id,

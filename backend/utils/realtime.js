@@ -6,7 +6,7 @@ import { logAudit } from './audit.js';
 import { AUTH_COOKIE_NAME, ADMIN_AUTH_COOKIE_NAME } from './tokens.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET || process.env.JWT_SECRET;
+const JWT_ADMIN_SECRET = process.env.JWT_ADMIN_SECRET;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is required');
 }
@@ -21,11 +21,12 @@ const allowedOrigins = process.env.CORS_ORIGIN
       .map((o) => o.trim())
       .filter((o) => o.length > 0)
   : [...defaultOrigins, ...extraOrigins];
+const normalizedOrigins = allowedOrigins.filter((o) => o !== '*');
 const WS_TOKEN_MAX_AGE_MINUTES = Number(process.env.WS_TOKEN_MAX_AGE_MINUTES || 10);
 
 function originAllowed(origin) {
   if (!origin) return true;
-  return allowedOrigins.includes(origin);
+  return normalizedOrigins.includes(origin);
 }
 
 const userClients = new Map();

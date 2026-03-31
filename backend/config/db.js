@@ -9,6 +9,7 @@ import {
   hashEmail,
   hashPhone,
 } from '../utils/encryption.js';
+import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 
 dotenv.config();
 
@@ -746,10 +747,11 @@ async function ensureTransactionMetadataEncrypted(conn) {
       }
     }
     if (!meta) continue;
-    await conn.query('UPDATE transactions SET metadata_encrypted = ? WHERE id = ?', [
-      encryptJson(meta, row.user_id),
-      row.id,
-    ]);
+    const { safe, encrypted } = buildTransactionMetadata(meta, row.user_id);
+    await conn.query(
+      'UPDATE transactions SET metadata = ?, metadata_encrypted = ? WHERE id = ?',
+      [safe ? JSON.stringify(safe) : null, encrypted, row.id]
+    );
   }
 }
 

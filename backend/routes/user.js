@@ -23,7 +23,8 @@ import {
   generateTotpQr,
   verifyTotp,
   generateBackupCodes,
-  hashBackupCode,
+  hashBackupCodes,
+  verifyBackupCode,
 } from '../utils/totp.js';
 import zxcvbn from 'zxcvbn';
 import { getKycLimitConfig } from '../utils/kycLimits.js';
@@ -1019,7 +1020,7 @@ router.post('/totp/enable', requireUser, async (req, res) => {
   if (!valid) return res.status(400).json({ error: 'Invalid TOTP code' });
 
   const backupCodes = generateBackupCodes();
-  const hashed = backupCodes.map((code) => hashBackupCode(code));
+  const hashed = await hashBackupCodes(backupCodes);
   await pool.query(
     'UPDATE users SET totp_enabled = 1, totp_backup_codes = ?, backup_codes_used = ? WHERE id = ?',
     [JSON.stringify(hashed), JSON.stringify([]), req.user.sub]
@@ -1043,9 +1044,9 @@ router.post('/totp/disable', requireUser, async (req, res) => {
   if (!valid && backupCode) {
     const used = new Set(JSON.parse(user.backup_codes_used || '[]'));
     const codes = JSON.parse(user.totp_backup_codes || '[]');
-    const hashed = hashBackupCode(backupCode);
-    if (codes.includes(hashed) && !used.has(hashed)) {
-      used.add(hashed);
+    const matched = await verifyBackupCode(backupCode, codes);
+    if (matched && !used.has(matched)) {
+      used.add(matched);
       await pool.query('UPDATE users SET backup_codes_used = ? WHERE id = ?', [
         JSON.stringify([...used]),
         req.user.sub,

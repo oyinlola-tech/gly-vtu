@@ -23,7 +23,7 @@ import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js
 import zxcvbn from 'zxcvbn';
 import { checkFailedLoginAnomaly } from '../utils/anomalies.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
-import { verifyTotp, hashBackupCode } from '../utils/totp.js';
+import { verifyTotp, verifyBackupCode } from '../utils/totp.js';
 import { 
   registrationSchema, 
   loginSchema, 
@@ -377,9 +377,9 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
     if (!totpValid && backupCode) {
       const used = new Set(JSON.parse(user.backup_codes_used || '[]'));
       const codes = JSON.parse(user.totp_backup_codes || '[]');
-      const hashed = hashBackupCode(backupCode);
-      if (codes.includes(hashed) && !used.has(hashed)) {
-        used.add(hashed);
+      const matched = await verifyBackupCode(backupCode, codes);
+      if (matched && !used.has(matched)) {
+        used.add(matched);
         await pool.query('UPDATE users SET backup_codes_used = ? WHERE id = ?', [
           JSON.stringify([...used]),
           user.id,
@@ -475,9 +475,9 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
     if (!totpValid && backupCode) {
       const used = new Set(JSON.parse(user.backup_codes_used || '[]'));
       const codes = JSON.parse(user.totp_backup_codes || '[]');
-      const hashed = hashBackupCode(backupCode);
-      if (codes.includes(hashed) && !used.has(hashed)) {
-        used.add(hashed);
+      const matched = await verifyBackupCode(backupCode, codes);
+      if (matched && !used.has(matched)) {
+        used.add(matched);
         await pool.query('UPDATE users SET backup_codes_used = ? WHERE id = ?', [
           JSON.stringify([...used]),
           user.id,
