@@ -3,12 +3,14 @@ import { Link } from 'react-router';
 import { ChevronLeft, Laptop, Smartphone, Tablet, Trash2 } from 'lucide-react';
 import { tokenStore, userAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function DeviceManagement() {
   const [devices, setDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const deviceId = useMemo(() => tokenStore.getDeviceId(), []);
 
   const loadDevices = async () => {
@@ -34,8 +36,8 @@ export default function DeviceManagement() {
   };
 
   const revoke = async (id: string) => {
-    if (!confirm('Disable this device? You will need to log in again from it.')) return;
     await userAPI.revokeSession(id);
+    setConfirmingId(null);
     await loadDevices();
   };
 
@@ -111,9 +113,7 @@ export default function DeviceManagement() {
                       )}
                       <span
                         className={`text-xs px-2 py-0.5 rounded ${
-                          isVerified
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-yellow-100 text-yellow-700'
+                          isVerified ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
                         }`}
                       >
                         {isVerified ? 'Verified' : 'Unverified'}
@@ -123,7 +123,7 @@ export default function DeviceManagement() {
                       Last seen: {device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Unknown'}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {device.ip_address || 'IP unknown'} · {device.user_agent || 'Device'}
+                      {device.ip_address || 'IP unknown'} - {device.user_agent || 'Device'}
                     </p>
                     <div className="mt-2 flex items-center gap-2 text-xs">
                       {editingId === device.id ? (
@@ -153,7 +153,7 @@ export default function DeviceManagement() {
                   </div>
                 </div>
                 <button
-                  onClick={() => revoke(device.id)}
+                  onClick={() => setConfirmingId(device.id)}
                   className="text-xs text-red-600 font-semibold flex items-center gap-1"
                   disabled={isCurrent}
                 >
@@ -165,6 +165,15 @@ export default function DeviceManagement() {
           })
         )}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmingId)}
+        title="Disable this device?"
+        description="You will need to log in again from it."
+        confirmLabel="Disable"
+        onConfirm={() => confirmingId && revoke(confirmingId)}
+        onCancel={() => setConfirmingId(null)}
+      />
     </div>
   );
 }

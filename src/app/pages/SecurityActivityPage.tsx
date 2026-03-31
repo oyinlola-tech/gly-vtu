@@ -25,11 +25,39 @@ export function SecurityActivityPage() {
     loadSecurityEvents();
   }, []);
 
+  const normalizeEvent = (row: any): SecurityEvent => {
+    if (row?.title) {
+      return {
+        id: row.id,
+        type: row.type,
+        severity: row.severity,
+        title: row.title,
+        description: row.description,
+        ipAddress: row.ipAddress || row.ip_address || '',
+        location: row.location,
+        device: row.device || row.userAgent,
+        timestamp: row.createdAt || row.created_at || row.timestamp,
+      };
+    }
+    const meta = row?.metadata || row?.details || {};
+    return {
+      id: row.id,
+      type: row.event_type || row.type || 'security',
+      severity: row.severity || 'low',
+      title: row.event_type || 'Security event',
+      description: meta?.message || row.description || 'Security activity recorded',
+      ipAddress: row.ip_address || meta?.ip || '',
+      location: meta?.location,
+      device: row.user_agent || meta?.device,
+      timestamp: row.created_at || row.timestamp || new Date().toISOString(),
+    };
+  };
+
   async function loadSecurityEvents() {
     try {
       setLoading(true);
       const data = await userAPI.getSecurityEvents?.();
-      setEvents(data || []);
+      setEvents((data || []).map(normalizeEvent));
       setError(null);
     } catch (err) {
       setError('Failed to load security events');
