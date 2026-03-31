@@ -76,19 +76,24 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), async (re
     #swagger.responses[200] = { description: 'CSV or PDF report' }
   */
   const format = (req.query.format || 'csv').toString().toLowerCase();
-  const from = req.query.from;
-  const to = req.query.to;
+  const safeFormat = format === 'pdf' ? 'pdf' : 'csv';
+  const fromRaw = req.query.from;
+  const toRaw = req.query.to;
+  const fromDate = fromRaw ? new Date(fromRaw) : null;
+  const toDate = toRaw ? new Date(toRaw) : null;
   const filters = [];
   const params = [];
-  if (from) {
+  if (fromDate && !Number.isNaN(fromDate.getTime())) {
     filters.push('created_at >= ?');
-    params.push(from);
+    params.push(fromDate);
   }
-  if (to) {
+  if (toDate && !Number.isNaN(toDate.getTime())) {
     filters.push('created_at <= ?');
-    params.push(to);
+    params.push(toDate);
   }
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const fromLabel = fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate.toISOString() : 'All time';
+  const toLabel = toDate && !Number.isNaN(toDate.getTime()) ? toDate.toISOString() : 'Now';
 
   const [[volume]] = await pool.query(
     `SELECT SUM(total) as total FROM transactions ${where}`,
@@ -111,15 +116,15 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), async (re
     params
   );
 
-  if (format === 'pdf') {
+  if (safeFormat === 'pdf') {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="finance-report.pdf"');
     doc.pipe(res);
     doc.fontSize(18).text('GLY VTU Finance Report');
     doc.moveDown();
-    doc.fontSize(12).text(`From: ${from || 'All time'}`);
-    doc.fontSize(12).text(`To: ${to || 'Now'}`);
+    doc.fontSize(12).text(`From: ${fromLabel}`);
+    doc.fontSize(12).text(`To: ${toLabel}`);
     doc.moveDown();
     doc.fontSize(12).text(`Total Volume: ₦${Number(volume.total || 0).toFixed(2)}`);
     doc.fontSize(12).text(`Total Revenue: ₦${Number(revenue.total || 0).toFixed(2)}`);
@@ -131,8 +136,8 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), async (re
 
   const csv = [
     ['Metric', 'Value'],
-    ['From', from || 'All time'],
-    ['To', to || 'Now'],
+    ['From', fromLabel],
+    ['To', toLabel],
     ['Total Volume', Number(volume.total || 0).toFixed(2)],
     ['Total Revenue', Number(revenue.total || 0).toFixed(2)],
     ['Total Credits', Number(credits.total || 0).toFixed(2)],

@@ -6,7 +6,8 @@ function hashCode(code) {
 }
 
 export function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  // Use cryptographically strong RNG for OTPs
+  return String(crypto.randomInt(100000, 1000000));
 }
 
 export async function createOtp({ userId = null, email, purpose, ttlMinutes = 10 }) {
