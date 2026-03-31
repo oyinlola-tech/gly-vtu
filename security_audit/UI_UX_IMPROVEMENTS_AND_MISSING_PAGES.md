@@ -16,7 +16,7 @@
 - Shows device info, IP, location, last activity
 - Essential for security and compliance
 
-**Status:** NOT IMPLEMENTED
+**Status:** IMPLEMENTED (page + API hook in place)
 
 **Implementation Time:** 2-3 hours
 
@@ -32,7 +32,7 @@
 - Share receipt with others
 - Essential for financial compliance
 
-**Status:** PARTIALLY IMPLEMENTED (TransactionHistoryPage exists but no receipt detail page)
+**Status:** IMPLEMENTED (receipt page + download handler)
 
 **Required Endpoints:**
 - `GET /app/api/transactions/:id` - Get transaction details
@@ -52,7 +52,7 @@
 - Lists recent suspicious activities
 - Quick access to security settings
 
-**Status:** PARTIALLY IMPLEMENTED (exists but incomplete)
+**Status:** IMPLEMENTED (score, 2FA status, devices, failed attempts, recent logins, activity feed)
 
 **Features Needed:**
 - Security score calculation
@@ -77,7 +77,7 @@
 - Proper data deletion workflow
 - 30-day cancellation window with confirmation
 
-**Status:** NOT IMPLEMENTED
+**Status:** IMPLEMENTED (multi-step flow + API hook)
 
 ```typescript
 import React, { useState } from 'react';
@@ -311,7 +311,7 @@ router.post('/account/closure-request', auth, async (req, res) => {
 - Users can request their data in machine-readable format
 - Must include all personal data
 
-**Status:** NOT IMPLEMENTED
+**Status:** IMPLEMENTED (request flow + API hook)
 
 ```typescript
 import React, { useState } from 'react';
@@ -394,6 +394,8 @@ export default function DataExport() {
 
 Add to top of all pages:
 
+**Status:** IMPLEMENTED (mounted in `src/app/App.tsx`)
+
 ```typescript
 // src/components/SecurityAlertBanner.tsx
 
@@ -470,6 +472,8 @@ export default function SecurityAlertBanner() {
 ### 2.2 Biometric Authentication Setup
 
 **File:** `src/app/pages/BiometricSetup.tsx`
+
+**Status:** IMPLEMENTED
 
 ```typescript
 import React, { useState } from 'react';
@@ -585,6 +589,8 @@ export default function BiometricSetup() {
 
 Shows security events in chronological order with icons and descriptions.
 
+**Status:** IMPLEMENTED
+
 ---
 
 ### 2.4 Transaction Status Cards
@@ -596,6 +602,8 @@ Improve transaction display with:
 - Quick retry button for failed transactions
 - View receipt link
 - Mark as paid
+
+**Status:** IMPLEMENTED
 
 ---
 
@@ -611,6 +619,8 @@ Allows admins to:
 - Export logs
 - Set up alerts for critical events
 
+**Status:** IMPLEMENTED
+
 ---
 
 ### 3.2 Anomaly Detection Dashboard
@@ -623,6 +633,8 @@ Shows:
 - Bot/fraud detection
 - User behavior analysis
 
+**Status:** IMPLEMENTED
+
 ---
 
 ### 3.3 Compliance & KYC Management
@@ -634,6 +646,8 @@ Shows:
 - Document review queue
 - Expiring KYC records
 - Risk scoring
+
+**Status:** IMPLEMENTED
 
 ---
 
@@ -649,6 +663,8 @@ Shows:
 
 These should be user-friendly and not expose sensitive information.
 
+**Status:** IMPLEMENTED
+
 ---
 
 ### 4.2 Maintenance Page
@@ -657,6 +673,8 @@ These should be user-friendly and not expose sensitive information.
 
 Shows when app is under maintenance.
 
+**Status:** IMPLEMENTED
+
 ---
 
 ### 4.3 Offline Page
@@ -664,6 +682,8 @@ Shows when app is under maintenance.
 **File:** `src/app/pages/Offline.tsx`
 
 Shows when user loses internet connection.
+
+**Status:** IMPLEMENTED
 
 ---
 
