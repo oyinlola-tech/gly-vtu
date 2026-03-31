@@ -309,14 +309,4 @@ export async function verifyIdentity({ type, payload }) {
   };
 
   return result;
-    lastName: name.lastName,
-    dob: parseDobFromResponse(raw),
-    phone: parsePhoneFromResponse(raw),
-    gender: parseGenderFromResponse(raw),
-    reference: parseReferenceFromResponse(raw),
-    raw,
-  };
-
-  return result;
 }
-
