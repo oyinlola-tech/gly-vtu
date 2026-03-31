@@ -74,10 +74,11 @@ export default function VerifyDevice() {
 
         <form onSubmit={handleVerify} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label htmlFor="verifyEmail" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Email
             </label>
             <input
+              id="verifyEmail"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -122,10 +123,11 @@ export default function VerifyDevice() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="backupCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Backup Code (optional)
                 </label>
                 <input
+                  id="backupCode"
                   type="text"
                   value={backupCode}
                   onChange={(e) => setBackupCode(e.target.value.trim())}
@@ -138,7 +140,7 @@ export default function VerifyDevice() {
 
           <button
             type="submit"
-            disabled={loading || (!code && !answer && !totpCode)}
+            disabled={loading || (!code && !answer && !totpCode && !backupCode)}
             className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {loading ? <LoadingSpinner size="sm" /> : 'Verify'}

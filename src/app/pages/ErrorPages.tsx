@@ -74,7 +74,7 @@ export function ErrorPage({
       <div className="max-w-md w-full">
         <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl p-8 text-center">
           {/* Error Icon & Code */}
-          <div className="text-6xl mb-4">{error.icon}</div>
+          <div className="text-6xl mb-4 animate-pulse">{error.icon}</div>
           <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-2">{code}</h1>
 
           {/* Error Title & Description */}

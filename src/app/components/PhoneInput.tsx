@@ -15,6 +15,7 @@ interface PhoneInputProps {
   countryCode?: string;
   onCountryChange?: (code: string) => void;
   placeholder?: string;
+  inputId?: string;
 }
 
 export default function PhoneInput({
@@ -23,6 +24,7 @@ export default function PhoneInput({
   countryCode = 'NG',
   onCountryChange,
   placeholder = 'Phone number',
+  inputId,
 }: PhoneInputProps) {
   const selected = useMemo(
     () => COUNTRIES.find((c) => c.code === countryCode) || COUNTRIES[0],
@@ -45,6 +47,7 @@ export default function PhoneInput({
         ))}
       </select>
       <input
+        id={inputId}
         type="tel"
         value={localValue}
         onChange={(e) => onChange(`${selected.dial}${e.target.value.replace(/\D/g, '')}`)}

@@ -12,7 +12,7 @@ import { notificationsAPI } from '../../services/api';
 
 export default function More() {
   const navigate = useNavigate();
-  const { theme, toggleTheme, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const isDark = theme === 'dark';
   const isHighContrast = theme === 'high-contrast';
   const { user, logout } = useAuth();

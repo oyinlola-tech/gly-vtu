@@ -127,10 +127,11 @@ export function AccountSettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                  <label htmlFor="settingsPhone" className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
                   <PhoneInput
                     value={formData.phone}
                     onChange={(value) => setFormData({ ...formData, phone: value })}
+                    inputId="settingsPhone"
                   />
                 </div>
 
