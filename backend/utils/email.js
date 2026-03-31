@@ -3,6 +3,7 @@ import PDFDocument from 'pdfkit';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import { htmlToText as htmlToTextLib } from 'html-to-text';
 
 dotenv.config();
 
@@ -164,24 +165,10 @@ function baseTemplate({ title, body, footer, highlight, cta, preheader, logoCid 
 
 function htmlToText(html) {
   if (!html) return '';
-  let text = String(html);
-  text = text.replace(/<\s*br\s*\/?>/gi, '\n');
-  text = text.replace(/<\/\s*p\s*>/gi, '\n\n');
-  text = text.replace(/<\/\s*li\s*>/gi, '\n');
-  text = text.replace(/<\/\s*div\s*>/gi, '\n');
-  text = text.replace(/<\/\s*h\d\s*>/gi, '\n\n');
-  text = text.replace(/<\s*li\s*>/gi, '- ');
-  text = text.replace(/<a\s+[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)');
-  text = text.replace(/<[^>]+>/g, '');
-  text = text
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'");
-  text = text.replace(/\n{3,}/g, '\n\n').trim();
-  return text;
+  const text = htmlToTextLib(String(html), {
+    wordwrap: false,
+  });
+  return text.trim();
 }
 
 export async function sendEmail({

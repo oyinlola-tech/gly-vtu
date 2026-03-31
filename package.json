@@ -83,7 +83,8 @@
     "qrcode": "^1.5.4",
     "vaul": "1.1.2",
     "ws": "^8.18.3",
-    "zxcvbn": "^4.4.2"
+    "zxcvbn": "^4.4.2",
+    "html-to-text": "^9.0.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.2.2",
