@@ -322,6 +322,7 @@ export async function initDatabase() {
         status ENUM('pending','success','failed') NOT NULL DEFAULT 'pending',
         reference VARCHAR(80) NOT NULL,
         metadata JSON NULL,
+        metadata_encrypted LONGTEXT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_tx_user (user_id),
         UNIQUE KEY uniq_reference (reference),
@@ -510,6 +511,7 @@ export async function initDatabase() {
     await ensureKycVerificationTable(conn);
     await ensureAdminTotpColumns(conn, DB_NAME);
     await ensureUserTotpColumns(conn);
+    await ensureTransactionMetadataEncrypted(conn);
     await ensureAccountClosureTable(conn);
     await ensureDataExportTable(conn);
     await ensureUserPasswordUpdatedAt(conn);
@@ -717,6 +719,37 @@ async function ensureRefreshTokenFamilyColumns(conn) {
   }
   if (alters.length) {
     await conn.query(`ALTER TABLE refresh_tokens ${alters.join(', ')}`);
+  }
+}
+
+async function ensureTransactionMetadataEncrypted(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'transactions'`,
+    [DB_NAME]
+  );
+  const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+  if (!existing.has('metadata_encrypted')) {
+    await conn.query('ALTER TABLE transactions ADD COLUMN metadata_encrypted LONGTEXT NULL');
+  }
+
+  const [rows] = await conn.query(
+    `SELECT id, user_id, metadata, metadata_encrypted FROM transactions WHERE metadata IS NOT NULL`
+  );
+  for (const row of rows) {
+    if (row.metadata_encrypted) continue;
+    let meta = row.metadata;
+    if (typeof meta === 'string') {
+      try {
+        meta = JSON.parse(meta);
+      } catch {
+        meta = null;
+      }
+    }
+    if (!meta) continue;
+    await conn.query('UPDATE transactions SET metadata_encrypted = ? WHERE id = ?', [
+      encryptJson(meta, row.user_id),
+      row.id,
+    ]);
   }
 }
 

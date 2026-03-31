@@ -6,6 +6,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 import { checkAdminAdjustmentAnomaly } from '../utils/anomalies.js';
 import { applyUserPII } from '../utils/encryption.js';
 
@@ -283,8 +284,12 @@ router.post(
         ]);
       }
       const reference = `ADM-${id}`;
+      const { safe, encrypted } = buildTransactionMetadata(
+        { source: 'admin_adjustment', adjustment_id: id },
+        adj.user_id
+      );
       await conn.query(
-        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           adj.user_id,
           adj.type === 'credit' ? 'receive' : 'send',
@@ -293,7 +298,8 @@ router.post(
           adj.amount,
           'success',
           reference,
-          JSON.stringify({ source: 'admin_adjustment', adjustment_id: id }),
+          safe ? JSON.stringify(safe) : null,
+          encrypted,
         ]
       );
       await conn.query(

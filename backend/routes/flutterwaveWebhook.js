@@ -8,6 +8,7 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { logger } from '../utils/logger.js';
 import { webhookLimiter } from '../middleware/rateLimiters.js';
 import { applyUserPII } from '../utils/encryption.js';
+import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
 
@@ -36,9 +37,13 @@ function isIpAllowed(req) {
     return false;
   }
   
-  // If no IP list configured in non-production, allow (for testing)
+  // In non-production, only allow all if explicitly enabled
   if (!list.length) {
-    return true;
+    if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_ANY_WEBHOOK_IP === 'true') {
+      logger.warn('Webhook IP validation disabled (dev only)');
+      return true;
+    }
+    return false;
   }
   
   const ip = getRequestIp(req);
@@ -157,8 +162,12 @@ router.post('/', webhookLimiter, async (req, res) => {
     types: ['topup'],
   });
   if (!limitCheck.ok) {
+    const { safe, encrypted } = buildTransactionMetadata(
+      { provider: 'flutterwave', reason: 'kyc_limit' },
+      account.user_id
+    );
     await pool.query(
-      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         account.user_id,
         'topup',
@@ -167,7 +176,8 @@ router.post('/', webhookLimiter, async (req, res) => {
         amount,
         'pending',
         reference,
-        JSON.stringify({ provider: 'flutterwave', reason: 'kyc_limit' }),
+        safe ? JSON.stringify(safe) : null,
+        encrypted,
       ]
     );
     logSecurityEvent({
@@ -186,6 +196,7 @@ router.post('/', webhookLimiter, async (req, res) => {
 
   const conn = await pool.getConnection();
   try {
+    await conn.query('SET TRANSACTION ISOLATION LEVEL SERIALIZABLE');
     await conn.beginTransaction();
     const [existing] = await conn.query(
       'SELECT id FROM transactions WHERE reference = ? FOR UPDATE',
@@ -195,12 +206,29 @@ router.post('/', webhookLimiter, async (req, res) => {
       await conn.commit();
       return res.json({ message: 'Already processed' });
     }
-    await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
+    const [[wallet]] = await conn.query(
+      'SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      [account.user_id]
+    );
+    if (!wallet) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+    await conn.query('UPDATE wallets SET balance = balance + ? WHERE id = ?', [
       amount,
-      account.user_id,
+      wallet.id,
     ]);
+    const { safe, encrypted } = buildTransactionMetadata(
+      {
+        provider: 'flutterwave',
+        tx_ref: txRef,
+        flw_ref: data.flw_ref || null,
+        payment_type: data.payment_type || null,
+      },
+      account.user_id
+    );
     await conn.query(
-      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         account.user_id,
         'topup',
@@ -209,12 +237,8 @@ router.post('/', webhookLimiter, async (req, res) => {
         amount,
         'success',
         reference,
-        JSON.stringify({
-          provider: 'flutterwave',
-          tx_ref: txRef,
-          flw_ref: data.flw_ref || null,
-          payment_type: data.payment_type || null,
-        }),
+        safe ? JSON.stringify(safe) : null,
+        encrypted,
       ]
     );
     await conn.commit();

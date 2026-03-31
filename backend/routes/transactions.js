@@ -3,6 +3,7 @@ import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
 import { generateStatementPdf, sendStatementEmail, generateReceiptPdf } from '../utils/email.js';
 import { applyUserPII } from '../utils/encryption.js';
+import { hydrateTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
 
@@ -70,28 +71,25 @@ router.get('/', requireUser, async (req, res) => {
     }
   */
   const [rows] = await pool.query(
-    'SELECT id, type, amount, fee, total, status, reference, metadata, created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
+    'SELECT id, type, amount, fee, total, status, reference, metadata, metadata_encrypted, created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
     [req.user.sub]
   );
-  return res.json(rows);
+  const mapped = rows.map((row) => ({
+    ...row,
+    metadata: hydrateTransactionMetadata(row, req.user.sub),
+  }));
+  return res.json(mapped);
 });
 
 router.get('/:id', requireUser, async (req, res) => {
   const [rows] = await pool.query(
-    'SELECT id, type, amount, fee, total, status, reference, metadata, created_at FROM transactions WHERE id = ? AND user_id = ? LIMIT 1',
+    'SELECT id, type, amount, fee, total, status, reference, metadata, metadata_encrypted, created_at FROM transactions WHERE id = ? AND user_id = ? LIMIT 1',
     [req.params.id, req.user.sub]
   );
   if (!rows.length) return res.status(404).json({ error: 'Transaction not found' });
 
   const tx = rows[0];
-  let meta = tx.metadata;
-  if (typeof meta === 'string') {
-    try {
-      meta = JSON.parse(meta);
-    } catch {
-      meta = {};
-    }
-  }
+  const meta = hydrateTransactionMetadata(tx, req.user.sub) || {};
 
   const recipient = {
     name:
@@ -116,20 +114,13 @@ router.get('/:id', requireUser, async (req, res) => {
 
 router.get('/:id/receipt', requireUser, async (req, res) => {
   const [rows] = await pool.query(
-    'SELECT id, type, amount, fee, total, status, reference, metadata, created_at FROM transactions WHERE id = ? AND user_id = ? LIMIT 1',
+    'SELECT id, type, amount, fee, total, status, reference, metadata, metadata_encrypted, created_at FROM transactions WHERE id = ? AND user_id = ? LIMIT 1',
     [req.params.id, req.user.sub]
   );
   if (!rows.length) return res.status(404).json({ error: 'Transaction not found' });
 
   const tx = rows[0];
-  let meta = tx.metadata;
-  if (typeof meta === 'string') {
-    try {
-      meta = JSON.parse(meta);
-    } catch {
-      meta = {};
-    }
-  }
+  const meta = hydrateTransactionMetadata(tx, req.user.sub) || {};
 
   const [[userRaw]] = await pool.query(
     'SELECT id, full_name, full_name_encrypted FROM users WHERE id = ?',

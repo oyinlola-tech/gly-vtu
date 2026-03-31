@@ -10,6 +10,7 @@ import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { checkWithdrawalAnomaly } from '../utils/anomalies.js';
 import { applyUserPII, hashEmail, hashPhone } from '../utils/encryption.js';
+import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
 
@@ -160,8 +161,18 @@ router.post('/send', requireUser, async (req, res) => {
 
     const reference = `TX-${nanoid(10)}`;
     if (isBank) {
+      const { safe, encrypted } = buildTransactionMetadata(
+        {
+          channel: 'bank',
+          bankCode,
+          bankName,
+          accountNumber,
+          accountName,
+        },
+        req.user.sub
+      );
       await conn.query(
-        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           req.user.sub,
           'send',
@@ -170,13 +181,8 @@ router.post('/send', requireUser, async (req, res) => {
           numericAmount,
           'pending',
           reference,
-          JSON.stringify({
-            channel: 'bank',
-            bankCode,
-            bankName,
-            accountNumber,
-            accountName,
-          }),
+          safe ? JSON.stringify(safe) : null,
+          encrypted,
         ]
       );
     } else {
@@ -184,8 +190,12 @@ router.post('/send', requireUser, async (req, res) => {
         numericAmount,
         recipientId,
       ]);
+      const { safe: senderSafe, encrypted: senderEncrypted } = buildTransactionMetadata(
+        { to, channel: 'internal' },
+        req.user.sub
+      );
       await conn.query(
-        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           req.user.sub,
           'send',
@@ -194,11 +204,16 @@ router.post('/send', requireUser, async (req, res) => {
           numericAmount,
           'success',
           reference,
-          JSON.stringify({ to, channel: 'internal' }),
+          senderSafe ? JSON.stringify(senderSafe) : null,
+          senderEncrypted,
         ]
       );
+      const { safe: receiverSafe, encrypted: receiverEncrypted } = buildTransactionMetadata(
+        { from: req.user.sub },
+        recipientId
+      );
       await conn.query(
-        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           recipientId,
           'receive',
@@ -207,7 +222,8 @@ router.post('/send', requireUser, async (req, res) => {
           numericAmount,
           'success',
           reference,
-          JSON.stringify({ from: req.user.sub }),
+          receiverSafe ? JSON.stringify(receiverSafe) : null,
+          receiverEncrypted,
         ]
       );
     }
@@ -290,8 +306,9 @@ router.post('/receive', requireUser, async (req, res) => {
   }
 
   const reference = `REQ-${nanoid(10)}`;
+  const { safe, encrypted } = buildTransactionMetadata({ note }, req.user.sub);
   await pool.query(
-    'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       req.user.sub,
       'request',
@@ -300,7 +317,8 @@ router.post('/receive', requireUser, async (req, res) => {
       numericAmount,
       'pending',
       reference,
-      JSON.stringify({ note }),
+      safe ? JSON.stringify(safe) : null,
+      encrypted,
     ]
   );
   return res.json({ message: 'Money request created', reference });

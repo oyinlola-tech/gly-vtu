@@ -26,6 +26,7 @@ import { enforceKycLimits } from '../utils/kycLimits.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII } from '../utils/encryption.js';
+import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
 
@@ -334,8 +335,12 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
           'INSERT INTO bill_orders (id, user_id, provider_id, amount, fee, total, status, reference) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)',
           [req.user.sub, null, resolvedAmount, 0, resolvedAmount, 'pending', reference]
         );
+        const { safe, encrypted } = buildTransactionMetadata(
+          { provider: providerCode, account: safeAccount },
+          req.user.sub
+        );
         await conn.query(
-          'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [
             req.user.sub,
             'bill',
@@ -344,7 +349,8 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
             resolvedAmount,
             'pending',
             reference,
-            JSON.stringify({ provider: providerCode, account: safeAccount }),
+            safe ? JSON.stringify(safe) : null,
+            encrypted,
           ]
         );
         await conn.commit();
@@ -375,15 +381,20 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         status,
         reference,
       ]);
+      const { safe: updateSafe, encrypted: updateEncrypted } = buildTransactionMetadata(
+        {
+          provider: providerCode,
+          account: safeAccount,
+          vtpass: vtpassRes ? sanitizeVtpassPayload(vtpassRes) : null,
+        },
+        req.user.sub
+      );
       await pool.query(
-        'UPDATE transactions SET status = ?, metadata = ? WHERE reference = ?',
+        'UPDATE transactions SET status = ?, metadata = ?, metadata_encrypted = ? WHERE reference = ?',
         [
           status,
-          JSON.stringify({
-            provider: providerCode,
-            account: safeAccount,
-            vtpass: vtpassRes ? sanitizeVtpassPayload(vtpassRes) : null,
-          }),
+          updateSafe ? JSON.stringify(updateSafe) : null,
+          updateEncrypted,
           reference,
         ]
       );
@@ -493,8 +504,12 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
       'INSERT INTO bill_orders (id, user_id, provider_id, amount, fee, total, status, reference) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)',
       [req.user.sub, pricing.id, numericAmount, fee, total, 'success', reference]
     );
+    const { safe: safeMeta, encrypted: encryptedMeta } = buildTransactionMetadata(
+      { provider: pricing.name, account },
+      req.user.sub
+    );
     await conn.query(
-      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         req.user.sub,
         'bill',
@@ -503,7 +518,8 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         total,
         'success',
         reference,
-        JSON.stringify({ provider: pricing.name, account }),
+        safeMeta ? JSON.stringify(safeMeta) : null,
+        encryptedMeta,
       ]
     );
     await conn.commit();
@@ -612,8 +628,18 @@ router.post('/pay-card', billsLimiter, requireUser, async (req, res) => {
     'INSERT INTO bill_orders (id, user_id, provider_id, amount, fee, total, status, reference) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)',
     [req.user.sub, null, resolvedAmount, fee, total, 'pending', reference]
   );
+  const { safe: cardSafe, encrypted: cardEncrypted } = buildTransactionMetadata(
+    {
+      provider: pricing.name,
+      account: safeAccount,
+      channel: 'card',
+      cardProvider: provider,
+      variationCode,
+    },
+    req.user.sub
+  );
   await pool.query(
-    'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       req.user.sub,
       'bill',
@@ -622,13 +648,8 @@ router.post('/pay-card', billsLimiter, requireUser, async (req, res) => {
       total,
       'pending',
       reference,
-      JSON.stringify({
-        provider: pricing.name,
-        account: safeAccount,
-        channel: 'card',
-        cardProvider: provider,
-        variationCode,
-      }),
+      cardSafe ? JSON.stringify(cardSafe) : null,
+      cardEncrypted,
     ]
   );
 

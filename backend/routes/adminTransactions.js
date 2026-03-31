@@ -6,6 +6,7 @@ import { logAudit } from '../utils/audit.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII } from '../utils/encryption.js';
+import { hydrateTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
 
@@ -18,14 +19,17 @@ router.get('/', requireAdmin, requirePermission('transactions:read'), async (req
   */
   const [rows] = await pool.query(
     `SELECT t.id, u.id as user_id, u.full_name, u.full_name_encrypted, t.type, t.amount, t.fee, t.total, t.status, t.reference, t.created_at,
-        t.metadata, v.status as vtpass_status, v.updated_at as vtpass_updated_at
+        t.metadata, t.metadata_encrypted, v.status as vtpass_status, v.updated_at as vtpass_updated_at
      FROM transactions t
      JOIN users u ON u.id = t.user_id
      LEFT JOIN vtpass_events v ON v.request_id = SUBSTRING(t.reference, 6)
      ORDER BY t.created_at DESC
      LIMIT 200`
   );
-  return res.json(rows.map((row) => applyUserPII(row)));
+  const mapped = rows.map((row) =>
+    applyUserPII({ ...row, metadata: hydrateTransactionMetadata(row, row.user_id) })
+  );
+  return res.json(mapped);
 });
 
 router.get('/metrics', requireAdmin, requirePermission('transactions:read'), async (req, res) => {
@@ -57,7 +61,7 @@ router.get('/metrics', requireAdmin, requirePermission('transactions:read'), asy
 
 router.get('/held-topups', requireAdmin, requirePermission('transactions:read'), async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT t.id, t.user_id, u.full_name, u.full_name_encrypted, t.amount, t.reference, t.metadata, t.created_at
+    `SELECT t.id, t.user_id, u.full_name, u.full_name_encrypted, t.amount, t.reference, t.metadata, t.metadata_encrypted, t.created_at
      FROM transactions t
      JOIN users u ON u.id = t.user_id
      WHERE t.type = 'topup' AND t.status = 'pending'
@@ -65,7 +69,10 @@ router.get('/held-topups', requireAdmin, requirePermission('transactions:read'),
      ORDER BY t.created_at DESC
      LIMIT 200`
   );
-  return res.json(rows.map((row) => applyUserPII(row)));
+  const mapped = rows.map((row) =>
+    applyUserPII({ ...row, metadata: hydrateTransactionMetadata(row, row.user_id) })
+  );
+  return res.json(mapped);
 });
 
 router.post(

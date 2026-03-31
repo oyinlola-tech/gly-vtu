@@ -13,12 +13,6 @@ interface User {
   hasPin?: boolean;
 }
 
-function getPersistableUser(user: User | null): Omit<User, 'accountNumber'> | null {
-  if (!user) return null;
-  const { accountNumber, ...rest } = user;
-  return rest;
-}
-
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -38,14 +32,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    // NOTE: User data is now stored in sessionStorage (not localStorage)
-    // sessionStorage is cleared when the browser tab closes, reducing XSS attack surface
-    // Full profile will be fetched from /api/user/profile on app load
-    const saved = sessionStorage.getItem('user');
-    return saved ? (JSON.parse(saved) as Omit<User, 'accountNumber'>) : null;
-  });
-
+  const [user, setUser] = useState<User | null>(null);
   const isAuthenticated = !!user;
 
   const refreshProfile = async () => {
@@ -63,22 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         kycStatus: profile.kyc_status,
         hasPin: security?.pinSet,
       });
-    } catch (error) {
+    } catch {
       tokenStore.clear();
       setUser(null);
     }
   };
-
-  useEffect(() => {
-    if (user) {
-      const safeUser = getPersistableUser(user);
-      // SECURITY: Store in sessionStorage (cleared on tab close) instead of localStorage
-      // This reduces the window of opportunity for XSS attacks to steal user data
-      sessionStorage.setItem('user', JSON.stringify(safeUser));
-    } else {
-      sessionStorage.removeItem('user');
-    }
-  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -87,40 +63,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string, totp?: string, backupCode?: string) => {
-    try {
-      const response = await authAPI.login({ email, password, totp, backupCode });
-      if (response?.otpRequired) {
-        return { otpRequired: true, email };
-      }
-      if (response?.totpRequired) {
-        return { totpRequired: true, email };
-      }
-      const profile = await userAPI.getProfile();
-      const security = await userAPI.getSecurityStatus();
-      const mappedUser = {
-        id: profile.id,
-        fullName: profile.full_name,
-        email: profile.email,
-        phone: profile.phone,
-        accountNumber: profile.account_number,
-        bankName: profile.bank_name,
-        kycLevel: profile.kyc_level,
-        kycStatus: profile.kyc_status,
-        hasPin: security?.pinSet,
-      };
-      setUser(mappedUser);
-      return { needsPin: !security?.pinSet };
-    } catch (error) {
-      throw error;
+    const response = await authAPI.login({ email, password, totp, backupCode });
+    if (response?.otpRequired) {
+      return { otpRequired: true, email };
     }
+    if (response?.totpRequired) {
+      return { totpRequired: true, email };
+    }
+    const profile = await userAPI.getProfile();
+    const security = await userAPI.getSecurityStatus();
+    const mappedUser = {
+      id: profile.id,
+      fullName: profile.full_name,
+      email: profile.email,
+      phone: profile.phone,
+      accountNumber: profile.account_number,
+      bankName: profile.bank_name,
+      kycLevel: profile.kyc_level,
+      kycStatus: profile.kyc_status,
+      hasPin: security?.pinSet,
+    };
+    setUser(mappedUser);
+    return { needsPin: !security?.pinSet };
   };
 
   const register = async (data: any) => {
-    try {
-      await authAPI.register(data);
-    } catch (error) {
-      throw error;
-    }
+    await authAPI.register(data);
   };
 
   const logout = () => {
@@ -133,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await userAPI.verifyPin(pin);
       return response.valid;
-    } catch (error) {
+    } catch {
       return false;
     }
   };

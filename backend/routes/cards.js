@@ -9,6 +9,7 @@ import { isValidAmount, isNonEmptyString } from '../utils/validation.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII, decryptJson } from '../utils/encryption.js';
+import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
 
 const router = express.Router();
@@ -157,8 +158,12 @@ router.post('/', requireUser, async (req, res) => {
         JSON.stringify(sanitizeFlutterwaveCard(card)),
       ]
     );
+    const { safe, encrypted } = buildTransactionMetadata(
+      { reason: 'virtual_card_funding', provider: 'flutterwave', card_id: card.id },
+      req.user.sub
+    );
     await conn.query(
-      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         req.user.sub,
         'send',
@@ -167,7 +172,8 @@ router.post('/', requireUser, async (req, res) => {
         numericAmount,
         'success',
         `CARD-${card.id || Date.now()}`,
-        JSON.stringify({ reason: 'virtual_card_funding', provider: 'flutterwave', card_id: card.id }),
+        safe ? JSON.stringify(safe) : null,
+        encrypted,
       ]
     );
     await conn.commit();
