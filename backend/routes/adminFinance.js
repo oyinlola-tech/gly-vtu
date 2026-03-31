@@ -143,7 +143,15 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), async (re
     ['Total Credits', Number(credits.total || 0).toFixed(2)],
     ['Total Debits', Number(debits.total || 0).toFixed(2)],
   ]
-    .map((row) => row.map((c) => `"${String(c).replace(/\"/g, '""')}"`).join(','))
+    .map((row) =>
+      row
+        .map((c) => {
+          let value = String(c);
+          if (/^[=+\-@]/.test(value)) value = `'${value}`;
+          return `"${value.replace(/\"/g, '""')}"`;
+        })
+        .join(',')
+    )
     .join('\n');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="finance-report.csv"');
