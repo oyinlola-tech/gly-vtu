@@ -7,7 +7,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "kyc:health": "node scripts/kyc-health-check.js"
+    "kyc:health": "node scripts/kyc-health-check.js",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
