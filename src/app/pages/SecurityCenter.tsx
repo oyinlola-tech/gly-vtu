@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { userAPI, tokenStore } from '../../services/api';
 import BottomNav from '../components/BottomNav';
+import DeviceFingerprint from '../components/DeviceFingerprint';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function SecurityCenter() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -91,6 +93,10 @@ export default function SecurityCenter() {
       })),
     [sessions, deviceId]
   );
+  const currentSession = useMemo(
+    () => enrichedSessions.find((session) => session.isCurrent),
+    [enrichedSessions]
+  );
 
   const handleExport = async () => {
     try {
@@ -128,6 +134,9 @@ export default function SecurityCenter() {
             <h1 className="text-xl font-bold text-white">Security Center</h1>
             <p className="text-white/70 text-sm">Manage sessions and security controls</p>
           </div>
+        </div>
+        <div className="mt-3 text-white/80 text-xs">
+          <Breadcrumbs items={[{ label: 'Settings', href: '/more' }, { label: 'Security Center' }]} />
         </div>
       </div>
 
@@ -181,6 +190,13 @@ export default function SecurityCenter() {
             <div className="flex items-center gap-2 mb-4">
               <ShieldCheck size={18} className="text-[#235697]" />
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Active Sessions</h2>
+            </div>
+            <div className="mb-4">
+              <DeviceFingerprint
+                deviceId={deviceId}
+                userAgent={currentSession?.user_agent}
+                ipAddress={currentSession?.ip_address}
+              />
             </div>
             <div className="mb-4 flex justify-end">
               <Link to="/settings/devices" className="text-xs font-semibold text-[#235697]">

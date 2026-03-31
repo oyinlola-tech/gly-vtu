@@ -1,4 +1,5 @@
 @custom-variant dark (&:is(.dark *));
+@custom-variant high-contrast (&:is(.high-contrast *));
 
 :root {
   --font-size: 16px;
@@ -78,6 +79,38 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
+.high-contrast {
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #000000;
+  --card-foreground: #ffffff;
+  --popover: #000000;
+  --popover-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #111111;
+  --secondary-foreground: #ffffff;
+  --muted: #111111;
+  --muted-foreground: #ffffff;
+  --accent: #000000;
+  --accent-foreground: #ffffff;
+  --destructive: #ff2d2d;
+  --destructive-foreground: #ffffff;
+  --border: #ffffff;
+  --input: #000000;
+  --input-background: #000000;
+  --switch-background: #ffffff;
+  --ring: #ffffff;
+  --sidebar: #000000;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #000000;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #ffffff;
+  --sidebar-ring: #ffffff;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -126,6 +159,11 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  .high-contrast :focus-visible {
+    outline: 3px solid #ffffff;
+    outline-offset: 2px;
   }
 
   /**

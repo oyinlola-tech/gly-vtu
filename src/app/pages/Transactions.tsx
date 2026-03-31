@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ChevronLeft, Filter, Search, Download } from 'lucide-react';
+import { ChevronLeft, Search, Download, Send, Plus } from 'lucide-react';
 import { walletAPI } from '../../services/api';
 import BottomNav from '../components/BottomNav';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function Transactions() {
   const navigate = useNavigate();
@@ -100,17 +101,36 @@ export default function Transactions() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
-      <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-8 sticky top-0 z-30 backdrop-blur">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <Link to="/dashboard" className="text-white">
               <ChevronLeft size={24} />
             </Link>
             <h1 className="text-xl font-bold text-white">Transactions</h1>
           </div>
-          <button className="text-white">
+          <button className="text-white" aria-label="Download transactions">
             <Download size={24} />
           </button>
+        </div>
+        <div className="text-white/80 text-xs mb-4">
+          <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Transactions' }]} />
+        </div>
+        <div className="flex items-center gap-2 mb-4">
+          <Link
+            to="/send"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 text-white text-xs font-semibold"
+          >
+            <Send size={14} />
+            Send Money
+          </Link>
+          <Link
+            to="/add-money"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 text-white text-xs font-semibold"
+          >
+            <Plus size={14} />
+            Add Funds
+          </Link>
         </div>
 
         {/* Search Bar */}
@@ -153,10 +173,13 @@ export default function Transactions() {
       <div className="px-6 pt-6">
         {loading ? (
           <div className="space-y-3 animate-pulse">
-            <div className="h-16 bg-white dark:bg-gray-900 rounded-xl shadow" />
-            <div className="h-16 bg-white dark:bg-gray-900 rounded-xl shadow" />
-            <div className="h-16 bg-white dark:bg-gray-900 rounded-xl shadow" />
-            <div className="h-16 bg-white dark:bg-gray-900 rounded-xl shadow" />
+            {[1, 2, 3, 4].map((idx) => (
+              <div key={idx} className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow">
+                <div className="h-4 w-40 bg-gray-200 dark:bg-gray-800 rounded mb-3" />
+                <div className="h-3 w-64 bg-gray-200 dark:bg-gray-800 rounded mb-2" />
+                <div className="h-3 w-32 bg-gray-200 dark:bg-gray-800 rounded" />
+              </div>
+            ))}
           </div>
         ) : filteredTransactions.length === 0 ? (
           <div className="text-center py-12">

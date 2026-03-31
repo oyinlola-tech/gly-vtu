@@ -966,7 +966,7 @@ async function ensureDataExportTable(conn) {
 
 async function ensureUserPasswordUpdatedAt(conn) {
   const [cols] = await conn.query(
-    \`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'\`,
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'`,
     [DB_NAME]
   );
   const existing = new Set(cols.map((c) => c.COLUMN_NAME));

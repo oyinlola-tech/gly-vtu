@@ -5,23 +5,38 @@ import { userAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import PhoneInput from '../components/PhoneInput';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function Profile() {
   const { refreshProfile } = useAuth();
   const [formData, setFormData] = useState({ fullName: '', phone: '', email: '' });
+  const [phoneCountry, setPhoneCountry] = useState('NG');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
+  const inferCountry = (value: string) => {
+    if (value.startsWith('+233')) return 'GH';
+    if (value.startsWith('+254')) return 'KE';
+    if (value.startsWith('+27')) return 'ZA';
+    if (value.startsWith('+1')) return 'US';
+    if (value.startsWith('+44')) return 'GB';
+    return 'NG';
+  };
 
   useEffect(() => {
     userAPI
       .getProfile()
-      .then((profile) =>
+      .then((profile) => {
         setFormData({
           fullName: profile.full_name,
           phone: profile.phone,
           email: profile.email,
-        })
-      )
+        });
+        if (profile.phone) {
+          setPhoneCountry(inferCountry(profile.phone));
+        }
+      })
       .catch(() => null);
   }, []);
 
@@ -49,6 +64,9 @@ export default function Profile() {
           </Link>
           <h1 className="text-xl font-bold text-white">Profile Settings</h1>
         </div>
+        <div className="mt-3 text-white/80 text-xs">
+          <Breadcrumbs items={[{ label: 'Settings', href: '/more' }, { label: 'Profile' }]} />
+        </div>
       </div>
 
       <div className="px-6 -mt-16">
@@ -75,12 +93,12 @@ export default function Profile() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Phone Number
               </label>
-              <input
-                type="tel"
+              <PhoneInput
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                required
+                onChange={(value) => setFormData({ ...formData, phone: value })}
+                countryCode={phoneCountry}
+                onCountryChange={setPhoneCountry}
+                placeholder="8000000000"
               />
             </div>
             <div>

@@ -36,7 +36,7 @@ export default function PhoneInput({
       <select
         value={selected.code}
         onChange={(e) => onCountryChange?.(e.target.value)}
-        className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm"
+        className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
       >
         {COUNTRIES.map((c) => (
           <option key={c.code} value={c.code}>
@@ -49,7 +49,7 @@ export default function PhoneInput({
         value={localValue}
         onChange={(e) => onChange(`${selected.dial}${e.target.value.replace(/\D/g, '')}`)}
         placeholder={placeholder}
-        className="flex-1 px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-[#235697] focus:outline-none"
+        className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#235697] focus:outline-none"
       />
     </div>
   );

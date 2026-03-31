@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { authAPI, userAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import OTPInput from '../components/OTPInput';
 
 export default function VerifyDevice() {
   const navigate = useNavigate();
@@ -89,13 +90,9 @@ export default function VerifyDevice() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               OTP Code
             </label>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-              placeholder="Enter OTP"
-            />
+            <div className="flex justify-center">
+              <OTPInput value={code} onChange={setCode} autoFocus />
+            </div>
           </div>
 
           {question && (
@@ -120,13 +117,9 @@ export default function VerifyDevice() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Authenticator Code
                 </label>
-                <input
-                  type="text"
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697] text-center tracking-widest"
-                  placeholder="000000"
-                />
+                <div className="flex justify-center">
+                  <OTPInput value={totpCode} onChange={setTotpCode} />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -145,7 +138,7 @@ export default function VerifyDevice() {
 
           <button
             type="submit"
-            disabled={loading || (!code && !answer)}
+            disabled={loading || (!code && !answer && !totpCode)}
             className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {loading ? <LoadingSpinner size="sm" /> : 'Verify'}

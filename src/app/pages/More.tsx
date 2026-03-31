@@ -12,7 +12,9 @@ import { notificationsAPI } from '../../services/api';
 
 export default function More() {
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, setTheme } = useTheme();
+  const isDark = theme === 'dark';
+  const isHighContrast = theme === 'high-contrast';
   const { user, logout } = useAuth();
   const [showChat, setShowChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -53,11 +55,18 @@ export default function More() {
       title: 'Preferences',
       items: [
         { 
-          icon: theme === 'dark' ? Sun : Moon, 
+          icon: isDark ? Sun : Moon, 
           label: 'Dark Mode', 
-          action: toggleTheme, 
+          action: () => setTheme(isDark ? 'light' : 'dark'), 
           toggle: true,
-          value: theme === 'dark'
+          value: isDark
+        },
+        {
+          icon: Eye,
+          label: 'High Contrast',
+          action: () => setTheme(isHighContrast ? 'light' : 'high-contrast'),
+          toggle: true,
+          value: isHighContrast,
         },
       ],
     },

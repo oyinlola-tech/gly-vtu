@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { Eye, EyeOff, Check } from 'lucide-react';
+import PhoneInput from '../components/PhoneInput';
+import PasswordStrengthIndicator from '../components/PasswordStrengthIndicator';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ export default function Register() {
     password: '',
     confirmPassword: '',
   });
+  const [phoneCountry, setPhoneCountry] = useState('NG');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -139,13 +142,12 @@ export default function Register() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Phone Number
                   </label>
-                  <input
-                    type="tel"
+                  <PhoneInput
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                    placeholder="+234 800 000 0000"
-                    required
+                    onChange={(value) => setFormData({ ...formData, phone: value })}
+                    countryCode={phoneCountry}
+                    onCountryChange={setPhoneCountry}
+                    placeholder="8000000000"
                   />
                 </div>
               </>
@@ -171,6 +173,9 @@ export default function Register() {
                     >
                       {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
+                  </div>
+                  <div className="mt-3">
+                    <PasswordStrengthIndicator password={formData.password} />
                   </div>
                 </div>
 

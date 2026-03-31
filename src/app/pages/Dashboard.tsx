@@ -12,6 +12,7 @@ import { walletAPI, userAPI } from '../../services/api';
 export default function Dashboard() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
   const [showBalance, setShowBalance] = useState(true);
   const [balance, setBalance] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -101,7 +102,7 @@ export default function Dashboard() {
               onClick={toggleTheme}
               className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
             >
-              {theme === 'dark' ? <Sun size={20} className="text-white" /> : <Moon size={20} className="text-white" />}
+              {isDark ? <Sun size={20} className="text-white" /> : <Moon size={20} className="text-white" />}
             </button>
             <Link to="/notifications" className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">
               <Bell size={20} className="text-white" />

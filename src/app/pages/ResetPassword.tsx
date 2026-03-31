@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router';
 import { authAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
+import OTPInput from '../components/OTPInput';
+import PasswordStrengthIndicator from '../components/PasswordStrengthIndicator';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -59,13 +61,9 @@ export default function ResetPassword() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               OTP Code
             </label>
-            <input
-              type="text"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-              required
-            />
+            <div className="flex justify-center">
+              <OTPInput value={formData.code} onChange={(value) => setFormData({ ...formData, code: value })} autoFocus />
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -78,6 +76,9 @@ export default function ResetPassword() {
               className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
               required
             />
+            <div className="mt-3">
+              <PasswordStrengthIndicator password={formData.newPassword} />
+            </div>
           </div>
 
           <button
