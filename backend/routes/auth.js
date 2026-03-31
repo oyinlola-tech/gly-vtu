@@ -146,9 +146,9 @@ router.post('/register', validateRequest(registrationSchema), async (req, res) =
     
     await pool.query(
       `INSERT INTO users
-       (id, full_name, email, phone, password_hash, kyc_level, kyc_status, kyc_payload, date_of_birth,
+       (id, full_name, email, phone, password_hash, password_updated_at, kyc_level, kyc_status, kyc_payload, date_of_birth,
         full_name_encrypted, email_encrypted, phone_encrypted, email_hash, phone_hash, kyc_payload_encrypted)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
         null,
@@ -600,7 +600,10 @@ router.post('/reset-password', async (req, res) => {
   const otp = await verifyOtp({ email, purpose: 'password_reset', code });
   if (!otp) return res.status(400).json({ error: 'Invalid or expired OTP' });
   const passwordHash = await bcrypt.hash(newPassword, 12);
-  await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, otp.user_id]);
+  await pool.query('UPDATE users SET password_hash = ?, password_updated_at = NOW() WHERE id = ?', [
+    passwordHash,
+    otp.user_id,
+  ]);
   sendSecurityEmail({
     to: email,
     title: 'Password Updated',

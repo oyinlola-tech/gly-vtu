@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { AlertCircle, CheckCircle, Copy, Eye, EyeOff, Smartphone, RefreshCw } from 'lucide-react';
 import { authAPI } from '../../services/api';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface TwoFactorSetupState {
   showSetup: boolean;
@@ -23,6 +24,7 @@ export function TwoFactorAuthPage() {
   const [showBackupCodes, setShowBackupCodes] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const codeInputRef = useRef<HTMLInputElement>(null);
+  const [confirmDisable, setConfirmDisable] = useState(false);
 
   useEffect(() => {
     loadTwoFactorStatus();
@@ -99,8 +101,6 @@ export function TwoFactorAuthPage() {
   }
 
   async function handleDisable2FA() {
-    if (!window.confirm('Are you sure you want to disable 2FA? Your account will be less secure.')) return;
-
     try {
       setLoading(true);
       setError(null);
@@ -338,7 +338,7 @@ export function TwoFactorAuthPage() {
               </p>
             </div>
             <button
-              onClick={handleDisable2FA}
+              onClick={() => setConfirmDisable(true)}
               disabled={loading}
               className="w-full px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition font-semibold"
             >
@@ -359,6 +359,17 @@ export function TwoFactorAuthPage() {
           </ul>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmDisable}
+        title="Disable two-factor authentication?"
+        description="Your account will be less secure without 2FA."
+        confirmLabel="Disable 2FA"
+        onConfirm={() => {
+          setConfirmDisable(false);
+          handleDisable2FA();
+        }}
+        onCancel={() => setConfirmDisable(false)}
+      />
     </div>
   );
 }

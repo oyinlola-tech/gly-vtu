@@ -410,6 +410,19 @@ export const userAPI = {
       `/user/security-events${query ? `?${query}` : ''}`
     );
   },
+  getSecurityAlerts: async () => {
+    return request<{ alerts: any[] }>(API_BASE_URL, '/user/security-alerts');
+  },
+  requestDataExport: async () => {
+    return request<{ success: boolean }>(API_BASE_URL, '/user/data-export', { method: 'POST' });
+  },
+  requestAccountClosure: async (payload: { reason: string; feedbackMessage?: string }) => {
+    return request<{ success: boolean; deletionDate: string }>(
+      API_BASE_URL,
+      '/user/account/closure-request',
+      { method: 'POST', body: JSON.stringify(payload) }
+    );
+  },
   downloadSecurityEvents: async () => {
     const res = await fetch(`${API_BASE_URL}/user/security-events?export=csv`, {
       credentials: 'include',
@@ -776,6 +789,36 @@ export const adminAPI = {
 
   getAudit: async () => {
     return request<any[]>(ADMIN_API_BASE_URL, '/audit', {}, { admin: true });
+  },
+  getSecurityEvents: async (params?: { limit?: number; offset?: number; severity?: string; type?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    if (params?.severity) search.set('severity', params.severity);
+    if (params?.type) search.set('type', params.type);
+    const query = search.toString();
+    return request<any[]>(
+      ADMIN_API_BASE_URL,
+      `/security-events${query ? `?${query}` : ''}`,
+      {},
+      { admin: true }
+    );
+  },
+  downloadSecurityEvents: async () => {
+    const res = await fetch(`${ADMIN_API_BASE_URL}/security-events?export=csv`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await parseResponse(res);
+      throw new Error(error?.error || 'Download failed');
+    }
+    return res.blob();
+  },
+  getAnomalies: async () => {
+    return request<any[]>(ADMIN_API_BASE_URL, '/anomalies', {}, { admin: true });
+  },
+  getComplianceQueue: async () => {
+    return request<any[]>(ADMIN_API_BASE_URL, '/compliance', {}, { admin: true });
   },
 
   getAuditLogs: async (params?: {

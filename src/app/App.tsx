@@ -1,4 +1,5 @@
 import { useState, Suspense, lazy } from 'react';
+import { HelpCircle } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -6,6 +7,8 @@ import { AdminAuthProvider, useAdminAuth } from '../contexts/AdminAuthContext';
 import SplashScreen from './components/SplashScreen';
 import NotificationListener from './components/NotificationListener';
 import LoadingSpinner from './components/LoadingSpinner';
+import SecurityAlertBanner from './components/SecurityAlertBanner';
+import SupportChat from './components/SupportChat';
 
 // Auth Pages (code-split)
 const Login = lazy(() => import('./pages/Login'));
@@ -51,6 +54,18 @@ const Disputes = lazy(() => import('./pages/Disputes'));
 const WalletManagementPage = lazy(() => import('./pages/WalletManagementPage'));
 const TransactionHistoryPage = lazy(() => import('./pages/TransactionHistoryPage'));
 const TransactionDetailsPage = lazy(() => import('./pages/TransactionDetailsPage'));
+const SessionManagement = lazy(() => import('./pages/SessionManagement'));
+const TransactionReceipt = lazy(() => import('./pages/TransactionReceipt'));
+const AccountClosure = lazy(() => import('./pages/AccountClosure'));
+const AccountClosureCancel = lazy(() => import('./pages/AccountClosureCancel'));
+const DataExport = lazy(() => import('./pages/DataExport'));
+const BiometricSetup = lazy(() => import('./pages/BiometricSetup'));
+const Error400 = lazy(() => import('./pages/Error400'));
+const Error403 = lazy(() => import('./pages/Error403'));
+const Error404 = lazy(() => import('./pages/Error404'));
+const Error500 = lazy(() => import('./pages/Error500'));
+const Maintenance = lazy(() => import('./pages/Maintenance'));
+const Offline = lazy(() => import('./pages/Offline'));
 
 // Admin Pages (code-split)
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -58,6 +73,9 @@ const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AdminTransactions = lazy(() => import('./pages/admin/AdminTransactions'));
 const AdminReview = lazy(() => import('./pages/admin/AdminReview'));
 const AdminAuditLogs = lazy(() => import('./pages/admin/AdminAuditLogs'));
+const SecurityEventsDashboard = lazy(() => import('./pages/admin/SecurityEventsDashboard'));
+const AnomalyDetection = lazy(() => import('./pages/admin/AnomalyDetection'));
+const ComplianceManagement = lazy(() => import('./pages/admin/ComplianceManagement'));
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -72,6 +90,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 function AppContent() {
   const [showSplash, setShowSplash] = useState(true);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   return (
     <>
@@ -85,6 +104,7 @@ function AppContent() {
             </div>
           }
         >
+          <SecurityAlertBanner />
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<Navigate to="/login" />} />
@@ -270,6 +290,14 @@ function AppContent() {
             }
           />
           <Route
+            path="/security/sessions"
+            element={
+              <PrivateRoute>
+                <SessionManagement />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/wallet"
             element={
               <PrivateRoute>
@@ -293,6 +321,45 @@ function AppContent() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/transactions/:id/receipt"
+            element={
+              <PrivateRoute>
+                <TransactionReceipt />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/account/closure"
+            element={
+              <PrivateRoute>
+                <AccountClosure />
+              </PrivateRoute>
+            }
+          />
+          <Route path="/account/closure/cancel" element={<AccountClosureCancel />} />
+          <Route
+            path="/account/data-export"
+            element={
+              <PrivateRoute>
+                <DataExport />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/security/biometric"
+            element={
+              <PrivateRoute>
+                <BiometricSetup />
+              </PrivateRoute>
+            }
+          />
+          <Route path="/maintenance" element={<Maintenance />} />
+          <Route path="/offline" element={<Offline />} />
+          <Route path="/error/400" element={<Error400 />} />
+          <Route path="/error/403" element={<Error403 />} />
+          <Route path="/error/404" element={<Error404 />} />
+          <Route path="/error/500" element={<Error500 />} />
           <Route
             path="/notifications"
             element={
@@ -415,12 +482,48 @@ function AppContent() {
               </AdminRoute>
             }
           />
+          <Route
+            path="/admin/security-events"
+            element={
+              <AdminRoute>
+                <SecurityEventsDashboard />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/anomalies"
+            element={
+              <AdminRoute>
+                <AnomalyDetection />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/compliance"
+            element={
+              <AdminRoute>
+                <ComplianceManagement />
+              </AdminRoute>
+            }
+          />
           <Route path="/admin/login" element={<AdminLogin />} />
 
           {/* Catch all */}
-            <Route path="*" element={<Navigate to="/dashboard" />} />
+            <Route path="*" element={<Error404 />} />
           </Routes>
         </Suspense>
+      )}
+      {!showSplash && (
+        <>
+          <button
+            onClick={() => setSupportOpen(true)}
+            className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-[#235697] text-white shadow-xl flex items-center justify-center"
+            aria-label="Open support chat"
+          >
+            <HelpCircle size={22} />
+          </button>
+          {supportOpen && <SupportChat onClose={() => setSupportOpen(false)} />}
+        </>
       )}
     </>
   );

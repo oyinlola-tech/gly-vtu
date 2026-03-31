@@ -49,7 +49,7 @@ export default function SecurityEventsDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -70,7 +70,7 @@ export default function SecurityEventsDashboard() {
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-gray-200 flex flex-wrap gap-3 items-center">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 flex flex-wrap gap-3 items-center">
           <Filter size={16} className="text-gray-500" />
           <select
             value={filters.severity}
@@ -91,7 +91,7 @@ export default function SecurityEventsDashboard() {
           />
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
           {loading ? (
             <div className="p-6 text-sm text-gray-500">Loading events...</div>
           ) : events.length === 0 ? (
@@ -99,7 +99,7 @@ export default function SecurityEventsDashboard() {
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-left">
+                <thead className="bg-gray-50 dark:bg-gray-800 text-left">
                   <tr>
                     <th className="px-4 py-3">Type</th>
                     <th className="px-4 py-3">Severity</th>

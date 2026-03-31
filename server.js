@@ -22,6 +22,9 @@ import adminBillsRoutes from './backend/routes/adminBills.js';
 import adminTransactionsRoutes from './backend/routes/adminTransactions.js';
 import adminManagementRoutes from './backend/routes/adminManagement.js';
 import adminAuditRoutes from './backend/routes/adminAudit.js';
+import adminSecurityEventsRoutes from './backend/routes/adminSecurityEvents.js';
+import adminAnomaliesRoutes from './backend/routes/adminAnomalies.js';
+import adminComplianceRoutes from './backend/routes/adminCompliance.js';
 import adminFinanceRoutes from './backend/routes/adminFinance.js';
 import flutterwaveWebhookRoutes from './backend/routes/flutterwaveWebhook.js';
 import vtpassWebhookRoutes from './backend/routes/vtpassWebhook.js';
@@ -257,12 +260,21 @@ const userPages = [
   'receive',
   'bills',
   'transactions',
+  'transactions/history',
   'kyc',
   'kyc-status',
   'settings',
   'security-center',
+  'security/dashboard',
+  'security/password',
+  'security/activity',
+  'security/sessions',
+  'security/biometric',
   'auth/setup-2fa',
   'settings/devices',
+  'account/closure',
+  'account/closure/cancel',
+  'account/data-export',
   'verify-device',
   'forgot-password',
   'reset-password',
@@ -272,12 +284,29 @@ const userPages = [
   'faq',
   'compliance',
   'disputes',
+  'maintenance',
+  'offline',
+  'error/400',
+  'error/403',
+  'error/404',
+  'error/500',
 ];
 
 userPages.forEach((page) => {
   app.get(`/${page}`, pageLimiter, (req, res) => {
     res.sendFile(path.join(userDir, `${page}.html`));
   });
+});
+
+// Dynamic user routes
+app.get('/transactions/:id', pageLimiter, (req, res) => {
+  res.sendFile(path.join(userDir, 'transactions.html'));
+});
+app.get('/transactions/:id/receipt', pageLimiter, (req, res) => {
+  res.sendFile(path.join(userDir, 'transactions.html'));
+});
+app.get('/transaction/:id', pageLimiter, (req, res) => {
+  res.sendFile(path.join(userDir, 'transactions.html'));
 });
 
 app.get('/', pageLimiter, (req, res) => res.redirect('/splash'));
@@ -297,6 +326,9 @@ const adminPages = [
   'transactions',
   'settings',
   'audit',
+  'security-events',
+  'anomalies',
+  'compliance',
   'review',
   'vtpass',
 ];
@@ -323,6 +355,9 @@ app.use('/api/admin/bills', adminBillsRoutes);
 app.use('/api/admin/transactions', adminTransactionsRoutes);
 app.use('/api/admin/manage', adminManagementRoutes);
 app.use('/api/admin/audit', adminAuditRoutes);
+app.use('/api/admin/security-events', adminSecurityEventsRoutes);
+app.use('/api/admin/anomalies', adminAnomaliesRoutes);
+app.use('/api/admin/compliance', adminComplianceRoutes);
 app.use('/api/admin/finance', adminFinanceRoutes);
 app.use('/api/admin/notifications', adminNotificationsRoutes);
 app.use('/api/admin/conversations', adminConversationsRoutes);
@@ -348,6 +383,9 @@ app.use('/app/admin/api/bills', adminBillsRoutes);
 app.use('/app/admin/api/transactions', adminTransactionsRoutes);
 app.use('/app/admin/api/manage', adminManagementRoutes);
 app.use('/app/admin/api/audit', adminAuditRoutes);
+app.use('/app/admin/api/security-events', adminSecurityEventsRoutes);
+app.use('/app/admin/api/anomalies', adminAnomaliesRoutes);
+app.use('/app/admin/api/compliance', adminComplianceRoutes);
 app.use('/app/admin/api/finance', adminFinanceRoutes);
 app.use('/app/admin/api/notifications', adminNotificationsRoutes);
 app.use('/app/admin/api/conversations', adminConversationsRoutes);

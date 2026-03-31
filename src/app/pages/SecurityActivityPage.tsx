@@ -40,11 +40,28 @@ export function SecurityActivityPage() {
       };
     }
     const meta = row?.metadata || row?.details || {};
+    const rawType = row.event_type || row.type || 'security';
+    const mappedType =
+      rawType.includes('login') && rawType.includes('failed')
+        ? 'failed_login'
+        : rawType.includes('login')
+          ? 'login'
+          : rawType.includes('logout')
+            ? 'logout'
+            : rawType.includes('password')
+              ? 'password_change'
+              : rawType.includes('totp.enabled')
+                ? 'totp_enabled'
+                : rawType.includes('totp.disabled')
+                  ? 'totp_disabled'
+                  : rawType.includes('device')
+                    ? 'device_added'
+                    : 'unusual_activity';
     return {
       id: row.id,
-      type: row.event_type || row.type || 'security',
+      type: mappedType,
       severity: row.severity || 'low',
-      title: row.event_type || 'Security event',
+      title: rawType || 'Security event',
       description: meta?.message || row.description || 'Security activity recorded',
       ipAddress: row.ip_address || meta?.ip || '',
       location: meta?.location,

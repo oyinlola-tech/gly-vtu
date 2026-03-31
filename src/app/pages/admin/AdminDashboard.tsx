@@ -308,7 +308,7 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
           <Link
             to="/admin/review"
             className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
@@ -322,6 +322,27 @@ export default function AdminDashboard() {
           >
             Audit Logs
             <p className="text-white/70 text-xs mt-1">Monitor admin activity</p>
+          </Link>
+          <Link
+            to="/admin/security-events"
+            className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
+          >
+            Security Events
+            <p className="text-white/70 text-xs mt-1">Threat monitoring</p>
+          </Link>
+          <Link
+            to="/admin/anomalies"
+            className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
+          >
+            Anomaly Detection
+            <p className="text-white/70 text-xs mt-1">Risky activity</p>
+          </Link>
+          <Link
+            to="/admin/compliance"
+            className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
+          >
+            Compliance & KYC
+            <p className="text-white/70 text-xs mt-1">Verification queue</p>
           </Link>
         </div>
       </div>

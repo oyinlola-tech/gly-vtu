@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ArrowDown, ArrowUp, Filter, Download, Search, Calendar } from 'lucide-react';
 import { userAPI } from '../../services/api';
+import TransactionStatusCard from '../components/TransactionStatusCard';
+import { toast } from 'sonner';
 
 interface Transaction {
   id: string;
@@ -233,7 +235,31 @@ export function TransactionHistoryPage() {
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="grid gap-3 p-4 sm:hidden">
+            {filteredTransactions.map((tx) => (
+              <TransactionStatusCard
+                key={tx.id}
+                id={tx.id}
+                type={tx.type}
+                reference={tx.reference}
+                amount={tx.amount}
+                fee={tx.fee}
+                status={tx.status}
+                createdAt={tx.createdAt}
+                onRetry={tx.status === 'failed' ? () => toast.message('Retry queued') : undefined}
+                onMarkPaid={() =>
+                  toast('Marked as paid', {
+                    action: {
+                      label: 'Undo',
+                      onClick: () => toast.message('Undo complete'),
+                    },
+                  })
+                }
+              />
+            ))}
+          </div>
+
+          <div className="overflow-x-auto hidden sm:block">
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
@@ -277,9 +303,14 @@ export function TransactionHistoryPage() {
                       <p className="text-xs text-gray-500">{new Date(tx.createdAt).toLocaleTimeString()}</p>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <a href={`/transactions/${tx.id}`} className="text-blue-600 hover:text-blue-700 text-sm font-semibold">
-                        View
-                      </a>
+                      <div className="flex items-center justify-center gap-3">
+                        <a href={`/transactions/${tx.id}`} className="text-blue-600 hover:text-blue-700 text-sm font-semibold">
+                          View
+                        </a>
+                        <a href={`/transactions/${tx.id}/receipt`} className="text-blue-600 hover:text-blue-700 text-sm font-semibold">
+                          Receipt
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 ))}

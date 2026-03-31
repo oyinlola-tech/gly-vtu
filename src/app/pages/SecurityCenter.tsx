@@ -229,7 +229,7 @@ export default function SecurityCenter() {
                           Last seen: {session.last_seen ? new Date(session.last_seen).toLocaleString() : 'Unknown'}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {session.ip_address || 'IP unknown'} · {session.user_agent || 'Device'}
+                          {session.ip_address || 'IP unknown'} - {session.user_agent || 'Device'}
                         </p>
                       </div>
                     </div>
@@ -298,6 +298,38 @@ export default function SecurityCenter() {
                 className="inline-flex items-center gap-2 text-sm font-semibold text-[#235697]"
               >
                 Manage PIN & Security Question
+              </Link>
+            </div>
+
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Shield size={18} className="text-[#235697]" />
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Session Management</h2>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Review and revoke active sessions on your account.
+              </p>
+              <Link
+                to="/security/sessions"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-[#235697]"
+              >
+                Manage sessions
+              </Link>
+            </div>
+
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <ShieldCheck size={18} className="text-[#235697]" />
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Biometric Login</h2>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Enable fingerprint or face authentication on supported devices.
+              </p>
+              <Link
+                to="/security/biometric"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-[#235697]"
+              >
+                Configure biometrics
               </Link>
             </div>
 

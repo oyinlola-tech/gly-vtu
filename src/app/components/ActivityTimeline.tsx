@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import { AlertTriangle, CheckCircle, Lock, LogIn, LogOut, Shield } from 'lucide-react';
 
 interface ActivityEvent {
@@ -11,7 +12,7 @@ interface ActivityEvent {
   userAgent?: string;
 }
 
-const iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+const iconMap: Record<string, ComponentType<{ size?: number; className?: string }>> = {
   'auth.login': LogIn,
   'auth.logout': LogOut,
   'password.changed': Lock,

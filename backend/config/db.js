@@ -510,6 +510,9 @@ export async function initDatabase() {
     await ensureKycVerificationTable(conn);
     await ensureAdminTotpColumns(conn, DB_NAME);
     await ensureUserTotpColumns(conn);
+    await ensureAccountClosureTable(conn);
+    await ensureDataExportTable(conn);
+    await ensureUserPasswordUpdatedAt(conn);
   } finally {
     conn.release();
   }
@@ -891,5 +894,48 @@ async function ensureUserTotpColumns(conn) {
   }
   if (alters.length) {
     await conn.query(`ALTER TABLE users ${alters.join(', ')}`);
+  }
+}
+
+async function ensureAccountClosureTable(conn) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS account_closure_requests (
+      id CHAR(36) PRIMARY KEY,
+      user_id CHAR(36) NOT NULL,
+      reason VARCHAR(255) NULL,
+      feedback TEXT NULL,
+      requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      scheduled_deletion_at TIMESTAMP NULL,
+      status ENUM('pending','cancelled','completed') NOT NULL DEFAULT 'pending',
+      cancel_token_hash CHAR(64) NULL,
+      cancelled_at TIMESTAMP NULL,
+      INDEX idx_closure_user (user_id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+}
+
+async function ensureDataExportTable(conn) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS data_export_requests (
+      id CHAR(36) PRIMARY KEY,
+      user_id CHAR(36) NOT NULL,
+      status ENUM('pending','processing','completed','failed') NOT NULL DEFAULT 'pending',
+      requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      completed_at TIMESTAMP NULL,
+      INDEX idx_export_user (user_id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+}
+
+async function ensureUserPasswordUpdatedAt(conn) {
+  const [cols] = await conn.query(
+    \`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'\`,
+    [DB_NAME]
+  );
+  const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+  if (!existing.has('password_updated_at')) {
+    await conn.query('ALTER TABLE users ADD COLUMN password_updated_at TIMESTAMP NULL');
   }
 }

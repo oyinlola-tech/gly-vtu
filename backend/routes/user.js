@@ -3,7 +3,11 @@ import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
 import { createVirtualAccountForCustomer, updateCustomer } from '../utils/flutterwave.js';
 import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
-import { sendReservedAccountEmail } from '../utils/email.js';
+import {
+  sendReservedAccountEmail,
+  sendAccountClosureRequestEmail,
+  sendDataExportRequestedEmail,
+} from '../utils/email.js';
 import {
   isValidPin,
   setTransactionPin,
@@ -28,6 +32,7 @@ import { changePasswordSchema, validateRequest } from '../middleware/requestVali
 import { logger } from '../utils/logger.js';
 import { applyUserPII, decryptJson, encryptJson, hashPhone, encryptPII } from '../utils/encryption.js';
 import { runKycVerification } from '../utils/kycVerification.js';
+import crypto from 'crypto';
 
 const router = express.Router();
 const MIN_PASSWORD_LENGTH = 10;
@@ -297,13 +302,88 @@ router.get('/security', requireUser, async (req, res) => {
   const status = await getPinStatus(req.user.sub);
   if (!status) return res.status(404).json({ error: 'Not found' });
   const [[row]] = await pool.query(
-    'SELECT security_question_enabled, totp_enabled FROM users WHERE id = ?',
+    'SELECT security_question_enabled, totp_enabled, totp_backup_codes, biometric_enabled, login_failed_attempts, password_updated_at FROM users WHERE id = ?',
     [req.user.sub]
   );
+  const [devices] = await pool.query(
+    `SELECT id, device_id, label, last_seen, ip_address, user_agent, trusted
+     FROM user_devices WHERE user_id = ? ORDER BY last_seen DESC LIMIT 5`,
+    [req.user.sub]
+  );
+  const [events] = await pool.query(
+    `SELECT id, event_type, severity, ip_address, user_agent, metadata, created_at
+     FROM security_events
+     WHERE actor_type = 'user' AND actor_id = ?
+     ORDER BY created_at DESC
+     LIMIT 5`,
+    [req.user.sub]
+  );
+  const mappedEvents = (events || []).map((event) => {
+    let meta = event.metadata;
+    if (typeof meta === 'string') {
+      try {
+        meta = JSON.parse(meta);
+      } catch {
+        meta = {};
+      }
+    }
+    return {
+      id: event.id,
+      type: event.event_type,
+      title: event.event_type.replace(/\./g, ' '),
+      description: meta?.message || meta?.reason || 'Security activity recorded',
+      severity: event.severity,
+      createdAt: event.created_at,
+      ipAddress: event.ip_address,
+      userAgent: event.user_agent,
+    };
+  });
+  const suspiciousActivities = (events || [])
+    .filter((event) => ['high', 'critical'].includes(event.severity))
+    .slice(0, 5)
+    .map((event) => {
+      let meta = event.metadata;
+      if (typeof meta === 'string') {
+        try {
+          meta = JSON.parse(meta);
+        } catch {
+          meta = {};
+        }
+      }
+      return {
+        id: event.id,
+        type: event.event_type,
+        message: meta?.message || event.event_type,
+        ip: event.ip_address || '',
+        timestamp: event.created_at,
+        severity: event.severity === 'critical' ? 'high' : event.severity,
+      };
+    });
+
+  let backupCodesCount = 0;
+  try {
+    backupCodesCount = JSON.parse(row?.totp_backup_codes || '[]').length;
+  } catch {
+    backupCodesCount = 0;
+  }
+
   return res.json({
-    ...status,
-    securityQuestionEnabled: Boolean(row?.security_question_enabled),
+    pinSet: Boolean(status?.hasPin),
+    biometricEnabled: Boolean(row?.biometric_enabled),
     totpEnabled: Boolean(row?.totp_enabled),
+    backupCodesGenerated: backupCodesCount > 0,
+    devicesCount: devices?.length || 0,
+    lastActivityAt: devices?.[0]?.last_seen || null,
+    securityQuestionEnabled: Boolean(row?.security_question_enabled),
+    loginFailedAttempts: Number(row?.login_failed_attempts || 0),
+    passwordUpdatedAt: row?.password_updated_at,
+    recentLogins: (devices || []).map((device) => ({
+      ip: device.ip_address,
+      userAgent: device.user_agent,
+      lastSeen: device.last_seen,
+    })),
+    securityEvents: mappedEvents,
+    suspiciousActivities,
   });
 });
 
@@ -330,7 +410,32 @@ router.get('/security-events', requireUser, async (req, res) => {
   );
 
   if (!exportCsv) {
-    return res.json(rows || []);
+    const normalized = (rows || []).map((row) => {
+      let meta = row.metadata;
+      if (typeof meta === 'string') {
+        try {
+          meta = JSON.parse(meta);
+        } catch {
+          meta = {};
+        }
+      }
+      return {
+        id: row.id,
+        event_type: row.event_type,
+        severity: row.severity,
+        ip_address: row.ip_address,
+        user_agent: row.user_agent,
+        metadata: meta,
+        created_at: row.created_at,
+        type: row.event_type,
+        title: row.event_type.replace(/\./g, ' '),
+        description: meta?.message || meta?.reason || 'Security activity recorded',
+        ipAddress: row.ip_address,
+        userAgent: row.user_agent,
+        createdAt: row.created_at,
+      };
+    });
+    return res.json(normalized);
   }
 
   const header = ['id', 'event_type', 'severity', 'ip_address', 'user_agent', 'metadata', 'created_at'];
@@ -453,7 +558,7 @@ router.post('/password/change', requireUser, validateRequest(changePasswordSchem
     return res.status(400).json({ error: 'Invalid password' });
   }
   const passwordHash = await bcrypt.hash(newPassword, 12);
-  await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [
+  await pool.query('UPDATE users SET password_hash = ?, password_updated_at = NOW() WHERE id = ?', [
     passwordHash,
     req.user.sub,
   ]);
@@ -593,6 +698,204 @@ router.post('/biometric', requireUser, async (req, res) => {
     userAgent: req.headers['user-agent'],
   }).catch(console.error);
   return res.json({ message: 'Biometric preference updated' });
+});
+
+router.get('/security-alerts', requireUser, async (req, res) => {
+  const [[user]] = await pool.query(
+    'SELECT id, email, email_encrypted, totp_enabled, password_updated_at, login_failed_attempts, last_login_failed_at, created_at FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const alerts = [];
+  const now = Date.now();
+  const passwordUpdatedAt = user?.password_updated_at || user?.created_at;
+  if (!user?.totp_enabled) {
+    alerts.push({
+      id: 'totp-disabled',
+      title: 'Two-factor authentication is disabled',
+      message: 'Enable 2FA to protect your account from unauthorized logins.',
+      severity: 'medium',
+      actionUrl: '/auth/setup-2fa',
+      createdAt: new Date().toISOString(),
+    });
+  }
+  if (passwordUpdatedAt) {
+    const ageDays = Math.floor((now - new Date(passwordUpdatedAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (ageDays >= 90) {
+      alerts.push({
+        id: 'password-stale',
+        title: 'Password has not been changed in 90+ days',
+        message: 'Update your password to keep your account secure.',
+        severity: 'medium',
+        actionUrl: '/security/password',
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
+  if ((user?.login_failed_attempts || 0) >= 3) {
+    alerts.push({
+      id: 'failed-logins',
+      title: 'Multiple failed login attempts',
+      message: 'We detected several failed login attempts on your account.',
+      severity: 'high',
+      actionUrl: '/security/activity',
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  const [untrusted] = await pool.query(
+    `SELECT id, device_id, last_seen FROM user_devices WHERE user_id = ? AND trusted = 0 ORDER BY last_seen DESC LIMIT 1`,
+    [req.user.sub]
+  );
+  if (untrusted?.length) {
+    alerts.push({
+      id: 'untrusted-device',
+      title: 'Unrecognized device detected',
+      message: 'Review and revoke any devices you do not recognize.',
+      severity: 'high',
+      actionUrl: '/settings/devices',
+      createdAt: untrusted[0].last_seen,
+    });
+  }
+
+  const [largeTx] = await pool.query(
+    `SELECT id, total, created_at FROM transactions
+     WHERE user_id = ? AND status = 'success' AND type IN ('send','bill')
+       AND total >= 100000 AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+     ORDER BY created_at DESC LIMIT 1`,
+    [req.user.sub]
+  );
+  if (largeTx?.length) {
+    alerts.push({
+      id: 'large-withdrawal',
+      title: 'Large withdrawal detected',
+      message: 'A large outgoing transaction was completed recently.',
+      severity: 'high',
+      actionUrl: '/transactions',
+      createdAt: largeTx[0].created_at,
+    });
+  }
+
+  return res.json({ alerts });
+});
+
+router.post('/account/closure-request', requireUser, async (req, res) => {
+  const { reason, feedbackMessage } = req.body || {};
+  const cleanupReason = String(reason || '').trim();
+  if (!cleanupReason) {
+    return res.status(400).json({ error: 'Reason is required' });
+  }
+  const deletionDate = new Date();
+  deletionDate.setDate(deletionDate.getDate() + 30);
+  const cancelToken = crypto.randomBytes(32).toString('hex');
+  const cancelTokenHash = crypto.createHash('sha256').update(cancelToken).digest('hex');
+
+  await pool.query(
+    `INSERT INTO account_closure_requests
+     (id, user_id, reason, feedback, requested_at, scheduled_deletion_at, status, cancel_token_hash)
+     VALUES (UUID(), ?, ?, ?, NOW(), ?, 'pending', ?)`,
+    [req.user.sub, cleanupReason, feedbackMessage || null, deletionDate, cancelTokenHash]
+  );
+
+  logSecurityEvent({
+    type: 'account.closure_requested',
+    severity: 'medium',
+    actorType: 'user',
+    actorId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    metadata: { deletionDate: deletionDate.toISOString() },
+  }).catch(() => null);
+
+  const [[userRaw]] = await pool.query(
+    'SELECT id, email, full_name, email_encrypted, full_name_encrypted FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const user = applyUserPII(userRaw);
+  if (user?.email) {
+    const baseUrl = process.env.BRAND_URL || 'https://app.glyvtu.com';
+    const cancelUrl = `${baseUrl}/app/api/user/account/closure/cancel?token=${cancelToken}`;
+    const deletionDateLabel = deletionDate.toLocaleDateString('en-NG', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    sendAccountClosureRequestEmail({
+      to: user.email,
+      name: user.full_name,
+      deletionDateLabel,
+      cancelUrl,
+    }).catch(() => null);
+  }
+
+  return res.json({ success: true, deletionDate });
+});
+
+router.post('/account/closure-cancel', requireUser, async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT id FROM account_closure_requests
+     WHERE user_id = ? AND status = 'pending'
+     ORDER BY requested_at DESC LIMIT 1`,
+    [req.user.sub]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'No pending request' });
+  await pool.query(
+    'UPDATE account_closure_requests SET status = ?, cancelled_at = NOW() WHERE id = ?',
+    ['cancelled', rows[0].id]
+  );
+  logSecurityEvent({
+    type: 'account.closure_cancelled',
+    severity: 'low',
+    actorType: 'user',
+    actorId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  return res.json({ success: true });
+});
+
+router.get('/account/closure/cancel', async (req, res) => {
+  const token = String(req.query.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'Token required' });
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const [rows] = await pool.query(
+    `SELECT id, user_id FROM account_closure_requests
+     WHERE cancel_token_hash = ? AND status = 'pending' LIMIT 1`,
+    [tokenHash]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Request not found' });
+  await pool.query(
+    'UPDATE account_closure_requests SET status = ?, cancelled_at = NOW() WHERE id = ?',
+    ['cancelled', rows[0].id]
+  );
+  logSecurityEvent({
+    type: 'account.closure_cancelled',
+    severity: 'low',
+    actorType: 'user',
+    actorId: rows[0].user_id,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  return res.json({ success: true });
+});
+
+router.post('/data-export', requireUser, async (req, res) => {
+  await pool.query(
+    `INSERT INTO data_export_requests (id, user_id, status, requested_at)
+     VALUES (UUID(), ?, 'pending', NOW())`,
+    [req.user.sub]
+  );
+  const [[userRaw]] = await pool.query(
+    'SELECT id, email, full_name, email_encrypted, full_name_encrypted FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const user = applyUserPII(userRaw);
+  if (user?.email) {
+    sendDataExportRequestedEmail({
+      to: user.email,
+      name: user.full_name,
+    }).catch(() => null);
+  }
+  return res.json({ success: true });
 });
 
 router.get('/security-questions', requireUser, async (req, res) => {

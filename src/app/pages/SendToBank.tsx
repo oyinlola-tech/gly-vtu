@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router';
-import { ChevronLeft, ChevronDown, Search } from 'lucide-react';
+import { ChevronLeft, ChevronDown } from 'lucide-react';
 import { banksAPI, walletAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
+import CurrencyInput from '../components/CurrencyInput';
 
 export default function SendToBank() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export default function SendToBank() {
     accountNumber: '',
     bankCode: '',
     bankName: '',
-    amount: '',
+    amount: 0,
     narration: '',
   });
   const [accountName, setAccountName] = useState('');
@@ -101,7 +102,7 @@ export default function SendToBank() {
 
     try {
       const response = await walletAPI.sendMoney({
-        amount: parseFloat(formData.amount),
+        amount: Number(formData.amount || 0),
         accountNumber: formData.accountNumber,
         bankCode: formData.bankCode,
         accountName,
@@ -112,7 +113,7 @@ export default function SendToBank() {
       navigate('/transaction-success', {
         state: {
           transaction: response,
-          amount: parseFloat(formData.amount),
+          amount: Number(formData.amount || 0),
           recipientName: accountName,
           recipientBank: formData.bankName,
         },
@@ -135,11 +136,10 @@ export default function SendToBank() {
           <h1 className="text-xl font-bold text-white">Send to Bank Account</h1>
         </div>
 
-        {/* Balance Card */}
         <div className="bg-[#235697] rounded-2xl p-6 shadow-lg">
           <p className="text-white/80 text-xs mb-2">Total Balance</p>
           <h2 className="text-white text-2xl font-bold">
-            ₦{balance.toLocaleString('en-NG', {
+            NGN {balance.toLocaleString('en-NG', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
@@ -211,17 +211,10 @@ export default function SendToBank() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Amount
               </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
-                <input
-                  type="number"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                  placeholder="0.00"
-                  required
-                />
-              </div>
+              <CurrencyInput
+                value={formData.amount}
+                onChange={(value) => setFormData({ ...formData, amount: value })}
+              />
             </div>
 
             <div>
@@ -248,7 +241,6 @@ export default function SendToBank() {
         </div>
       </div>
 
-      {/* Bank Selection Modal */}
       {showBankSelect && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[80vh] flex flex-col">

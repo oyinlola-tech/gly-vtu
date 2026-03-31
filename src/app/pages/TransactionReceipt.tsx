@@ -4,6 +4,7 @@ import { ArrowLeft, Download, ReceiptText } from 'lucide-react';
 import { transactionsAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { toast } from 'sonner';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function TransactionReceipt() {
   const { id } = useParams();
@@ -63,8 +64,9 @@ export default function TransactionReceipt() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-6 py-8">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-6 py-8">
       <div className="max-w-3xl mx-auto space-y-6">
+        <Breadcrumbs items={[{ label: 'Transactions', href: '/transactions' }, { label: 'Receipt' }]} />
         <div className="flex items-center justify-between">
           <Link to="/transactions" className="text-sm text-blue-600 flex items-center gap-2">
             <ArrowLeft size={16} />
@@ -79,40 +81,40 @@ export default function TransactionReceipt() {
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl shadow p-6">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
               <ReceiptText size={18} className="text-blue-600" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Transaction Receipt</h1>
-              <p className="text-sm text-gray-500">{transaction.reference}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{transaction.reference}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-900 dark:text-gray-100">
             <div>
-              <p className="text-gray-500">Status</p>
+              <p className="text-gray-500 dark:text-gray-400">Status</p>
               <p className="font-semibold text-gray-900">{String(transaction.status || '').toUpperCase()}</p>
             </div>
             <div>
-              <p className="text-gray-500">Type</p>
+              <p className="text-gray-500 dark:text-gray-400">Type</p>
               <p className="font-semibold text-gray-900">{String(transaction.type || '').toUpperCase()}</p>
             </div>
             <div>
-              <p className="text-gray-500">Amount</p>
+              <p className="text-gray-500 dark:text-gray-400">Amount</p>
               <p className="font-semibold text-gray-900">NGN {Number(transaction.amount || 0).toFixed(2)}</p>
             </div>
             <div>
-              <p className="text-gray-500">Fee</p>
+              <p className="text-gray-500 dark:text-gray-400">Fee</p>
               <p className="font-semibold text-gray-900">NGN {Number(transaction.fee || 0).toFixed(2)}</p>
             </div>
             <div>
-              <p className="text-gray-500">Total</p>
+              <p className="text-gray-500 dark:text-gray-400">Total</p>
               <p className="font-semibold text-gray-900">NGN {Number(transaction.total || 0).toFixed(2)}</p>
             </div>
             <div>
-              <p className="text-gray-500">Date</p>
+              <p className="text-gray-500 dark:text-gray-400">Date</p>
               <p className="font-semibold text-gray-900">
                 {transaction.createdAt ? new Date(transaction.createdAt).toLocaleString() : '—'}
               </p>
@@ -120,14 +122,14 @@ export default function TransactionReceipt() {
           </div>
 
           {transaction.recipient && (
-            <div className="mt-6 border-t pt-4">
+          <div className="mt-6 border-t border-gray-200 dark:border-gray-800 pt-4">
               <h2 className="text-sm font-semibold text-gray-900 mb-2">Recipient</h2>
-              <p className="text-sm text-gray-700">{transaction.recipient.name || '—'}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-200">{transaction.recipient.name || '—'}</p>
               {transaction.recipient.account && (
-                <p className="text-xs text-gray-500">Account: {transaction.recipient.account}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Account: {transaction.recipient.account}</p>
               )}
               {transaction.recipient.bank && (
-                <p className="text-xs text-gray-500">Bank: {transaction.recipient.bank}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Bank: {transaction.recipient.bank}</p>
               )}
             </div>
           )}

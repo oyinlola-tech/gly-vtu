@@ -4,6 +4,7 @@ import { ChevronLeft, Laptop, MapPin, Smartphone, Tablet, Trash2 } from 'lucide-
 import { tokenStore, userAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function SessionManagement() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -50,6 +51,14 @@ export default function SessionManagement() {
             <h1 className="text-xl font-bold text-white">Session Management</h1>
             <p className="text-white/70 text-sm">Review and revoke active sessions</p>
           </div>
+        </div>
+        <div className="mt-4 text-white/70">
+          <Breadcrumbs
+            items={[
+              { label: 'Security', href: '/security-center' },
+              { label: 'Session Management' },
+            ]}
+          />
         </div>
       </div>
 

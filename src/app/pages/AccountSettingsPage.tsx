@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Edit2, Save, X, AlertCircle, CheckCircle, Phone, Mail, User } from 'lucide-react';
 import { userAPI } from '../../services/api';
+import PhoneInput from '../components/PhoneInput';
 
 interface UserProfile {
   id: string;
@@ -31,7 +32,18 @@ export function AccountSettingsPage() {
     try {
       setLoading(true);
       const data = await userAPI.getProfile();
-      setProfile(data);
+      setProfile({
+        id: data.id,
+        fullName: data.full_name,
+        email: data.email,
+        phone: data.phone,
+        accountNumber: data.account_number,
+        bankName: data.bank_name,
+        kycLevel: data.kyc_level,
+        kycStatus: data.kyc_status,
+        createdAt: data.created_at,
+        lastActivityAt: data.last_activity_at,
+      });
       setFormData({ fullName: data.full_name, phone: data.phone });
       setError(null);
     } catch (err) {
@@ -116,12 +128,9 @@ export function AccountSettingsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                  <input
-                    type="tel"
+                  <PhoneInput
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
+                    onChange={(value) => setFormData({ ...formData, phone: value })}
                   />
                 </div>
 
@@ -195,17 +204,21 @@ export function AccountSettingsPage() {
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-6">Quick Settings</h2>
             <div className="space-y-3">
-              <a href="/settings/password" className="block p-4 border rounded-lg hover:bg-gray-50 transition">
+              <a href="/security/password" className="block p-4 border rounded-lg hover:bg-gray-50 transition">
                 <h3 className="font-semibold text-gray-900">Change Password</h3>
                 <p className="text-sm text-gray-600">Update your password</p>
               </a>
-              <a href="/settings/security" className="block p-4 border rounded-lg hover:bg-gray-50 transition">
+              <a href="/security/dashboard" className="block p-4 border rounded-lg hover:bg-gray-50 transition">
                 <h3 className="font-semibold text-gray-900">Security Settings</h3>
                 <p className="text-sm text-gray-600">Manage 2FA, devices, and security events</p>
               </a>
               <a href="/settings/devices" className="block p-4 border rounded-lg hover:bg-gray-50 transition">
                 <h3 className="font-semibold text-gray-900">Manage Devices</h3>
                 <p className="text-sm text-gray-600">View and revoke active sessions</p>
+              </a>
+              <a href="/account/data-export" className="block p-4 border rounded-lg hover:bg-gray-50 transition">
+                <h3 className="font-semibold text-gray-900">Export Data</h3>
+                <p className="text-sm text-gray-600">Request a GDPR data export</p>
               </a>
             </div>
           </div>
@@ -216,9 +229,15 @@ export function AccountSettingsPage() {
             <p className="text-sm text-red-800 mb-4">
               Once you delete your account, there is no going back. Please be certain.
             </p>
-            <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+            <a href="/account/closure" className="inline-flex px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
               Delete Account
-            </button>
+            </a>
+            <a
+              href="/account/closure/cancel"
+              className="ml-3 inline-flex px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-100 transition"
+            >
+              Cancel Deletion
+            </a>
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { CheckCircle, Copy, Download, Lock, ShieldCheck } from 'lucide-react';
 import { userAPI } from '../../services/api';
+import OTPInput from '../components/OTPInput';
 
 type Step = 'intro' | 'scan' | 'verify' | 'backup' | 'done';
 
@@ -143,13 +144,7 @@ export default function TwoFactorSetup() {
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Enter the 6-digit code from your authenticator app.
               </p>
-              <input
-                type="text"
-                value={token}
-                onChange={(e) => setToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697] text-center tracking-widest"
-                placeholder="000000"
-              />
+              <OTPInput value={token} onChange={setToken} />
               {error && (
                 <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">
                   {error}

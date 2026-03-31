@@ -24,7 +24,7 @@ export default function AnomalyDetection() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
       <div className="max-w-5xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
@@ -36,7 +36,7 @@ export default function AnomalyDetection() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
           {loading ? (
             <div className="p-6 text-sm text-gray-500">Loading anomalies...</div>
           ) : anomalies.length === 0 ? (
