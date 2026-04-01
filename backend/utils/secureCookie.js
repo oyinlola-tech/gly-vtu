@@ -1,18 +1,31 @@
 import crypto from 'crypto';
 
-// CRITICAL: COOKIE_ENC_SECRET must be a separate, strong secret (≥32 chars)
+// CRITICAL: COOKIE_ENC_SECRET must be a separate, strong secret (>=32 chars)
 // DO NOT fall back to JWT_SECRET - each secret serves a different purpose
-const DEFAULT_SECRET = process.env.COOKIE_ENC_SECRET;
-if (!DEFAULT_SECRET) {
+const COOKIE_ENC_SECRET = process.env.COOKIE_ENC_SECRET;
+if (!COOKIE_ENC_SECRET) {
   throw new Error(
-    'COOKIE_ENC_SECRET environment variable is required and must not fall back to JWT_SECRET. ' +
-    'Generate a strong 32+ character random string and set it separately.'
+    'CRITICAL: COOKIE_ENC_SECRET environment variable must be set. ' +
+    'It must be different from JWT_SECRET. ' +
+    'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
   );
 }
+if (COOKIE_ENC_SECRET.length < 32) {
+  throw new Error('CRITICAL: COOKIE_ENC_SECRET must be at least 32 characters');
+}
+
+const ENCRYPTION_SALT = 'gly-vtu-cookie-encryption';
+const ITERATIONS = 100000;
 
 function getKey() {
-  // Derive a 32-byte key from the configured secret.
-  return crypto.createHash('sha256').update(String(DEFAULT_SECRET)).digest();
+  // Derive a 32-byte key from the configured secret using PBKDF2.
+  return crypto.pbkdf2Sync(
+    String(COOKIE_ENC_SECRET),
+    ENCRYPTION_SALT,
+    ITERATIONS,
+    32,
+    'sha256'
+  );
 }
 
 export function encryptCookieValue(value) {
@@ -43,7 +56,7 @@ export function decryptCookieValue(value) {
     decipher.setAuthTag(tag);
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
     return plaintext.toString('utf8');
-  } catch (err) {
+  } catch (_) {
     return null;
   }
 }

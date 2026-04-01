@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
   ChevronLeft,
@@ -127,7 +127,7 @@ export default function SecurityCenter() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-24 rounded-b-[24px]">
         <div className="flex items-center gap-4">
-          <Link to="/more" className="text-white">
+          <Link to="/more" className="text-white" aria-label="Back to settings">
             <ChevronLeft size={24} />
           </Link>
           <div>

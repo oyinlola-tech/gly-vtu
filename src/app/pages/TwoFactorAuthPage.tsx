@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { AlertCircle, CheckCircle, Copy, Eye, EyeOff, Smartphone, RefreshCw } from 'lucide-react';
+import { AlertCircle, CheckCircle, Copy, Smartphone } from 'lucide-react';
 import { authAPI } from '../../services/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -21,7 +21,6 @@ export function TwoFactorAuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [showBackupCodes, setShowBackupCodes] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const codeInputRef = useRef<HTMLInputElement>(null);
   const [confirmDisable, setConfirmDisable] = useState(false);
@@ -155,7 +154,7 @@ export function TwoFactorAuthPage() {
 
               {/* Manual Entry */}
               <div>
-                <p className="text-sm text-gray-600 mb-3">Can't scan? Enter this code manually:</p>
+                <p className="text-sm text-gray-600 mb-3">Can&apos;t scan? Enter this code manually:</p>
                 <div className="bg-gray-100 p-4 rounded-lg font-mono text-center text-lg tracking-widest text-gray-900">
                   {state.secret}
                 </div>
@@ -163,10 +162,11 @@ export function TwoFactorAuthPage() {
 
               {/* Verification Code Input */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label htmlFor="verifyTotp" className="block text-sm font-medium text-gray-700 mb-3">
                   Enter verification code from your authenticator app
                 </label>
                 <input
+                  id="verifyTotp"
                   ref={codeInputRef}
                   type="text"
                   inputMode="numeric"
@@ -352,7 +352,7 @@ export function TwoFactorAuthPage() {
           <h3 className="font-semibold text-gray-900 mb-3">Security Tips</h3>
           <ul className="space-y-2 text-sm text-gray-600">
             <li>• Keep your backup codes safe - store them offline or in a secure password manager</li>
-            <li>• Don't share your authenticator app with anyone</li>
+            <li>• Don&apos;t share your authenticator app with anyone</li>
             <li>• If you lose access to your authenticator, use a backup code to regain access</li>
             <li>• Enable 2FA on all important accounts, not just this one</li>
             <li>• Use a strong, unique password in combination with 2FA</li>

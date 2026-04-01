@@ -5,13 +5,15 @@ import { walletAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
+import CurrencyInput from '../components/CurrencyInput';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function SendToUser() {
   const navigate = useNavigate();
   const { verifyPin } = useAuth();
   const [formData, setFormData] = useState({
     recipient: '',
-    amount: '',
+    amount: 0,
     narration: '',
   });
   const [showPINInput, setShowPINInput] = useState(false);
@@ -35,7 +37,7 @@ export default function SendToUser() {
 
     try {
       const response = await walletAPI.sendMoney({
-        amount: parseFloat(formData.amount),
+        amount: Number(formData.amount || 0),
         to: formData.recipient,
         pin,
         channel: 'internal',
@@ -43,7 +45,7 @@ export default function SendToUser() {
       navigate('/transaction-success', {
         state: {
           transaction: response,
-          amount: parseFloat(formData.amount),
+          amount: Number(formData.amount || 0),
           recipientName: formData.recipient,
           recipientBank: 'GLY VTU',
         },
@@ -60,10 +62,13 @@ export default function SendToUser() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-24 rounded-b-[24px]">
         <div className="flex items-center gap-4 mb-6">
-          <Link to="/send" className="text-white">
+          <Link to="/send" className="text-white" aria-label="Back to send options">
             <ChevronLeft size={24} />
           </Link>
           <h1 className="text-xl font-bold text-white">Send to GLY VTU User</h1>
+        </div>
+        <div className="text-white/80 text-xs">
+          <Breadcrumbs items={[{ label: 'Send', href: '/send' }, { label: 'GLY VTU User' }]} />
         </div>
       </div>
 
@@ -77,10 +82,11 @@ export default function SendToUser() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="recipient" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Recipient (Email or Phone)
               </label>
               <input
+                id="recipient"
                 type="text"
                 value={formData.recipient}
                 onChange={(e) => setFormData({ ...formData, recipient: e.target.value })}
@@ -91,27 +97,23 @@ export default function SendToUser() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Amount
               </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
-                <input
-                  type="number"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                  placeholder="0.00"
-                  required
-                />
-              </div>
+              <CurrencyInput
+                value={formData.amount}
+                onChange={(value) => setFormData({ ...formData, amount: value })}
+                inputId="amount"
+                ariaLabel="Amount"
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="narration" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Narration (Optional)
               </label>
               <input
+                id="narration"
                 type="text"
                 value={formData.narration}
                 onChange={(e) => setFormData({ ...formData, narration: e.target.value })}

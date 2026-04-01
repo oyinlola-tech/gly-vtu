@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAdminAuth } from '../../../contexts/AdminAuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -52,10 +52,11 @@ export default function AdminLogin() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label htmlFor="adminEmail" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Email
             </label>
             <input
+              id="adminEmail"
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -65,10 +66,11 @@ export default function AdminLogin() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label htmlFor="adminPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Password
             </label>
             <input
+              id="adminPassword"
               type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -79,10 +81,11 @@ export default function AdminLogin() {
           </div>
           {totpRequired && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="adminTotp" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Authenticator Code
               </label>
               <input
+                id="adminTotp"
                 type="text"
                 value={formData.totp}
                 onChange={(e) => setFormData({ ...formData, totp: e.target.value })}

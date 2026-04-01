@@ -4,6 +4,7 @@ import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission, rolePermissions } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -64,7 +65,7 @@ router.post('/', requireAdmin, requirePermission('admin:manage'), async (req, re
     ip: req.ip,
     userAgent: req.headers['user-agent'],
     metadata: { role },
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.create)', { error: logger.format(err) }));
 
   return res.status(201).json({ message: 'Admin created' });
 });
@@ -91,7 +92,7 @@ router.put('/:id/role', requireAdmin, requirePermission('admin:manage'), async (
     ip: req.ip,
     userAgent: req.headers['user-agent'],
     metadata: { role },
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.role.update)', { error: logger.format(err) }));
   return res.json({ message: 'Role updated' });
 });
 

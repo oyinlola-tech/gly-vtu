@@ -29,15 +29,33 @@ import {
 import zxcvbn from 'zxcvbn';
 import { getKycLimitConfig } from '../utils/kycLimits.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
-import { changePasswordSchema, validateRequest } from '../middleware/requestValidation.js';
+import {
+  changePasswordSchema,
+  validateRequest,
+  updateProfileSchema,
+  kycSubmissionSchema,
+} from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
 import { applyUserPII, decryptJson, encryptJson, hashPhone, encryptPII } from '../utils/encryption.js';
 import { runKycVerification } from '../utils/kycVerification.js';
 import crypto from 'crypto';
+import Joi from 'joi';
 
 const router = express.Router();
 const MIN_PASSWORD_LENGTH = 10;
 const MIN_ZXCVBN_SCORE = 3;
+const kycPayloadSchema = Joi.object({
+  bvn: Joi.string().length(11).pattern(/^\d+$/).optional(),
+  nin: Joi.string().length(11).pattern(/^\d+$/).optional(),
+  dob: Joi.date().max('now').min('1930-01-01').optional(),
+  address: Joi.string().min(10).max(500).optional(),
+  phone: Joi.string().pattern(/^(\+234|0)[789][0-9]{9}$/).optional(),
+}).unknown(false);
+
+const ALLOWED_UPDATE_FIELDS = {
+  fullName: 'full_name',
+  phone: 'phone',
+};
 
 function validatePasswordStrength(password) {
   if (!password || password.length < MIN_PASSWORD_LENGTH) {
@@ -75,7 +93,7 @@ router.get('/profile', requireUser, async (req, res) => {
   return res.json({ ...safeRow, kyc_payload: kycPayload });
 });
 
-router.put('/profile', requireUser, async (req, res) => {
+router.put('/profile', requireUser, validateRequest(updateProfileSchema), async (req, res) => {
   /*
     #swagger.tags = ['User']
     #swagger.summary = 'Update profile'
@@ -88,7 +106,7 @@ router.put('/profile', requireUser, async (req, res) => {
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { fullName, phone } = req.body || {};
+  const { fullName, phone } = req.validated || req.body || {};
   if (!fullName && !phone) return res.status(400).json({ error: 'Missing fields' });
 
   if (phone) {
@@ -102,26 +120,32 @@ router.put('/profile', requireUser, async (req, res) => {
 
   const updates = [];
   const values = [];
-  if (fullName) {
-    updates.push('full_name = ?');
-    updates.push('full_name_encrypted = ?');
-    values.push(null);
-    values.push(encryptPII(fullName, req.user.sub));
-  }
-  if (phone) {
-    updates.push('phone = ?');
-    updates.push('phone_encrypted = ?');
-    updates.push('phone_hash = ?');
-    values.push(null);
-    values.push(encryptPII(phone, req.user.sub));
-    values.push(hashPhone(phone));
+  const payload = { fullName, phone };
+
+  for (const [field, dbCol] of Object.entries(ALLOWED_UPDATE_FIELDS)) {
+    const value = payload[field];
+    if (!value) continue;
+    if (dbCol === 'full_name') {
+      updates.push('full_name = ?');
+      updates.push('full_name_encrypted = ?');
+      values.push(null);
+      values.push(encryptPII(value, req.user.sub));
+    }
+    if (dbCol === 'phone') {
+      updates.push('phone = ?');
+      updates.push('phone_encrypted = ?');
+      updates.push('phone_hash = ?');
+      values.push(null);
+      values.push(encryptPII(value, req.user.sub));
+      values.push(hashPhone(value));
+    }
   }
   values.push(req.user.sub);
   await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
   return res.json({ message: 'Profile updated' });
 });
 
-router.put('/kyc', requireUser, async (req, res) => {
+router.put('/kyc', requireUser, validateRequest(kycSubmissionSchema), async (req, res) => {
   /*
     #swagger.tags = ['User']
     #swagger.summary = 'Submit KYC data'
@@ -134,8 +158,22 @@ router.put('/kyc', requireUser, async (req, res) => {
     #swagger.responses[200] = { description: 'Submitted', schema: { $ref: '#/definitions/MessageResponse' } }
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { level, payload } = req.body || {};
+  const { level, payload } = req.validated || req.body || {};
   if (!level || !payload) return res.status(400).json({ error: 'Missing KYC data' });
+  const { error, value } = kycPayloadSchema.validate(payload, {
+    abortEarly: false,
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({
+      error: 'KYC validation failed',
+      details: error.details.map((detail) => ({
+        field: detail.path.join('.'),
+        message: detail.message,
+      })),
+    });
+  }
+  const cleanedPayload = value || {};
   const targetLevel = Number(level);
   if (![2, 3].includes(targetLevel)) return res.status(400).json({ error: 'Invalid level' });
 
@@ -149,7 +187,7 @@ router.put('/kyc', requireUser, async (req, res) => {
   if (!user) return res.status(404).json({ error: 'Not found' });
 
   if (targetLevel === 2) {
-    if (!payload.bvn && !payload.nin) {
+    if (!cleanedPayload.bvn && !cleanedPayload.nin) {
       logSecurityEvent({
         type: 'kyc.validation.failed',
         severity: 'low',
@@ -161,7 +199,7 @@ router.put('/kyc', requireUser, async (req, res) => {
       }).catch(() => null);
       return res.status(400).json({ error: 'BVN or NIN is required for Level 2' });
     }
-    if (!payload.dob) {
+    if (!cleanedPayload.dob) {
       logSecurityEvent({
         type: 'kyc.validation.failed',
         severity: 'low',
@@ -175,7 +213,7 @@ router.put('/kyc', requireUser, async (req, res) => {
     }
   }
   if (targetLevel === 3) {
-    if (!payload.address) {
+    if (!cleanedPayload.address) {
       logSecurityEvent({
         type: 'kyc.validation.failed',
         severity: 'low',
@@ -192,8 +230,8 @@ router.put('/kyc', requireUser, async (req, res) => {
     }
   }
 
-  if (payload.phone && payload.phone !== user.phone) {
-    const phoneHash = hashPhone(payload.phone);
+  if (cleanedPayload.phone && cleanedPayload.phone !== user.phone) {
+    const phoneHash = hashPhone(cleanedPayload.phone);
     const [existing] = await pool.query(
       'SELECT id FROM users WHERE phone_hash = ? AND id <> ? LIMIT 1',
       [phoneHash, req.user.sub]
@@ -201,14 +239,14 @@ router.put('/kyc', requireUser, async (req, res) => {
     if (existing.length) return res.status(409).json({ error: 'Phone already in use' });
     await pool.query(
       'UPDATE users SET phone = ?, phone_encrypted = ?, phone_hash = ? WHERE id = ?',
-      [null, encryptPII(payload.phone, req.user.sub), phoneHash, req.user.sub]
+      [null, encryptPII(cleanedPayload.phone, req.user.sub), phoneHash, req.user.sub]
     );
   }
 
   const existingPayload =
     decryptJson(user?.kyc_payload_encrypted, req.user.sub) ||
     (user?.kyc_payload ? JSON.parse(user.kyc_payload) : {});
-  const mergedPayload = { ...existingPayload, ...payload };
+  const mergedPayload = { ...existingPayload, ...cleanedPayload };
 
   await pool.query(
     'UPDATE users SET kyc_level = ?, kyc_status = ?, kyc_payload = ?, kyc_payload_encrypted = ? WHERE id = ?',
@@ -270,9 +308,9 @@ router.put('/kyc', requireUser, async (req, res) => {
             name: user.full_name,
             accountNumber: account.account_number,
             bankName: account.bank_name,
-          }).catch(console.error);
+          }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
         }
-      } catch (err) {
+      } catch (_) {
         // Keep KYC submission; reserved account can be retried later.
       }
     }
@@ -613,7 +651,7 @@ router.post('/pin/setup', requireUser, async (req, res) => {
     entityId: req.user.sub,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
   return res.json({ message: 'Transaction PIN created' });
 });
 
@@ -643,7 +681,7 @@ router.post('/pin/change', requireUser, async (req, res) => {
     entityId: req.user.sub,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
   return res.json({ message: 'Transaction PIN updated' });
 });
 
@@ -697,7 +735,7 @@ router.post('/biometric', requireUser, async (req, res) => {
     entityId: req.user.sub,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
   return res.json({ message: 'Biometric preference updated' });
 });
 
@@ -939,7 +977,7 @@ router.post('/security-question/set', requireUser, async (req, res) => {
     entityId: req.user.sub,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
   return res.json({ message: 'Security question updated' });
 });
 
@@ -964,7 +1002,7 @@ router.post('/security-question/enable', requireUser, async (req, res) => {
     entityId: req.user.sub,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
   return res.json({ message: enabled ? 'Security question enabled' : 'Security question disabled' });
 });
 
@@ -1065,3 +1103,4 @@ router.post('/totp/disable', requireUser, async (req, res) => {
 });
 
 export default router;
+

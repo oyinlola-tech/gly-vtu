@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { motion } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import OTPInput from '../components/OTPInput';
 import { Eye, EyeOff } from 'lucide-react';
 import { tokenStore } from '../../services/api';
 
@@ -139,10 +140,11 @@ export default function Login() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="loginEmail" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email
               </label>
               <input
+                id="loginEmail"
                 type="text"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -153,11 +155,12 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="loginPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Password
               </label>
               <div className="relative">
                 <input
+                  id="loginPassword"
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -169,6 +172,7 @@ export default function Login() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -178,23 +182,19 @@ export default function Login() {
             {totpRequired && (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label id="loginTotpLabel" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Authenticator Code
                   </label>
-                  <input
-                    type="text"
-                    value={totpCode}
-                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697] text-center tracking-widest"
-                    placeholder="000000"
-                    required
-                  />
+                  <div className="flex justify-center" role="group" aria-labelledby="loginTotpLabel">
+                    <OTPInput value={totpCode} onChange={setTotpCode} />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="loginBackupCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Backup Code (optional)
                   </label>
                   <input
+                    id="loginBackupCode"
                     type="text"
                     value={backupCode}
                     onChange={(e) => setBackupCode(e.target.value.trim())}
@@ -225,7 +225,7 @@ export default function Login() {
           </form>
 
           <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <Link to="/register" className="text-[#235697] font-semibold">
               Sign Up
             </Link>

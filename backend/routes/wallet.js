@@ -11,6 +11,8 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { checkWithdrawalAnomaly } from '../utils/anomalies.js';
 import { applyUserPII, hashEmail, hashPhone } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
+import { validateRequest, walletSendSchema, walletReceiveSchema } from '../middleware/requestValidation.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -31,7 +33,7 @@ router.get('/balance', requireUser, async (req, res) => {
   return res.json(rows[0]);
 });
 
-router.post('/send', requireUser, async (req, res) => {
+router.post('/send', requireUser, validateRequest(walletSendSchema), async (req, res) => {
   /*
     #swagger.tags = ['Wallet']
     #swagger.summary = 'Send money to bank or internal user'
@@ -40,13 +42,13 @@ router.post('/send', requireUser, async (req, res) => {
     #swagger.responses[200] = { description: 'Transfer created', schema: { $ref: '#/definitions/WalletSendResponse' } }
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { amount, pin, accountNumber, bankCode, accountName, to, channel } = req.body || {};
+  const { amount, pin, accountNumber, bankCode, accountName, to, channel } = req.validated || req.body || {};
   const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
   const idem = await checkIdempotency({
     userId: req.user.sub,
     key: idemKey,
     route: 'wallet.send',
-    body: req.body,
+    body: req.validated || req.body,
   });
   if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
   if (idem.hit) return res.json(idem.response || {});
@@ -242,7 +244,7 @@ router.post('/send', requireUser, async (req, res) => {
         isBank ? `Recipient: ${accountName} (${accountNumber})` : `Recipient: ${to}`,
         `Reference: ${reference}`,
       ],
-    }).catch(console.error);
+    }).catch((err) => logger.error('Receipt email send error (wallet)', { error: logger.format(err) }));
     if (!isBank) {
       const [[recipientRaw]] = await pool.query(
         'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
@@ -258,7 +260,9 @@ router.post('/send', requireUser, async (req, res) => {
           `Sender: ${sender.full_name}`,
           `Reference: ${reference}`,
         ],
-      }).catch(console.error);
+      }).catch((err) =>
+        logger.error('Receipt email send error (wallet recipient)', { error: logger.format(err) })
+      );
     }
     logAudit({
       actorType: 'user',
@@ -269,7 +273,7 @@ router.post('/send', requireUser, async (req, res) => {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
       metadata: isBank ? { bankCode, bankName, accountNumber } : { to },
-    }).catch(console.error);
+    }).catch((err) => logger.error('Audit log failed (wallet.send)', { error: logger.format(err) }));
     if (isBank) {
       checkWithdrawalAnomaly({
         userId: req.user.sub,
@@ -283,15 +287,15 @@ router.post('/send', requireUser, async (req, res) => {
       reference,
       status: isBank ? 'pending' : 'success',
     });
-  } catch (err) {
+  } catch (_) {
     await conn.rollback();
-    return respond(500, { error: 'Transfer failed' });
+    return res.status(500).json({ error: 'Transfer failed' });
   } finally {
     conn.release();
   }
 });
 
-router.post('/receive', requireUser, async (req, res) => {
+router.post('/receive', requireUser, validateRequest(walletReceiveSchema), async (req, res) => {
   /*
     #swagger.tags = ['Wallet']
     #swagger.summary = 'Request money from another user'
@@ -299,7 +303,7 @@ router.post('/receive', requireUser, async (req, res) => {
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/WalletReceiveRequest' } }
     #swagger.responses[200] = { description: 'Request created', schema: { $ref: '#/definitions/WalletReceiveResponse' } }
   */
-  const { amount, note } = req.body || {};
+  const { amount, note } = req.validated || req.body || {};
   const numericAmount = Number(amount);
   if (!numericAmount || numericAmount <= 0) {
     return res.status(400).json({ error: 'Invalid amount' });

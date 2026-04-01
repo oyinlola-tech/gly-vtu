@@ -10,6 +10,7 @@ export default function Cards() {
   const virtualCardReady = virtualCardStatus === 'live';
   const [cards, setCards] = useState<any[]>([]);
   const [amount, setAmount] = useState('');
+  const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -35,12 +36,16 @@ export default function Cards() {
   }, []);
 
   const handleCreate = async () => {
-    if (!amount) return;
+    if (!amount || pin.length !== 6) {
+      setError('Enter amount and 6-digit PIN to create a card.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      await cardsAPI.create(Number(amount));
+      await cardsAPI.create(Number(amount), 'NGN', pin);
       setAmount('');
+      setPin('');
       await loadCards();
     } catch (err) {
       setError('Unable to create card. Complete KYC and ensure enough balance.');
@@ -260,7 +265,7 @@ export default function Cards() {
           {error && (
             <p className="text-xs text-red-500 mb-2">{error}</p>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-3">
             <div className="relative flex-1">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
               <input
@@ -271,9 +276,18 @@ export default function Cards() {
                 placeholder="Enter amount"
               />
             </div>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-full px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+              placeholder="Enter 6-digit PIN"
+            />
             <button
               onClick={handleCreate}
-              disabled={!virtualCardReady || loading || !amount}
+              disabled={!virtualCardReady || loading || !amount || pin.length !== 6}
               className="bg-gradient-to-r from-[#235697] to-[#114280] text-white px-4 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create'}

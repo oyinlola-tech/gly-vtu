@@ -44,6 +44,7 @@ export default function OTPInput({
         <input
           key={idx}
           data-otp={idx}
+          aria-label={`OTP digit ${idx + 1}`}
           inputMode="numeric"
           autoComplete={idx === 0 ? 'one-time-code' : 'off'}
           value={digit}

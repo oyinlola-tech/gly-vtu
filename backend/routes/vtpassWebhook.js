@@ -6,6 +6,7 @@ import { sanitizeVtpassPayload } from '../utils/sanitize.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { webhookLimiter } from '../middleware/rateLimiters.js';
 import { applyUserPII } from '../utils/encryption.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -17,11 +18,8 @@ function getRequestIp(req) {
   return req.ip;
 }
 
-function verifyVtpassWebhook(req) {
-  const secret = (process.env.VTPASS_WEBHOOK_SECRET || '').trim();
-  if (!secret) {
-    throw new Error('VTPASS_WEBHOOK_SECRET not configured');
-  }
+function verifyVtpassWebhook(req, secret) {
+  if (!secret) return false;
   const signature = (req.headers['x-vtpass-signature'] || '').toString();
   if (!signature) return false;
   const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody : Buffer.from(req.rawBody || '');
@@ -40,7 +38,14 @@ function ipAllowed(req) {
     .map((ip) => ip.trim())
     .filter(Boolean);
   if (!list.length) {
-    if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_ANY_WEBHOOK_IP === 'true') {
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('VTPASS_WEBHOOK_IPS not configured in production', {
+        severity: 'critical',
+      });
+      return false;
+    }
+    if (process.env.ALLOW_ANY_WEBHOOK_IP === 'true') {
+      logger.warn('Webhook IP validation disabled (dev only)');
       return true;
     }
     return false;
@@ -50,35 +55,15 @@ function ipAllowed(req) {
 }
 
 router.post('/', webhookLimiter, async (req, res) => {
-  let signatureValid = false;
-  try {
-    signatureValid = verifyVtpassWebhook(req);
-  } catch (err) {
-    logSecurityEvent({
-      type: 'webhook.vtpass.signature_error',
-      severity: 'high',
-      actorType: 'system',
-      ip: getRequestIp(req),
-      userAgent: req.headers['user-agent'],
-      metadata: { error: err.message },
-    }).catch(() => null);
-    return res.status(401).json({ error: 'Signature verification failed' });
+  const secret = (process.env.VTPASS_WEBHOOK_SECRET || '').trim();
+  if (!secret) {
+    logger.error('CRITICAL: VTPASS_WEBHOOK_SECRET not configured');
+    return res.status(503).json({
+      success: false,
+      error: 'Service unavailable - webhook secret not configured',
+    });
   }
 
-  if (!signatureValid) {
-    logSecurityEvent({
-      type: 'webhook.vtpass.invalid',
-      severity: 'high',
-      actorType: 'system',
-      ip: getRequestIp(req),
-      userAgent: req.headers['user-agent'],
-      metadata: {
-        signature: Boolean(req.headers['x-vtpass-signature']),
-        ipAllowed: ipAllowed(req),
-      },
-    }).catch(() => null);
-    return res.status(401).json({ error: 'Invalid signature' });
-  }
   if (!ipAllowed(req)) {
     logSecurityEvent({
       type: 'webhook.vtpass.ip_rejected',
@@ -89,6 +74,22 @@ router.post('/', webhookLimiter, async (req, res) => {
       metadata: { ip: getRequestIp(req) },
     }).catch(() => null);
     return res.status(403).json({ error: 'IP not whitelisted' });
+  }
+
+  const signatureValid = verifyVtpassWebhook(req, secret);
+  if (!signatureValid) {
+    logSecurityEvent({
+      type: 'webhook.vtpass.invalid',
+      severity: 'high',
+      actorType: 'system',
+      ip: getRequestIp(req),
+      userAgent: req.headers['user-agent'],
+      metadata: {
+        signature: Boolean(req.headers['x-vtpass-signature']),
+        ipAllowed: true,
+      },
+    }).catch(() => null);
+    return res.status(401).json({ error: 'Invalid signature' });
   }
   const payload = req.body || {};
   const type = payload.type || '';
@@ -145,7 +146,9 @@ router.post('/', webhookLimiter, async (req, res) => {
           `Amount: NGN ${Number(tx.amount || 0).toFixed(2)}`,
           `Total: NGN ${Number(tx.total || 0).toFixed(2)}`,
         ],
-      }).catch(console.error);
+      }).catch((err) =>
+        logger.error('Receipt email send error (vtpass)', { error: logger.format(err) })
+      );
     }
   }
 

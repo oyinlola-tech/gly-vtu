@@ -35,28 +35,28 @@ const typeConfig: Record<SecurityAlertType, { bg: string; border: string; text: 
     bg: 'bg-blue-50',
     border: 'border-blue-200',
     text: 'text-blue-800',
-    icon: 'â„¹ï¸',
+    icon: 'i',
     accentBg: 'bg-blue-100'
   },
   warning: {
     bg: 'bg-yellow-50',
     border: 'border-yellow-200',
     text: 'text-yellow-800',
-    icon: 'âš ï¸',
+    icon: '!',
     accentBg: 'bg-yellow-100'
   },
   error: {
     bg: 'bg-red-50',
     border: 'border-red-200',
     text: 'text-red-800',
-    icon: 'ðŸš¨',
+    icon: '!',
     accentBg: 'bg-red-100'
   },
   success: {
     bg: 'bg-green-50',
     border: 'border-green-200',
     text: 'text-green-800',
-    icon: 'âœ“',
+    icon: 'ok',
     accentBg: 'bg-green-100'
   }
 };
@@ -120,7 +120,7 @@ export function SecurityAlert({
             className="flex-shrink-0 text-lg opacity-60 hover:opacity-100 transition-opacity"
             aria-label="Dismiss alert"
           >
-            âœ•
+            x
           </button>
         )}
       </div>

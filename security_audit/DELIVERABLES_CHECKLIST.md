@@ -14,7 +14,7 @@
   - Critical issues highlighted
   - Implementation roadmap
   - Navigation guide
-  - **Location:** `/c/Users/donri/OneDrive/Desktop/GLY-VTU/SECURITY_AUDIT_EXECUTIVE_SUMMARY.md`
+  - **Location:** `/c/Users/donri/OneDrive/Desktop/GLY-VTU/security_audit/SECURITY_AUDIT_EXECUTIVE_SUMMARY.md`
 
 - [x] **SECURITY_AUDIT_REPORT.md** (15 Sections, 15,000+ words)
   - Complete vulnerability analysis
@@ -216,7 +216,7 @@
   
 - [ ] Task 2: Generate New Secrets
   - Command: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-  - Status: Ready to execute
+  - Status: Manual step (env update required)
 
 - [x] Task 3: Remove Hardcoded Defaults
   - Files: server.js, auth.js, adminAuth.js, secureCookie.js
@@ -228,7 +228,7 @@
 
 - [ ] Task 5: Webhook IP Whitelist
   - File: Configuration needed
-  - Status: Documented in Section 7.1
+  - Status: Enforcement in code; requires environment IPs
 
 - [x] Task 6: Idempotency Locking
   - Implementation: Database-level locking
@@ -238,17 +238,17 @@
   - Implementation: Rate limiter update
   - Status: Documented in Section 1.2
 
-- [ ] Task 8: Request Validation
+- [x] Task 8: Request Validation
   - File: `backend/middleware/requestValidation.js` (READY)
-  - Status: Copy & integrate
+  - Status: Integrated into routes
 
 ### Phase 2: HIGH (Week 2-4)
 
 - [x] Task 9: CSRF Token Configuration (Double-Submit)
 - [x] Task 10: Enhanced Logging (Redaction)
 - [x] Task 11: Token Cleanup Jobs
-- [ ] Task 12: API Key Management
-- [ ] Task 13: Database Field Whitelisting
+- [x] Task 12: API Key Management
+- [x] Task 13: Database Field Whitelisting
 
 All documented and ready for implementation in SECURITY_IMPLEMENTATION_CHECKLIST.md
 

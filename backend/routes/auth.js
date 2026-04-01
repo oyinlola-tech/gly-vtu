@@ -46,6 +46,7 @@ const MIN_ZXCVBN_SCORE = 3;
 const LOGIN_LOCK_MAX = Number(process.env.LOGIN_LOCK_MAX || 5);
 const LOGIN_LOCK_MINUTES = Number(process.env.LOGIN_LOCK_MINUTES || 15);
 const LOGIN_LOCK_WINDOW_MINUTES = Number(process.env.LOGIN_LOCK_WINDOW_MINUTES || 15);
+const DEVICE_ID_COOKIE = 'device_id';
 
 function validatePasswordStrength(password) {
   if (!password || password.length < MIN_PASSWORD_LENGTH) {
@@ -86,6 +87,25 @@ function issueCsrf(res) {
   const token = generateCsrfToken();
   setCsrfCookie(res, token);
   return token;
+}
+
+function logAsyncError(context, err) {
+  logger.error(context, { error: logger.format(err) });
+}
+
+function isValidDeviceId(value) {
+  return typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value);
+}
+
+function setDeviceIdCookie(res, deviceId) {
+  res.cookie(DEVICE_ID_COOKIE, deviceId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProd,
+    maxAge: 365 * 24 * 60 * 60 * 1000,
+    path: '/',
+    domain: process.env.COOKIE_DOMAIN || undefined,
+  });
 }
 
 function requireCsrfForCookieRefresh(req) {
@@ -227,10 +247,12 @@ router.post('/register', validateRequest(registrationSchema), async (req, res) =
         name: fullName,
         accountNumber: account.account_number,
         bankName: account.bank_name,
-      }).catch(console.error);
+      }).catch((err) => logAsyncError('Send welcome email failed', err));
     } catch (err) {
       logger.warn('Virtual account creation failed', { error: logger.format(err) });
-      sendWelcomeEmail({ to: email, name: fullName }).catch(console.error);
+      sendWelcomeEmail({ to: email, name: fullName }).catch((err) =>
+        logAsyncError('Send welcome email failed', err)
+      );
     }
     logAudit({
       actorType: 'user',
@@ -240,7 +262,7 @@ router.post('/register', validateRequest(registrationSchema), async (req, res) =
       entityId: userId,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
-    }).catch(console.error);
+    }).catch((err) => logAsyncError('Audit log failed (user.register)', err));
     return res.status(201).json({ message: 'Registered successfully' });
   } catch (err) {
     await pool.query('DELETE FROM wallets WHERE user_id = ?', [userId]);
@@ -262,7 +284,8 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
     #swagger.responses[401] = { description: 'Invalid credentials', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
   // Use validated request data
-  const { email, password, deviceId, totp } = req.validated || req.body || {};
+  const { email, password, deviceId: bodyDeviceId } = req.validated || req.body || {};
+  const deviceId = bodyDeviceId || req.cookies?.[DEVICE_ID_COOKIE] || null;
 
   const [rows] = await pool.query('SELECT * FROM users WHERE email_hash = ? LIMIT 1', [
     hashEmail(email),
@@ -273,13 +296,17 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
   if (user.login_locked_until && new Date(user.login_locked_until) > new Date()) {
     return res.status(403).json({ error: 'Account temporarily locked. Try later.' });
   }
+  if (user.login_locked_until && new Date(user.login_locked_until) <= new Date()) {
+    await pool.query(
+      'UPDATE users SET login_failed_attempts = 0, login_locked_until = NULL WHERE id = ?',
+      [user.id]
+    );
+    user.login_failed_attempts = 0;
+    user.login_locked_until = null;
+  }
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) {
-    const lastFailedAt = user.last_login_failed_at ? new Date(user.last_login_failed_at) : null;
-    const withinWindow =
-      lastFailedAt &&
-      Date.now() - lastFailedAt.getTime() <= LOGIN_LOCK_WINDOW_MINUTES * 60 * 1000;
-    const nextAttempts = withinWindow ? Number(user.login_failed_attempts || 0) + 1 : 1;
+    const nextAttempts = Number(user.login_failed_attempts || 0) + 1;
     const lockedUntil =
       nextAttempts >= LOGIN_LOCK_MAX
         ? new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000)
@@ -311,7 +338,7 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
       to: user.email || email,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
-    }).catch(console.error);
+    }).catch((err) => logAsyncError('Login failed email send error', err));
     logAudit({
       actorType: 'user',
       actorId: user.id,
@@ -320,7 +347,7 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
       entityId: user.id,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
-    }).catch(console.error);
+    }).catch((err) => logAsyncError('Audit log failed (login.failed)', err));
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
@@ -349,7 +376,7 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
         entityId: user.id,
         ip: req.ip,
         userAgent: req.headers['user-agent'],
-      }).catch(console.error);
+      }).catch((err) => logAsyncError('Audit log failed (otp.device_login.requested)', err));
       return res.json({ otpRequired: true, message: 'OTP sent to email' });
     } catch (err) {
       if (err.code === 'OTP_COOLDOWN' || err.code === 'OTP_LIMIT') {
@@ -421,7 +448,8 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
     #swagger.responses[200] = { description: 'Device verified', schema: { $ref: '#/definitions/AuthLoginResponse' } }
     #swagger.responses[400] = { description: 'Invalid OTP or payload', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { email, code, deviceId, label, securityAnswer } = req.body || {};
+  const { email, code, deviceId: bodyDeviceId, label, securityAnswer } = req.body || {};
+  const deviceId = bodyDeviceId || req.cookies?.[DEVICE_ID_COOKIE] || null;
   if (!email || !deviceId) {
     return res.status(400).json({ error: 'Missing fields' });
   }
@@ -516,7 +544,7 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
     to: user.email || email,
     title: 'New Device Verified',
     message: `A new device was verified for your account. If this wasn't you, reset your password immediately.`,
-  }).catch(console.error);
+  }).catch((err) => logAsyncError('Security email send error (device verified)', err));
 
   logAudit({
     actorType: 'user',
@@ -526,7 +554,7 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
     entityId: deviceId,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logAsyncError('Audit log failed (device.verified)', err));
 
   return res.json({
     csrfToken,
@@ -567,7 +595,7 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
       entityId: rows[0].id,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
-    }).catch(console.error);
+    }).catch((err) => logAsyncError('Audit log failed (otp.password_reset.requested)', err));
   } catch (err) {
     if (err.code === 'OTP_COOLDOWN' || err.code === 'OTP_LIMIT') {
       return res.status(429).json({ error: 'Too many OTP requests. Try later.' });
@@ -608,7 +636,7 @@ router.post('/reset-password', async (req, res) => {
     to: email,
     title: 'Password Updated',
     message: 'Your GLY VTU password was changed successfully.',
-  }).catch(console.error);
+  }).catch((err) => logAsyncError('Security email send error (password reset)', err));
   logAudit({
     actorType: 'user',
     actorId: otp.user_id,
@@ -617,7 +645,7 @@ router.post('/reset-password', async (req, res) => {
     entityId: otp.user_id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logAsyncError('Audit log failed (user.password_reset)', err));
   return res.json({ message: 'Password reset successful' });
 });
 
@@ -636,7 +664,7 @@ router.post('/refresh', async (req, res) => {
   if (!requireCsrfForCookieRefresh(req)) {
     return res.status(403).json({ error: 'CSRF validation failed' });
   }
-  const deviceId = req.body?.deviceId || null;
+  const deviceId = req.body?.deviceId || req.cookies?.[DEVICE_ID_COOKIE] || null;
   if (cookieToken && !deviceId) {
     return res.status(400).json({ error: 'Device ID required' });
   }
@@ -791,6 +819,13 @@ router.post('/logout-all', requireUser, async (req, res) => {
     message: 'Logged out from all devices',
     sessionsRevoked
   });
+});
+
+router.get('/device-id', (req, res) => {
+  const existing = req.cookies?.[DEVICE_ID_COOKIE];
+  const deviceId = isValidDeviceId(existing) ? existing : crypto.randomUUID();
+  setDeviceIdCookie(res, deviceId);
+  return res.json({ deviceId });
 });
 
 router.get('/csrf', (req, res) => {

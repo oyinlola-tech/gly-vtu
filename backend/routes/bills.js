@@ -14,7 +14,6 @@ import {
   generateRequestId,
 } from '../utils/vtpass.js';
 import {
-  isNonEmptyString,
   isValidAmount,
   isValidPhone,
   isValidServiceId,
@@ -27,6 +26,13 @@ import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
+import {
+  validateRequest,
+  billsQuoteSchema,
+  billsPaySchema,
+  billsPayCardSchema,
+} from '../middleware/requestValidation.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -60,7 +66,7 @@ router.get('/categories', async (req, res) => {
       });
       return res.json(mapped);
     } catch (err) {
-      console.error('VTpass categories error', err.message);
+      logger.error('VTpass categories error', { error: err.message });
     }
   }
 
@@ -108,7 +114,7 @@ router.get('/providers', async (req, res) => {
       }));
       return res.json(mapped);
     } catch (err) {
-      console.error('VTpass providers error', err.message);
+      logger.error('VTpass providers error', { error: err.message });
       return res.status(502).json({ error: 'Unable to fetch providers' });
     }
   }
@@ -143,12 +149,12 @@ router.get('/variations', async (req, res) => {
   try {
     const data = await getServiceVariations(String(serviceID));
     return res.json(data?.content || {});
-  } catch (err) {
+  } catch (_) {
     return res.status(502).json({ error: 'Unable to fetch variations' });
   }
 });
 
-router.post('/quote', requireUser, async (req, res) => {
+router.post('/quote', requireUser, validateRequest(billsQuoteSchema), async (req, res) => {
   /*
     #swagger.tags = ['Bills']
     #swagger.summary = 'Get bill payment quote'
@@ -159,7 +165,7 @@ router.post('/quote', requireUser, async (req, res) => {
       schema: { $ref: '#/definitions/BillQuoteResponse' }
     }
   */
-  const { providerCode, amount, variationCode } = req.body || {};
+  const { providerCode, amount, variationCode } = req.validated || req.body || {};
   const numericAmount = Number(amount);
   if (!providerCode || !isValidServiceId(providerCode)) {
     return res.status(400).json({ error: 'Invalid provider' });
@@ -175,7 +181,7 @@ router.post('/quote', requireUser, async (req, res) => {
         const variations = await getServiceVariations(providerCode);
         const items = variations?.content?.variations || [];
         const match = items.find((v) => v.variation_code === variationCode);
-        if (!match) return respond(400, { error: 'Invalid variation code' });
+        if (!match) return res.status(400).json({ error: 'Invalid variation code' });
         resolvedAmount = Number(match.variation_amount || match.amount || numericAmount || 0);
       }
       return res.json({
@@ -185,7 +191,7 @@ router.post('/quote', requireUser, async (req, res) => {
         total: resolvedAmount,
         currency: 'NGN',
       });
-    } catch (err) {
+    } catch (_) {
       return res.status(502).json({ error: 'Unable to fetch quote' });
     }
   }
@@ -216,7 +222,7 @@ router.post('/quote', requireUser, async (req, res) => {
   });
 });
 
-router.post('/pay', billsLimiter, requireUser, async (req, res) => {
+router.post('/pay', billsLimiter, requireUser, validateRequest(billsPaySchema), async (req, res) => {
   /*
     #swagger.tags = ['Bills']
     #swagger.summary = 'Pay a bill'
@@ -225,13 +231,13 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
     #swagger.responses[200] = { description: 'Payment success', schema: { $ref: '#/definitions/BillsPayResponse' } }
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { providerCode, amount, account, pin, variationCode, phone, subscriptionType } = req.body || {};
+  const { providerCode, amount, account, pin, variationCode, phone, subscriptionType } = req.validated || req.body || {};
   const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
   const idem = await checkIdempotency({
     userId: req.user.sub,
     key: idemKey,
     route: 'bills.pay',
-    body: req.body,
+    body: req.validated || req.body,
   });
   if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
   if (idem.hit) return res.json(idem.response || {});
@@ -321,7 +327,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
                 `Amount: NGN ${resolvedAmount.toFixed(2)}`,
                 `Reason: Insufficient balance`,
               ],
-            }).catch(console.error);
+            }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
           }
           return respond(400, { error: 'Insufficient balance' });
         }
@@ -373,7 +379,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         vtpassRes = await buyService(payload);
         const responseCode = vtpassRes?.response_description || vtpassRes?.code || '';
         status = responseCode === '000' || responseCode === 'SUCCESS' ? 'success' : 'pending';
-      } catch (err) {
+      } catch (_) {
         status = 'failed';
       }
 
@@ -413,7 +419,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
               `Amount: NGN ${resolvedAmount.toFixed(2)}`,
               `Reason: Provider failed`,
             ],
-          }).catch(console.error);
+          }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
         }
         return respond(502, { error: 'VTpass payment failed' });
       }
@@ -428,7 +434,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
             `Amount: NGN ${resolvedAmount.toFixed(2)}`,
             `Reference: ${reference}`,
           ],
-        }).catch(console.error);
+        }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
       }
       logAudit({
         actorType: 'user',
@@ -439,7 +445,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         ip: req.ip,
         userAgent: req.headers['user-agent'],
         metadata: { provider: providerCode, account: safeAccount },
-      }).catch(console.error);
+      }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
       return respond(200, {
         message: status === 'success' ? 'Bill paid' : 'Payment pending',
         reference,
@@ -447,8 +453,8 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         status,
         vtpass: vtpassRes ? sanitizeVtpassPayload(vtpassRes) : null,
       });
-    } catch (err) {
-      return respond(502, { error: 'VTpass payment failed' });
+    } catch (_) {
+      return res.status(502).json({ error: 'VTpass payment failed' });
     }
   }
 
@@ -489,7 +495,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
             `Amount: NGN ${numericAmount.toFixed(2)}`,
             `Reason: Insufficient balance`,
           ],
-        }).catch(console.error);
+        }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
       }
       return respond(400, { error: 'Insufficient balance' });
     }
@@ -534,7 +540,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
         `Total: NGN ${total.toFixed(2)}`,
         `Reference: ${reference}`,
       ],
-    }).catch(console.error);
+    }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
     logAudit({
       actorType: 'user',
       actorId: req.user.sub,
@@ -544,7 +550,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
       metadata: { provider: pricing.name, account },
-    }).catch(console.error);
+    }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
     return respond(200, { message: 'Bill paid', reference, total });
   } catch (err) {
     await conn.rollback();
@@ -557,7 +563,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
           `Amount: NGN ${numericAmount.toFixed(2)}`,
           `Reason: ${err.message || 'Processing error'}`,
         ],
-      }).catch(console.error);
+      }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
     }
     return respond(500, { error: 'Payment failed' });
   } finally {
@@ -565,7 +571,7 @@ router.post('/pay', billsLimiter, requireUser, async (req, res) => {
   }
 });
 
-router.post('/pay-card', billsLimiter, requireUser, async (req, res) => {
+router.post('/pay-card', billsLimiter, requireUser, validateRequest(billsPayCardSchema), async (req, res) => {
   /*
     #swagger.tags = ['Bills']
     #swagger.summary = 'Pay a bill with external card'
@@ -574,13 +580,13 @@ router.post('/pay-card', billsLimiter, requireUser, async (req, res) => {
     #swagger.responses[200] = { description: 'Checkout created', schema: { type: 'object' } }
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { providerCode, amount, account, variationCode } = req.body || {};
+  const { providerCode, amount, account, variationCode } = req.validated || req.body || {};
   const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
   const idem = await checkIdempotency({
     userId: req.user.sub,
     key: idemKey,
     route: 'bills.pay-card',
-    body: req.body,
+    body: req.validated || req.body,
   });
   if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
   if (idem.hit) return res.json(idem.response || {});
@@ -667,3 +673,4 @@ router.post('/pay-card', billsLimiter, requireUser, async (req, res) => {
 });
 
 export default router;
+

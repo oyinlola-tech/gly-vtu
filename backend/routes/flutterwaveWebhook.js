@@ -198,26 +198,7 @@ router.post('/', webhookLimiter, async (req, res) => {
   try {
     await conn.query('SET TRANSACTION ISOLATION LEVEL SERIALIZABLE');
     await conn.beginTransaction();
-    const [existing] = await conn.query(
-      'SELECT id FROM transactions WHERE reference = ? FOR UPDATE',
-      [reference]
-    );
-    if (existing.length) {
-      await conn.commit();
-      return res.json({ message: 'Already processed' });
-    }
-    const [[wallet]] = await conn.query(
-      'SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-      [account.user_id]
-    );
-    if (!wallet) {
-      await conn.rollback();
-      return res.status(404).json({ error: 'Wallet not found' });
-    }
-    await conn.query('UPDATE wallets SET balance = balance + ? WHERE id = ?', [
-      amount,
-      wallet.id,
-    ]);
+
     const { safe, encrypted } = buildTransactionMetadata(
       {
         provider: 'flutterwave',
@@ -227,22 +208,51 @@ router.post('/', webhookLimiter, async (req, res) => {
       },
       account.user_id
     );
-    await conn.query(
-      'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        account.user_id,
-        'topup',
-        amount,
-        0,
-        amount,
-        'success',
-        reference,
-        safe ? JSON.stringify(safe) : null,
-        encrypted,
-      ]
+
+    try {
+      // Insert first to claim the unique reference and prevent double-credit
+      await conn.query(
+        'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          account.user_id,
+          'topup',
+          amount,
+          0,
+          amount,
+          'pending',
+          reference,
+          safe ? JSON.stringify(safe) : null,
+          encrypted,
+        ]
+      );
+    } catch (err) {
+      if (err?.code === 'ER_DUP_ENTRY') {
+        await conn.rollback();
+        return res.json({ message: 'Already processed' });
+      }
+      throw err;
+    }
+
+    const [[wallet]] = await conn.query(
+      'SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      [account.user_id]
     );
+    if (!wallet) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+
+    await conn.query('UPDATE wallets SET balance = balance + ? WHERE id = ?', [
+      amount,
+      wallet.id,
+    ]);
+    await conn.query('UPDATE transactions SET status = ? WHERE reference = ?', [
+      'success',
+      reference,
+    ]);
+
     await conn.commit();
-  } catch (err) {
+  } catch (_) {
     await conn.rollback();
     return res.status(500).json({ error: 'Failed to credit wallet' });
   } finally {
@@ -264,7 +274,7 @@ router.post('/', webhookLimiter, async (req, res) => {
         `Reference: ${reference}`,
         `Bank: ${account.bank_name || 'Flutterwave'}`,
       ],
-    }).catch(console.error);
+    }).catch((err) => logger.error('Receipt email send error (flutterwave)', { error: logger.format(err) }));
   }
 
   return res.json({ message: 'OK' });

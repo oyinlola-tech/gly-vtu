@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import Breadcrumbs from '../components/Breadcrumbs';
 import type { BillProvider, BillVariation } from '../../types/bills';
 
 export default function BuyData() {
@@ -163,10 +164,13 @@ export default function BuyData() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-24 rounded-b-[24px]">
         <div className="flex items-center gap-4">
-          <Link to="/dashboard" className="text-white">
+          <Link to="/dashboard" className="text-white" aria-label="Back to dashboard">
             <ChevronLeft size={24} />
           </Link>
           <h1 className="text-xl font-bold text-white">Buy Data Bundle</h1>
+        </div>
+        <div className="mt-3 text-white/80 text-xs">
+          <Breadcrumbs items={[{ label: 'Bills', href: '/bills' }, { label: 'Data' }]} />
         </div>
       </div>
 
@@ -180,7 +184,7 @@ export default function BuyData() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <label htmlFor="dataNetwork" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                 Select Network
               </label>
               {!manualNetwork ? (
@@ -209,6 +213,7 @@ export default function BuyData() {
                 </div>
               ) : (
                 <select
+                  id="dataNetwork"
                   value={formData.network}
                   onChange={(e) => setFormData({ ...formData, network: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
@@ -224,10 +229,11 @@ export default function BuyData() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="dataPhone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Phone Number
               </label>
               <input
+                id="dataPhone"
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -246,12 +252,13 @@ export default function BuyData() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="dataAmount" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Amount
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
                 <input
+                  id="dataAmount"
                   type="number"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
@@ -270,10 +277,11 @@ export default function BuyData() {
 
             {variations.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="dataPlan" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Select Data Plan
                 </label>
                 <select
+                  id="dataPlan"
                   value={variationCode}
                   onChange={(e) => {
                     const code = e.target.value;

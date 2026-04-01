@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, User, Bot } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';

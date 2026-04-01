@@ -37,7 +37,7 @@ import adminNotificationsRoutes from './backend/routes/adminNotifications.js';
 import conversationsRoutes from './backend/routes/conversations.js';
 import adminConversationsRoutes from './backend/routes/adminConversations.js';
 import { refreshBankCache } from './backend/utils/bankCache.js';
-import { pool } from './backend/config/db.js';
+
 import { authLimiter, adminAuthLimiter, webhookLimiter } from './backend/middleware/rateLimiters.js';
 import { csrfMiddleware } from './backend/middleware/csrf.js';
 import { attachRealtime } from './backend/utils/realtime.js';
@@ -45,6 +45,7 @@ import { pruneWebhookEvents, pruneAuditLogs, pruneSecurityEvents } from './backe
 import { logger } from './backend/utils/logger.js';
 import { SecretValidator } from './backend/utils/secretValidator.js';
 import { TokenCleanupManager } from './backend/utils/tokenCleanup.js';
+import { globalErrorHandler } from './backend/middleware/errorHandler.js';
 
 dotenv.config();
 
@@ -62,7 +63,7 @@ let dbError = null;
 if (isProd) {
   const validateSecret = (name, value) => {
     if (!value || value === 'dev_secret_change_me' || value.length < 32) {
-      console.error(
+      logger.error(
         `${name} must be set to a strong value (≥32 chars) in production. ` +
         `Do not use default values or short strings.`
       );
@@ -78,7 +79,7 @@ if (isProd) {
   
   // Webhook IP whitelist is mandatory in production
   if (!process.env.FLW_WEBHOOK_IPS) {
-    console.error(
+    logger.error(
       'FLW_WEBHOOK_IPS must be set in production. ' +
       'Obtain Flutterwave webhook IP whitelists from webhook docs and set as comma-separated values.'
     );
@@ -93,7 +94,7 @@ if (isProd) {
     process.env.COOKIE_ENC_SECRET
   ];
   if (new Set(secretsArray).size < secretsArray.length) {
-    console.error(
+    logger.error(
       'ERROR: Multiple secrets must have different values in production. ' +
       'Each secret serves a different purpose: JWT_SECRET, JWT_ADMIN_SECRET, PII_ENCRYPTION_KEY, COOKIE_ENC_SECRET'
     );
@@ -118,7 +119,7 @@ const normalizedOrigins = allowedOrigins.filter((o) => o !== '*');
 // SECURITY: Validate CORS configuration in production
 if (isProd) {
   if (!normalizedOrigins.length) {
-    console.error(
+    logger.error(
       'CORS_ORIGIN must be set to specific domain(s) in production (not wildcard). ' +
       'Example: CORS_ORIGIN=https://example.com,https://admin.example.com'
     );
@@ -128,7 +129,7 @@ if (isProd) {
   // Warn about HTTP origins in production (should use HTTPS)
   const httpOrigins = normalizedOrigins.filter((o) => o.startsWith('http://'));
   if (httpOrigins.length) {
-    console.warn(
+    logger.warn(
       `WARNING: HTTP origins detected in production CORS config: ${httpOrigins.join(', ')}. ` +
       `For production, use HTTPS origins only.`
     );
@@ -403,9 +404,9 @@ async function setupSwaggerDocs(appInstance) {
   try {
     const raw = fs.readFileSync(swaggerPath, 'utf-8');
     swaggerDocument = JSON.parse(raw);
-  } catch (err) {
+  } catch (_) {
     if (process.env.NODE_ENV === 'production') {
-      console.warn('Swagger file missing. Run `npm run swagger` to generate it.');
+      logger.warn('Swagger file missing. Run `npm run swagger` to generate it.');
       return;
     }
     try {
@@ -414,7 +415,7 @@ async function setupSwaggerDocs(appInstance) {
       const raw = fs.readFileSync(swaggerPath, 'utf-8');
       swaggerDocument = JSON.parse(raw);
     } catch (genErr) {
-      console.warn('Swagger generation failed:', genErr.message);
+      logger.warn('Swagger generation failed:', genErr.message);
       return;
     }
   }
@@ -440,8 +441,7 @@ app.use((err, req, res, next) => {
   if (err?.message === 'Not allowed by CORS') {
     return res.status(403).json({ error: 'CORS blocked' });
   }
-  logger.error('Unhandled error', { error: logger.format(err) });
-  res.status(500).json({ error: 'Server error' });
+  return globalErrorHandler(err, req, res, next);
 });
 
 const PORT = Number(process.env.PORT || 3000);
@@ -453,7 +453,7 @@ async function startServer() {
   try {
     SecretValidator.validateSecrets();
   } catch (err) {
-    console.error('Secret validation failed:', err.message);
+    logger.error('Secret validation failed', { error: logger.format(err) });
     process.exit(1);
   }
 
@@ -470,10 +470,10 @@ async function startServer() {
     dbCheckedAt = new Date().toISOString();
     dbError = err?.message || String(err);
     if (isProd) {
-      console.error('Database init failed:', err);
+      logger.error('Database init failed', { error: logger.format(err) });
       process.exit(1);
     }
-    console.warn('Database init failed (dev mode). Running UI without DB.');
+    logger.warn('Database init failed (dev mode). Running UI without DB.');
   }
 
   await swaggerReady;
@@ -519,3 +519,4 @@ async function startServer() {
 }
 
 startServer();
+

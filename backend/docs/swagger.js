@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import swaggerAutogen from 'swagger-autogen';
+import { logger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -724,7 +725,7 @@ if (process.argv[1] && process.argv[1].endsWith('swagger.js')) {
       }
     })
     .catch((err) => {
-      console.error('Swagger generation failed:', err);
+      logger.error('Swagger generation failed', { error: logger.format(err) });
       process.exit(1);
     });
 }

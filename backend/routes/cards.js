@@ -11,6 +11,8 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII, decryptJson } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
+import { validateRequest, cardCreateSchema } from '../middleware/requestValidation.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -23,14 +25,14 @@ router.get('/', requireUser, async (req, res) => {
   return res.json(rows);
 });
 
-router.post('/', requireUser, async (req, res) => {
-  const { amount, currency = 'NGN' } = req.body || {};
+router.post('/', requireUser, validateRequest(cardCreateSchema), async (req, res) => {
+  const { amount, currency = 'NGN' } = req.validated || req.body || {};
   const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
   const idem = await checkIdempotency({
     userId: req.user.sub,
     key: idemKey,
     route: 'cards.create',
-    body: req.body,
+    body: req.validated || req.body,
   });
   if (!idem.ok) return res.status(idem.status).json({ error: idem.error });
   if (idem.hit) return res.json(idem.response || {});
@@ -44,7 +46,7 @@ router.post('/', requireUser, async (req, res) => {
     });
     return res.status(status).json(payload);
   }
-  const { pin } = req.body || {};
+  const { pin } = req.validated || req.body || {};
   const numericAmount = Number(amount);
   if (!isValidAmount(numericAmount, 100, 5_000_000)) {
     return respond(400, { error: 'Invalid amount' });
@@ -186,12 +188,12 @@ router.post('/', requireUser, async (req, res) => {
       entityId: card.id || '',
       ip: req.ip,
       userAgent: req.headers['user-agent'],
-    }).catch(console.error);
+    }).catch((err) => logger.error('Audit log failed (card.create)', { error: logger.format(err) }));
 
     return respond(201, { message: 'Card created', card });
-  } catch (err) {
+  } catch (_) {
     await conn.rollback();
-    return respond(500, { error: 'Card creation failed' });
+    return res.status(500).json({ error: 'Card creation failed' });
   } finally {
     conn.release();
   }

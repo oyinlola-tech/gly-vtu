@@ -229,10 +229,11 @@ export function WalletManagementPage() {
           <>
             {/* Amount Input */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-3">Amount</label>
+              <label htmlFor="topupAmount" className="block text-sm font-medium text-gray-700 mb-3">Amount</label>
               <div className="relative">
                 <span className="absolute left-4 top-3 text-gray-600 font-semibold">NGN</span>
                 <input
+                  id="topupAmount"
                   type="number"
                   value={topupAmount}
                   onChange={(e) => {

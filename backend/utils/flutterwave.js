@@ -1,26 +1,32 @@
 import crypto from 'crypto';
+import { getSecret } from './secretsManager.js';
 
 const BASE_URL = (process.env.FLW_BASE_URL || 'https://api.flutterwave.com').replace(/\/$/, '');
-const SECRET_KEY = (process.env.FLW_SECRET_KEY || '').trim();
+let cachedSecret = null;
 
-function headers() {
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${SECRET_KEY}`,
-  };
+async function getFlutterwaveSecret() {
+  if (cachedSecret) return cachedSecret;
+  cachedSecret = await getSecret('gly-vtu/flutterwave-secret-key', {
+    envFallback: 'FLW_SECRET_KEY',
+  });
+  return cachedSecret;
 }
 
 export function flutterwaveEnabled() {
-  return Boolean(SECRET_KEY);
+  return Boolean(process.env.FLW_SECRET_KEY || process.env.AWS_SECRETS_ENABLED === 'true');
 }
 
 async function flwRequest(method, path, payload) {
-  if (!SECRET_KEY) {
+  const secret = await getFlutterwaveSecret();
+  if (!secret) {
     throw new Error('Flutterwave secret key missing');
   }
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
-    headers: headers(),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${secret}`,
+    },
     body: payload ? JSON.stringify(payload) : undefined,
   });
   const data = await res.json().catch(() => ({}));
@@ -135,7 +141,7 @@ export function verifyFlutterwaveWebhook(req) {
       return false;
     }
     return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  } catch (err) {
+  } catch (_) {
     return false;
   }
 }

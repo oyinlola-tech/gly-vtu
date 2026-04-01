@@ -5,6 +5,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import { requeryService } from '../utils/vtpass.js';
 import { sendReceiptEmail } from '../utils/email.js';
 import { applyUserPII } from '../utils/encryption.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -77,7 +78,7 @@ router.post('/requery', requireAdmin, requirePermission('bills:read'), async (re
             `Amount: NGN ${Number(tx.amount || 0).toFixed(2)}`,
             `Total: NGN ${Number(tx.total || 0).toFixed(2)}`,
           ],
-        }).catch(console.error);
+        }).catch((err) => logger.error('Receipt email send error (vtpass requery)', { error: logger.format(err) }));
       }
     }
   }

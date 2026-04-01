@@ -185,7 +185,7 @@ export function SecurityActivityPage() {
           {selectedEvent.severity === 'high' && (
             <div className="mt-6 p-4 bg-red-100 border border-red-300 rounded-lg">
               <p className="text-sm text-red-800">
-                <strong>Important:</strong> If you don't recognize this activity, please change your password immediately and review your other security settings.
+                <strong>Important:</strong> If you don&apos;t recognize this activity, please change your password immediately and review your other security settings.
               </p>
             </div>
           )}
@@ -233,7 +233,7 @@ export function SecurityActivityPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredEvents.map((event, idx) => (
+          {filteredEvents.map((event, _) => (
             <button
               key={event.id}
               onClick={() => setSelectedEvent(event)}
@@ -281,11 +281,11 @@ export function SecurityActivityPage() {
           </li>
           <li className="flex gap-3">
             <span className="font-bold flex-shrink-0">2.</span>
-            <span>Review your active devices and revoke any you don't recognize</span>
+            <span>Review your active devices and revoke any you don&apos;t recognize</span>
           </li>
           <li className="flex gap-3">
             <span className="font-bold flex-shrink-0">3.</span>
-            <span>Enable two-factor authentication if you haven't already</span>
+            <span>Enable two-factor authentication if you haven&apos;t already</span>
           </li>
           <li className="flex gap-3">
             <span className="font-bold flex-shrink-0">4.</span>

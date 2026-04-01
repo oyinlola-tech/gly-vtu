@@ -14,11 +14,12 @@ import { logAudit } from '../utils/audit.js';
 import { createOtp, verifyOtp } from '../utils/otp.js';
 import { sendOtpEmail, sendSecurityEmail } from '../utils/email.js';
 import { generateCsrfToken } from '../middleware/csrf.js';
-import { otpLimiter, adminLoginLimiter } from '../middleware/rateLimiters.js';
+import { otpLimiter, adminLoginLimiter, adminLoginPerEmailLimiter } from '../middleware/rateLimiters.js';
 import { encryptCookieValue, decryptCookieValue } from '../utils/secureCookie.js';
 import zxcvbn from 'zxcvbn';
 import { checkFailedLoginAnomaly } from '../utils/anomalies.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { logger } from '../utils/logger.js';
 import {
   generateTotpSecret,
   generateTotpQr,
@@ -38,6 +39,9 @@ const USE_COOKIE_REFRESH = (process.env.COOKIE_REFRESH || 'true') === 'true';
 const isProd = process.env.NODE_ENV === 'production';
 const MIN_PASSWORD_LENGTH = 10;
 const MIN_ZXCVBN_SCORE = 3;
+const DEVICE_ID_COOKIE = 'device_id';
+const ADMIN_LOGIN_LOCK_MAX = Number(process.env.ADMIN_LOGIN_LOCK_MAX || 5);
+const ADMIN_LOGIN_LOCK_MINUTES = Number(process.env.ADMIN_LOGIN_LOCK_MINUTES || 15);
 
 function validatePasswordStrength(password) {
   if (!password || password.length < MIN_PASSWORD_LENGTH) {
@@ -89,6 +93,10 @@ function issueCsrf(res) {
   return token;
 }
 
+function logAsyncError(context, err) {
+  logger.error(context, { error: logger.format(err) });
+}
+
 function requireCsrfForCookieRefresh(req) {
   const cookieToken = req.cookies?.admin_refresh_token;
   if (!cookieToken) return true;
@@ -97,7 +105,7 @@ function requireCsrfForCookieRefresh(req) {
   return Boolean(csrfCookie && csrfHeader && csrfCookie === csrfHeader);
 }
 
-router.post('/login', adminLoginLimiter, otpLimiter, async (req, res) => {
+router.post('/login', adminLoginPerEmailLimiter, adminLoginLimiter, otpLimiter, async (req, res) => {
   /*
     #swagger.tags = ['Admin Auth']
     #swagger.summary = 'Admin login'
@@ -105,19 +113,43 @@ router.post('/login', adminLoginLimiter, otpLimiter, async (req, res) => {
     #swagger.responses[200] = { description: 'Logged in', schema: { $ref: '#/definitions/AdminLoginResponse' } }
     #swagger.responses[401] = { description: 'Invalid credentials', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { email, password, deviceId } = req.body || {};
+  const { email, password, deviceId: bodyDeviceId } = req.body || {};
+  const deviceId = bodyDeviceId || req.cookies?.[DEVICE_ID_COOKIE] || null;
   if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
 
-  const [rows] = await pool.query('SELECT * FROM admin_users WHERE email = ? LIMIT 1', [email]);
+  const [rows] = await pool.query(
+    'SELECT * FROM admin_users WHERE email = ? LIMIT 1',
+    [email]
+  );
   if (!rows.length) return res.status(401).json({ error: 'Invalid credentials' });
 
   const admin = rows[0];
+  if (admin.login_locked_until && new Date(admin.login_locked_until) > new Date()) {
+    return res.status(403).json({ error: 'Account temporarily locked. Try later.' });
+  }
+  if (admin.login_locked_until && new Date(admin.login_locked_until) <= new Date()) {
+    await pool.query(
+      'UPDATE admin_users SET login_failed_attempts = 0, login_locked_until = NULL WHERE id = ?',
+      [admin.id]
+    );
+    admin.login_failed_attempts = 0;
+    admin.login_locked_until = null;
+  }
   const ok = await bcrypt.compare(password, admin.password_hash);
   if (!ok) {
+    const nextAttempts = Number(admin.login_failed_attempts || 0) + 1;
+    const lockedUntil =
+      nextAttempts >= ADMIN_LOGIN_LOCK_MAX
+        ? new Date(Date.now() + ADMIN_LOGIN_LOCK_MINUTES * 60 * 1000)
+        : null;
+    await pool.query(
+      'UPDATE admin_users SET login_failed_attempts = ?, login_locked_until = ?, last_login_failed_at = NOW() WHERE id = ?',
+      [nextAttempts, lockedUntil, admin.id]
+    );
     checkFailedLoginAnomaly({
       actorId: admin.id,
       actorType: 'admin',
-      attempts: 1,
+      attempts: nextAttempts,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -129,8 +161,24 @@ router.post('/login', adminLoginLimiter, otpLimiter, async (req, res) => {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     }).catch(() => null);
+    if (lockedUntil) {
+      logSecurityEvent({
+        type: 'admin.account.locked.failed_login',
+        severity: 'high',
+        actorType: 'admin',
+        actorId: admin.id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { lockedUntil },
+      }).catch(() => null);
+      return res.status(403).json({ error: 'Account locked due to failed attempts. Try later.' });
+    }
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+  await pool.query(
+    'UPDATE admin_users SET login_failed_attempts = 0, login_locked_until = NULL, last_login_failed_at = NULL, last_login = NOW(), last_login_ip = ? WHERE id = ?',
+    [req.ip, admin.id]
+  );
 
   // TOTP is now mandatory for all admin accounts
   if (!admin.totp_secret || !admin.totp_enabled) {
@@ -203,7 +251,7 @@ router.post('/login', adminLoginLimiter, otpLimiter, async (req, res) => {
     entityId: admin.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logAsyncError('Audit log failed (admin.login)', err));
 
   return res.json({
     csrfToken,
@@ -301,7 +349,7 @@ router.post('/refresh', async (req, res) => {
   if (!requireCsrfForCookieRefresh(req)) {
     return res.status(403).json({ error: 'CSRF validation failed' });
   }
-  const deviceId = req.body?.deviceId || null;
+  const deviceId = req.body?.deviceId || req.cookies?.[DEVICE_ID_COOKIE] || null;
   const incoming = cookieToken ? decryptCookieValue(cookieToken) : req.body?.refreshToken;
   if (!incoming) return res.status(400).json({ error: 'Refresh token required' });
 
@@ -374,7 +422,7 @@ router.post('/logout', requireAdmin, async (req, res) => {
     entityId: req.admin?.sub || null,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logAsyncError('Audit log failed (admin.logout)', err));
   return res.json({ message: 'Logged out' });
 });
 
@@ -422,7 +470,7 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
       entityId: rows[0].id,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
-    }).catch(console.error);
+    }).catch((err) => logAsyncError('Audit log failed (admin.password_reset.requested)', err));
   } catch (err) {
     if (err.code === 'OTP_COOLDOWN' || err.code === 'OTP_LIMIT') {
       return res.status(429).json({ error: 'Too many OTP requests. Try later.' });
@@ -462,7 +510,7 @@ router.post('/reset-password', async (req, res) => {
     to: email,
     title: 'Admin Password Updated',
     message: 'Your admin password was changed successfully.',
-  }).catch(console.error);
+  }).catch((err) => logAsyncError('Security email send error (admin password reset)', err));
   logAudit({
     actorType: 'admin',
     actorId: otp.user_id,
@@ -471,7 +519,7 @@ router.post('/reset-password', async (req, res) => {
     entityId: otp.user_id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logAsyncError('Audit log failed (admin.password_reset)', err));
   return res.json({ message: 'Password reset successful' });
 });
 

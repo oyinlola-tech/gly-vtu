@@ -101,6 +101,7 @@ export default function Dashboard() {
             <button
               onClick={toggleTheme}
               className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDark ? <Sun size={20} className="text-white" /> : <Moon size={20} className="text-white" />}
             </button>
@@ -119,6 +120,7 @@ export default function Dashboard() {
               <button
                 onClick={() => setShowBalance(!showBalance)}
                 className="text-white/80"
+                aria-label={showBalance ? 'Hide balance' : 'Show balance'}
               >
                 {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
               </button>

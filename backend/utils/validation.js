@@ -8,10 +8,28 @@ export function isValidAmount(value, min = 1, max = 1_000_000) {
   return amount >= min && amount <= max;
 }
 
-export function isValidPhone(value) {
+export function isValidNigerianPhone(value) {
   if (!isNonEmptyString(value, 20)) return false;
-  const digits = value.replace(/\D/g, '');
-  return digits.length >= 10 && digits.length <= 15;
+
+  const cleaned = value.replace(/[\s\-().+]/g, '');
+  const patterns = [
+    /^\+234[789]\d{9}$/,
+    /^0[789]\d{9}$/,
+    /^234[789]\d{9}$/,
+  ];
+
+  const isValid = patterns.some((pattern) => pattern.test(cleaned));
+  if (!isValid) return false;
+
+  const invalidPrefixes = ['0000', '9999'];
+  const prefix = cleaned.substring(0, 4);
+  if (invalidPrefixes.includes(prefix)) return false;
+
+  return true;
+}
+
+export function isValidPhone(value) {
+  return isValidNigerianPhone(value);
 }
 
 export function isValidServiceId(value) {

@@ -1,14 +1,28 @@
 import crypto from 'crypto';
+import { getSecret } from './secretsManager.js';
 
 const BASE_URL =
   (process.env.VTPASS_BASE_URL || '').trim() ||
   (process.env.VTPASS_ENV === 'sandbox' ? 'https://sandbox.vtpass.com' : 'https://vtpass.com');
 
-const API_KEY = (process.env.VTPASS_API_KEY || '').trim();
-const PUBLIC_KEY = (process.env.VTPASS_PUBLIC_KEY || '').trim();
-const SECRET_KEY = (process.env.VTPASS_SECRET_KEY || '').trim();
+let cachedKeys = null;
 
-export const vtpassEnabled = Boolean(API_KEY && PUBLIC_KEY && SECRET_KEY);
+async function getVtpassKeys() {
+  if (cachedKeys) return cachedKeys;
+  const apiKey = await getSecret('gly-vtu/vtpass-api-key', { envFallback: 'VTPASS_API_KEY' });
+  const publicKey = await getSecret('gly-vtu/vtpass-public-key', {
+    envFallback: 'VTPASS_PUBLIC_KEY',
+  });
+  const secretKey = await getSecret('gly-vtu/vtpass-secret-key', {
+    envFallback: 'VTPASS_SECRET_KEY',
+  });
+  cachedKeys = { apiKey: apiKey || '', publicKey: publicKey || '', secretKey: secretKey || '' };
+  return cachedKeys;
+}
+
+export const vtpassEnabled = Boolean(
+  process.env.VTPASS_API_KEY || process.env.VTPASS_PUBLIC_KEY || process.env.VTPASS_SECRET_KEY || process.env.AWS_SECRETS_ENABLED === 'true'
+);
 
 function buildUrl(path, params) {
   const url = new URL(path, BASE_URL);
@@ -22,10 +36,14 @@ function buildUrl(path, params) {
 }
 
 async function vtpassGet(path, params) {
+  const { apiKey, publicKey } = await getVtpassKeys();
+  if (!apiKey || !publicKey) {
+    throw new Error('VTpass keys missing');
+  }
   const res = await fetch(buildUrl(path, params), {
     headers: {
-      'api-key': API_KEY,
-      'public-key': PUBLIC_KEY,
+      'api-key': apiKey,
+      'public-key': publicKey,
     },
   });
   const data = await res.json().catch(() => ({}));
@@ -36,12 +54,16 @@ async function vtpassGet(path, params) {
 }
 
 async function vtpassPost(path, payload) {
+  const { apiKey, secretKey } = await getVtpassKeys();
+  if (!apiKey || !secretKey) {
+    throw new Error('VTpass keys missing');
+  }
   const res = await fetch(buildUrl(path), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'api-key': API_KEY,
-      'secret-key': SECRET_KEY,
+      'api-key': apiKey,
+      'secret-key': secretKey,
     },
     body: JSON.stringify(payload),
   });

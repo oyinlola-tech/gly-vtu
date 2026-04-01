@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Fingerprint, Check } from 'lucide-react';
 import { userAPI } from '../../services/api';
 import { toast } from 'sonner';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function BiometricSetup() {
   const [isSupported, setIsSupported] = useState(false);
@@ -56,6 +57,9 @@ export default function BiometricSetup() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 dark:from-gray-950 dark:to-gray-900 p-6">
       <div className="max-w-2xl mx-auto bg-white dark:bg-gray-900 rounded-lg shadow p-8">
+        <div className="mb-6 text-xs text-gray-500">
+          <Breadcrumbs items={[{ label: 'Settings', href: '/more' }, { label: 'Biometric Login' }]} />
+        </div>
         <div className="flex items-center gap-4 mb-8">
           <Fingerprint className="text-purple-600" size={40} />
           <div>

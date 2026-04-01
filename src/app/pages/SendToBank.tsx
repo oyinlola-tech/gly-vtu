@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { ChevronLeft, ChevronDown } from 'lucide-react';
 import { banksAPI, walletAPI } from '../../services/api';
@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyInput from '../components/CurrencyInput';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function SendToBank() {
   const navigate = useNavigate();
@@ -130,10 +131,13 @@ export default function SendToBank() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-24 rounded-b-[24px]">
         <div className="flex items-center gap-4 mb-6">
-          <Link to="/send" className="text-white">
+          <Link to="/send" className="text-white" aria-label="Back to send options">
             <ChevronLeft size={24} />
           </Link>
           <h1 className="text-xl font-bold text-white">Send to Bank Account</h1>
+        </div>
+        <div className="text-white/80 text-xs mb-4">
+          <Breadcrumbs items={[{ label: 'Send', href: '/send' }, { label: 'Bank Transfer' }]} />
         </div>
 
         <div className="bg-[#235697] rounded-2xl p-6 shadow-lg">
@@ -161,10 +165,11 @@ export default function SendToBank() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Account Number
               </label>
               <input
+                id="accountNumber"
                 type="tel"
                 maxLength={10}
                 value={formData.accountNumber}
@@ -178,12 +183,13 @@ export default function SendToBank() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label id="bankLabel" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Bank
               </label>
               <button
                 type="button"
                 onClick={() => setShowBankSelect(true)}
+                aria-labelledby="bankLabel"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697] flex items-center justify-between"
               >
                 <span>{formData.bankName || 'Select bank'}</span>
@@ -201,27 +207,30 @@ export default function SendToBank() {
             {accountName && (
               <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Beneficiary's name
+                  Beneficiary&apos;s name
                 </p>
                 <p className="font-semibold text-gray-900 dark:text-white">{accountName}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Amount
               </label>
               <CurrencyInput
                 value={formData.amount}
                 onChange={(value) => setFormData({ ...formData, amount: value })}
+                inputId="amount"
+                ariaLabel="Amount"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="narration" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Narration (Optional)
               </label>
               <input
+                id="narration"
                 type="text"
                 value={formData.narration}
                 onChange={(e) => setFormData({ ...formData, narration: e.target.value })}

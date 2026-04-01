@@ -445,18 +445,30 @@ export default function AdminDashboard() {
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Force Notification</h2>
             </div>
             <div className="space-y-3">
-              <input
-                value={notification.title}
-                onChange={(e) => setNotification((prev) => ({ ...prev, title: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
-                placeholder="Title"
-              />
-              <textarea
-                value={notification.body}
-                onChange={(e) => setNotification((prev) => ({ ...prev, body: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm h-24"
-                placeholder="Message"
-              />
+              <div>
+                <label htmlFor="forceNotificationTitle" className="text-xs text-gray-500 dark:text-gray-400">
+                  Title
+                </label>
+                <input
+                  id="forceNotificationTitle"
+                  value={notification.title}
+                  onChange={(e) => setNotification((prev) => ({ ...prev, title: e.target.value }))}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+                  placeholder="Title"
+                />
+              </div>
+              <div>
+                <label htmlFor="forceNotificationBody" className="text-xs text-gray-500 dark:text-gray-400">
+                  Message
+                </label>
+                <textarea
+                  id="forceNotificationBody"
+                  value={notification.body}
+                  onChange={(e) => setNotification((prev) => ({ ...prev, body: e.target.value }))}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm h-24"
+                  placeholder="Message"
+                />
+              </div>
               <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                 <input
                   type="checkbox"
@@ -578,8 +590,9 @@ export default function AdminDashboard() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{row.category_name}</p>
                   </div>
                   <div className="lg:col-span-3">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Logo URL</label>
+                    <label htmlFor={`provider-logo-${row.id}`} className="text-xs text-gray-500 dark:text-gray-400">Logo URL</label>
                     <input
+                      id={`provider-logo-${row.id}`}
                       value={row.logo_url || ''}
                       onChange={(e) => handleProviderChange(row.id, 'logo_url', e.target.value)}
                       className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
@@ -630,8 +643,9 @@ export default function AdminDashboard() {
                     <p className="text-xs text-gray-500 dark:text-gray-400">{row.provider_code}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Base Fee</label>
+                    <label htmlFor={`pricing-base-${row.id}`} className="text-xs text-gray-500 dark:text-gray-400">Base Fee</label>
                     <input
+                      id={`pricing-base-${row.id}`}
                       type="number"
                       value={row.base_fee}
                       onChange={(e) =>
@@ -641,8 +655,9 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Markup Type</label>
+                    <label htmlFor={`pricing-markup-type-${row.id}`} className="text-xs text-gray-500 dark:text-gray-400">Markup Type</label>
                     <select
+                      id={`pricing-markup-type-${row.id}`}
                       value={row.markup_type}
                       onChange={(e) =>
                         handlePricingChange(row.id, 'markup_type', e.target.value)
@@ -654,8 +669,9 @@ export default function AdminDashboard() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Markup Value</label>
+                    <label htmlFor={`pricing-markup-value-${row.id}`} className="text-xs text-gray-500 dark:text-gray-400">Markup Value</label>
                     <input
+                      id={`pricing-markup-value-${row.id}`}
                       type="number"
                       value={row.markup_value}
                       onChange={(e) =>

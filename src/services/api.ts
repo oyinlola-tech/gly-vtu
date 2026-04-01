@@ -15,23 +15,34 @@ import type {
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/app/api';
 const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || '/app/admin/api';
 
-const DEVICE_ID_KEY = 'gly_device_id';
 let csrfToken: string | null = null;
+let deviceIdCache: string | null = null;
+let deviceIdPromise: Promise<string> | null = null;
 
-function getDeviceId() {
-  // SECURITY: Store device ID in sessionStorage (not localStorage)
-  // Reduces XSS attack surface - device ID is cleared when browser tab closes
-  // In per-session mode, device ID changes per login/session (more secure for anomaly detection)
-  let deviceId = sessionStorage.getItem(DEVICE_ID_KEY);
-  if (!deviceId) {
-    deviceId = crypto.randomUUID();
+async function getDeviceId() {
+  if (deviceIdCache) return deviceIdCache;
+  if (deviceIdPromise) return deviceIdPromise;
+
+  deviceIdPromise = (async () => {
     try {
-      sessionStorage.setItem(DEVICE_ID_KEY, deviceId);
+      const res = await fetch(`${API_BASE_URL}/auth/device-id`, {
+        credentials: 'include',
+      });
+      const data = await parseResponse(res);
+      if (res.ok && data?.deviceId) {
+        deviceIdCache = data.deviceId;
+        return data.deviceId;
+      }
     } catch {
-      // ignore storage errors
+      // ignore and fall back to ephemeral ID
     }
-  }
-  return deviceId;
+    deviceIdCache = crypto.randomUUID();
+    return deviceIdCache;
+  })().finally(() => {
+    deviceIdPromise = null;
+  });
+
+  return deviceIdPromise;
 }
 
 function createIdempotencyKey() {
@@ -73,6 +84,7 @@ async function parseResponse(res: Response) {
 
 async function refreshAccessToken() {
   const token = await ensureCsrfToken();
+  const deviceId = await getDeviceId();
   const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
     method: 'POST',
     headers: {
@@ -80,7 +92,7 @@ async function refreshAccessToken() {
       ...(token ? { 'X-CSRF-Token': token } : {}),
     },
     credentials: 'include',
-    body: JSON.stringify({ deviceId: getDeviceId() }),
+    body: JSON.stringify({ deviceId }),
   });
   const data = await parseResponse(res);
   if (!res.ok) throw new Error(data?.error || 'Session expired');
@@ -92,6 +104,7 @@ async function refreshAccessToken() {
 
 async function refreshAdminAccessToken() {
   const token = await ensureAdminCsrfToken();
+  const deviceId = await getDeviceId();
   const res = await fetch(`${ADMIN_API_BASE_URL}/auth/refresh`, {
     method: 'POST',
     headers: {
@@ -99,7 +112,7 @@ async function refreshAdminAccessToken() {
       ...(token ? { 'X-CSRF-Token': token } : {}),
     },
     credentials: 'include',
-    body: JSON.stringify({ deviceId: getDeviceId() }),
+    body: JSON.stringify({ deviceId }),
   });
   const data = await parseResponse(res);
   if (!res.ok) throw new Error(data?.error || 'Session expired');
@@ -136,38 +149,34 @@ async function request<T>(
     headers,
     credentials: 'include',
   });
+  const rotatedToken = response.headers.get('x-csrf-token-new');
+  if (rotatedToken) {
+    csrfToken = rotatedToken;
+  }
 
   if (response.status === 401 && auth && !admin) {
-    try {
-      await refreshAccessToken();
-      const retryHeaders = { ...headers };
-      const retry = await fetch(`${base}${path}`, {
-        ...options,
-        headers: retryHeaders,
-        credentials: 'include',
-      });
-      const retryData = await parseResponse(retry);
-      if (!retry.ok) throw new Error(retryData?.error || 'Request failed');
-      return retryData as T;
-    } catch (err) {
-      throw err;
-    }
+    await refreshAccessToken();
+    const retryHeaders = { ...headers };
+    const retry = await fetch(`${base}${path}`, {
+      ...options,
+      headers: retryHeaders,
+      credentials: 'include',
+    });
+    const retryData = await parseResponse(retry);
+    if (!retry.ok) throw new Error(retryData?.error || 'Request failed');
+    return retryData as T;
   }
   if (response.status === 401 && auth && admin) {
-    try {
-      await refreshAdminAccessToken();
-      const retryHeaders = { ...headers };
-      const retry = await fetch(`${base}${path}`, {
-        ...options,
-        headers: retryHeaders,
-        credentials: 'include',
-      });
-      const retryData = await parseResponse(retry);
-      if (!retry.ok) throw new Error(retryData?.error || 'Request failed');
-      return retryData as T;
-    } catch (err) {
-      throw err;
-    }
+    await refreshAdminAccessToken();
+    const retryHeaders = { ...headers };
+    const retry = await fetch(`${base}${path}`, {
+      ...options,
+      headers: retryHeaders,
+      credentials: 'include',
+    });
+    const retryData = await parseResponse(retry);
+    if (!retry.ok) throw new Error(retryData?.error || 'Request failed');
+    return retryData as T;
   }
 
   const data = await parseResponse(response);
@@ -210,6 +219,7 @@ export const authAPI = {
   },
 
   login: async (data: { email: string; password: string; deviceId?: string; totp?: string; backupCode?: string }) => {
+    const resolvedDeviceId = data.deviceId || (await getDeviceId());
     return request<any>(
       API_BASE_URL,
       '/auth/login',
@@ -218,7 +228,7 @@ export const authAPI = {
         body: JSON.stringify({
           email: data.email,
           password: data.password,
-          deviceId: data.deviceId || getDeviceId(),
+          deviceId: resolvedDeviceId,
           totp: data.totp,
           backupCode: data.backupCode,
         }),
@@ -237,6 +247,7 @@ export const authAPI = {
     totp?: string;
     backupCode?: string;
   }) => {
+    const resolvedDeviceId = data.deviceId || (await getDeviceId());
     return request<any>(
       API_BASE_URL,
       '/auth/verify-device',
@@ -245,7 +256,7 @@ export const authAPI = {
         body: JSON.stringify({
           email: data.email,
           code: data.code,
-          deviceId: data.deviceId || getDeviceId(),
+          deviceId: resolvedDeviceId,
           label: data.label,
           securityAnswer: data.securityAnswer,
           totp: data.totp,
@@ -350,7 +361,7 @@ export const userAPI = {
     return request<any>(API_BASE_URL, '/user/profile');
   },
 
-  submitKYC: async (data: { level: 1 | 2; payload: Record<string, any> }) => {
+  submitKYC: async (data: { level: 2 | 3; payload: Record<string, any> }) => {
     return request<{ message: string }>(
       API_BASE_URL,
       '/user/kyc',
@@ -702,11 +713,11 @@ export const cardsAPI = {
   list: async () => {
     return request<any[]>(API_BASE_URL, '/cards');
   },
-  create: async (amount: number, currency = 'NGN') => {
+  create: async (amount: number, currency = 'NGN', pin?: string) => {
     return request<any>(API_BASE_URL, '/cards', {
       method: 'POST',
       headers: { 'X-Idempotency-Key': createIdempotencyKey() },
-      body: JSON.stringify({ amount, currency }),
+      body: JSON.stringify({ amount, currency, pin }),
     });
   },
   freeze: async (cardId: string) => {
@@ -733,12 +744,13 @@ export const cardsAPI = {
 // ============= ADMIN APIs =============
 export const adminAPI = {
   login: async (data: { email: string; password: string; totp?: string }) => {
+    const deviceId = await getDeviceId();
     const response = await request<any>(
       ADMIN_API_BASE_URL,
       '/auth/login',
       {
         method: 'POST',
-        body: JSON.stringify({ ...data, deviceId: getDeviceId() }),
+        body: JSON.stringify({ ...data, deviceId }),
       },
       { auth: false, admin: true }
     );
@@ -751,13 +763,14 @@ export const adminAPI = {
 
   refresh: async () => {
     const csrfToken = await ensureAdminCsrfToken();
+    const deviceId = await getDeviceId();
     const response = await request<any>(
       ADMIN_API_BASE_URL,
       '/auth/refresh',
       {
         method: 'POST',
         headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
-        body: JSON.stringify({ deviceId: getDeviceId() }),
+        body: JSON.stringify({ deviceId }),
       },
       { auth: false, admin: true }
     );

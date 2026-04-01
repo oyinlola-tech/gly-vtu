@@ -8,6 +8,7 @@ import { createVirtualAccountForCustomer } from '../utils/flutterwave.js';
 import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
 import { sendReservedAccountEmail } from '../utils/email.js';
 import { applyUserPII, decryptJson } from '../utils/encryption.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -55,7 +56,7 @@ router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req,
       to: user.email,
       name: user.full_name,
       status,
-    }).catch(console.error);
+    }).catch((err) => logger.error('KYC status email send error', { error: logger.format(err) }));
   }
   logAudit({
     actorType: 'admin',
@@ -66,7 +67,7 @@ router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
     metadata: { status, level: Number(level || 1) },
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.kyc.update)', { error: logger.format(err) }));
   return res.json({ message: 'KYC updated' });
 });
 
@@ -127,7 +128,7 @@ router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:w
     name: user.full_name,
     accountNumber: account.account_number,
     bankName: account.bank_name,
-  }).catch(console.error);
+  }).catch((err) => logger.error('Reserved account email send error', { error: logger.format(err) }));
   logAudit({
     actorType: 'admin',
     actorId: req.admin.sub,
@@ -136,7 +137,7 @@ router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:w
     entityId: userId,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.reserved_account.create)', { error: logger.format(err) }));
   return res.json({ message: 'Reserved account created' });
 });
 

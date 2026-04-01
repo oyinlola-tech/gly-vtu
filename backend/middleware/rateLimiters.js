@@ -8,11 +8,12 @@ const isProd = process.env.NODE_ENV === 'production';
 let redisClient = null;
 let redisStore = null;
 let redisConnected = false;
+const adminLoginLocal = new Map();
 
 if (REDIS_URL) {
   redisClient = createClient({ url: REDIS_URL });
   redisClient.on('error', (err) => {
-    console.error('Redis rate limiter error:', err.message);
+    logger.error('Redis rate limiter error', { error: err.message });
     redisConnected = false;
     
     // In production, fail hard if Redis (required) goes down
@@ -25,11 +26,11 @@ if (REDIS_URL) {
   });
   redisClient.on('connect', () => {
     redisConnected = true;
-    console.log('Redis rate limiter connected');
+    logger.info('Redis rate limiter connected');
   });
   
   redisClient.connect().catch((err) => {
-    console.error('Redis connection failed:', err.message);
+    logger.error('Redis connection failed', { error: err.message });
     redisConnected = false;
     
     // In production, fail startup if Redis is required but unavailable
@@ -120,6 +121,44 @@ export const adminLoginLimiter = rateLimit(
     },
   })
 );
+
+export async function adminLoginPerEmailLimiter(req, res, next) {
+  const email = String(req.body?.email || '').toLowerCase().trim();
+  if (!email) return next();
+
+  const max = Number(process.env.RATE_LIMIT_ADMIN_LOGIN_PER_EMAIL_MAX || 3);
+  const windowSeconds = Number(process.env.RATE_LIMIT_ADMIN_LOGIN_PER_EMAIL_WINDOW_SEC || 1800);
+  const key = `admin_login:${email}:${req.ip || 'unknown'}`;
+
+  if (redisClient && redisConnected) {
+    try {
+      const attempts = await redisClient.incr(key);
+      if (attempts === 1) {
+        await redisClient.expire(key, windowSeconds);
+      }
+      if (attempts > max) {
+        return res.status(429).json({ error: 'Admin account temporarily locked' });
+      }
+      return next();
+    } catch (err) {
+      logger.warn('Admin login per-email limiter failed', { error: err.message });
+      return next();
+    }
+  }
+
+  const now = Date.now();
+  const entry = adminLoginLocal.get(key);
+  if (!entry || entry.expiresAt <= now) {
+    adminLoginLocal.set(key, { count: 1, expiresAt: now + windowSeconds * 1000 });
+    return next();
+  }
+  entry.count += 1;
+  adminLoginLocal.set(key, entry);
+  if (entry.count > max) {
+    return res.status(429).json({ error: 'Admin account temporarily locked' });
+  }
+  return next();
+}
 
 export const billsLimiter = rateLimit(
   limiterOptions({

@@ -59,10 +59,10 @@ export default function ResetPassword() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label id="resetOtpLabel" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               OTP Code
             </label>
-            <div className="flex justify-center">
+            <div className="flex justify-center" role="group" aria-labelledby="resetOtpLabel">
               <OTPInput value={formData.code} onChange={(value) => setFormData({ ...formData, code: value })} autoFocus />
             </div>
           </div>

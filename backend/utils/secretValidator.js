@@ -1,8 +1,5 @@
 import crypto from 'crypto';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { logger } from './logger.js';
 
 /**
  * CRITICAL: Validate all required security secrets on startup
@@ -13,6 +10,7 @@ export class SecretValidator {
     'JWT_SECRET',
     'JWT_ADMIN_SECRET',
     'COOKIE_ENC_SECRET',
+    'PII_ENCRYPTION_KEY',
     'DB_PASSWORD',
     'FLW_SECRET_KEY',
     'VTPASS_API_KEY',
@@ -38,6 +36,8 @@ export class SecretValidator {
   static validateSecrets() {
     const errors = [];
     const isProduction = process.env.NODE_ENV === 'production';
+    const awsEnabled = process.env.AWS_SECRETS_ENABLED === 'true';
+    const awsManagedSecrets = new Set(['FLW_SECRET_KEY', 'VTPASS_API_KEY', 'VTPASS_SECRET_KEY']);
 
     // Check for required secrets
     for (const secretName of this.requiredSecrets) {
@@ -45,6 +45,9 @@ export class SecretValidator {
 
       // In production, all secrets are required
       if (isProduction && !secretValue) {
+        if (awsEnabled && awsManagedSecrets.has(secretName)) {
+          continue;
+        }
         errors.push(`[CRITICAL] ${secretName} is not configured. Set the environment variable.`);
         continue;
       }
@@ -88,18 +91,18 @@ export class SecretValidator {
 
     // Report all errors and exit
     if (errors.length > 0) {
-      console.error('\n❌ SECURITY VALIDATION FAILED\n');
-      errors.forEach(err => console.error(`  ${err}`));
-      console.error('\n🔧 To fix:\n');
-      console.error('  1. Create a .env file in the project root');
-      console.error('  2. Generate random secrets:');
-      console.error("     node -e \"console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))\"");
-      console.error('  3. Set all required environment variables');
-      console.error('  4. Do NOT commit .env to version control\n');
+      logger.error('SECURITY VALIDATION FAILED');
+      errors.forEach((err) => logger.error(err));
+      logger.error('To fix:');
+      logger.error('1. Create a .env file in the project root');
+      logger.error('2. Generate random secrets:');
+      logger.error("   node -e \"console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))\"");
+      logger.error('3. Set all required environment variables');
+      logger.error('4. Do NOT commit .env to version control');
       process.exit(1);
     }
 
-    console.log('✅ Security validation passed');
+    logger.info('Security validation passed');
   }
 
   /**
@@ -145,7 +148,7 @@ export function initializeSecurityValidation() {
   if (process.env.SKIP_SECRET_VALIDATION !== 'true') {
     SecretValidator.validateSecrets();
   } else {
-    console.warn('⚠️ WARNING: Secret validation is disabled. Only use this in development.');
+    logger.warn('Secret validation is disabled. Only use this in development.');
   }
 }
 

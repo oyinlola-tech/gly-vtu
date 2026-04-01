@@ -182,6 +182,56 @@ export const walletTransferSchema = Joi.object({
     .optional()
 });
 
+export const walletSendSchema = Joi.object({
+  amount: Joi.number()
+    .required()
+    .min(100)
+    .max(10_000_000)
+    .integer()
+    .messages({
+      'number.min': 'Amount must be at least ₦100',
+      'number.max': 'Amount cannot exceed ₦10,000,000',
+    }),
+  pin: Joi.string()
+    .required()
+    .length(6)
+    .pattern(/^\d+$/)
+    .messages({
+      'string.length': 'PIN must be 6 digits',
+    }),
+  to: Joi.string()
+    .max(120)
+    .optional(),
+  channel: Joi.string()
+    .valid('bank', 'internal')
+    .optional(),
+  accountNumber: Joi.string()
+    .pattern(/^\d{6,20}$/)
+    .optional(),
+  bankCode: Joi.string()
+    .pattern(/^\d{3,10}$/)
+    .optional(),
+  accountName: Joi.string()
+    .min(2)
+    .max(120)
+    .optional(),
+})
+  .with('accountNumber', ['bankCode', 'accountName'])
+  .with('bankCode', ['accountNumber', 'accountName'])
+  .with('accountName', ['accountNumber', 'bankCode'])
+  .xor('to', 'accountNumber');
+
+export const walletReceiveSchema = Joi.object({
+  amount: Joi.number()
+    .required()
+    .min(100)
+    .max(10_000_000)
+    .integer(),
+  note: Joi.string()
+    .max(500)
+    .optional(),
+});
+
 export const cardAdditionSchema = Joi.object({
   cardNumber: Joi.string()
     .required()
@@ -306,6 +356,71 @@ export const kycSchema = Joi.object({
     .email()
 });
 
+export const kycPayloadSchema = Joi.object({
+  bvn: Joi.string()
+    .length(11)
+    .pattern(/^\d+$/)
+    .optional(),
+  nin: Joi.string()
+    .length(11)
+    .pattern(/^\d+$/)
+    .optional(),
+  dob: Joi.date()
+    .max('now')
+    .min('1930-01-01')
+    .optional(),
+  address: Joi.string()
+    .min(10)
+    .max(500)
+    .optional(),
+  phone: Joi.string()
+    .pattern(/^(\+234|0)[789][0-9]{9}$/)
+    .optional(),
+}).unknown(false);
+
+export const kycSubmissionSchema = Joi.object({
+  level: Joi.number().valid(2, 3).required(),
+  payload: kycPayloadSchema.required(),
+});
+
+export const billsQuoteSchema = Joi.object({
+  providerCode: Joi.string().required().max(60),
+  amount: Joi.number().min(50).max(5_000_000).optional(),
+  variationCode: Joi.string().max(100).optional(),
+});
+
+export const billsPaySchema = Joi.object({
+  providerCode: Joi.string().required().max(60),
+  amount: Joi.number().min(50).max(5_000_000).optional(),
+  account: Joi.string().required().max(50),
+  pin: Joi.string().required().length(6).pattern(/^\d+$/),
+  variationCode: Joi.string().max(100).optional(),
+  phone: Joi.string()
+    .pattern(/^(\+234|0)[789][0-9]{9}$/)
+    .optional(),
+  subscriptionType: Joi.string().max(30).optional(),
+});
+
+export const billsPayCardSchema = Joi.object({
+  providerCode: Joi.string().required().max(60),
+  amount: Joi.number().min(50).max(5_000_000).optional(),
+  account: Joi.string().required().max(50),
+  variationCode: Joi.string().max(100).optional(),
+});
+
+export const cardCreateSchema = Joi.object({
+  amount: Joi.number().required().min(100).max(5_000_000).integer(),
+  currency: Joi.string().length(3).optional(),
+  pin: Joi.string().required().length(6).pattern(/^\d+$/),
+});
+
+export const updateProfileSchema = Joi.object({
+  fullName: Joi.string().min(2).max(100).optional(),
+  phone: Joi.string()
+    .pattern(/^(\+234|0)[789][0-9]{9}$/)
+    .optional(),
+});
+
 // ============================================================================
 // MIDDLEWARE FACTORY
 // ============================================================================
@@ -406,8 +521,17 @@ export default {
   changePasswordSchema,
   billPaymentSchema,
   walletTransferSchema,
+  walletSendSchema,
+  walletReceiveSchema,
   cardAdditionSchema,
   kycSchema,
+  kycPayloadSchema,
+  kycSubmissionSchema,
+  billsQuoteSchema,
+  billsPaySchema,
+  billsPayCardSchema,
+  cardCreateSchema,
+  updateProfileSchema,
   // Middleware
   createValidationMiddleware,
   validateRequest,

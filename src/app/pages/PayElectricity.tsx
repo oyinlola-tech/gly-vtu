@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import { billsAPI } from '../../services/api';
@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import Breadcrumbs from '../components/Breadcrumbs';
 import type { BillProvider, BillVariation } from '../../types/bills';
 
 export default function PayElectricity() {
@@ -89,10 +90,13 @@ export default function PayElectricity() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] rounded-b-[24px] p-6">
         <div className="flex items-center gap-4 mb-4">
-          <button onClick={() => navigate(-1)} className="text-white">
+          <button onClick={() => navigate(-1)} className="text-white" aria-label="Go back">
             <ChevronLeft size={24} />
           </button>
           <h1 className="text-xl font-bold text-white">Pay Electricity</h1>
+        </div>
+        <div className="text-white/80 text-xs">
+          <Breadcrumbs items={[{ label: 'Bills', href: '/bills' }, { label: 'Electricity' }]} />
         </div>
       </div>
 
@@ -171,10 +175,11 @@ export default function PayElectricity() {
           </div>
 
           <div>
-            <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+            <label htmlFor="meterNumber" className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
               Meter Number
             </label>
             <input
+              id="meterNumber"
               type="text"
               value={meterNumber}
               onChange={(e) => setMeterNumber(e.target.value)}
@@ -185,12 +190,13 @@ export default function PayElectricity() {
           </div>
 
           <div>
-            <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+            <label htmlFor="electricityAmount" className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
               Amount
             </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7d7c93]">₦</span>
               <input
+                id="electricityAmount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -217,10 +223,11 @@ export default function PayElectricity() {
 
           {variations.length > 0 && (
             <div>
-              <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+              <label htmlFor="tariff" className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
                 Select Tariff
               </label>
               <select
+                id="tariff"
                 value={variationCode}
                 onChange={(e) => {
                   const code = e.target.value;

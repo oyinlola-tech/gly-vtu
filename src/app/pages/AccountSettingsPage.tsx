@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Edit2, Save, X, AlertCircle, CheckCircle, Phone, Mail, User } from 'lucide-react';
 import { userAPI } from '../../services/api';
 import PhoneInput from '../components/PhoneInput';
@@ -116,8 +116,9 @@ export function AccountSettingsPage() {
             {editing ? (
               <form onSubmit={handleUpdate} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                  <label htmlFor="settingsFullName" className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
                   <input
+                    id="settingsFullName"
                     type="text"
                     value={formData.fullName}
                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}

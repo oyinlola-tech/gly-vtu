@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import Breadcrumbs from '../components/Breadcrumbs';
 import type { BillProvider, BillVariation } from '../../types/bills';
 
 export default function PayTV() {
@@ -80,10 +81,13 @@ export default function PayTV() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] rounded-b-[24px] p-6">
         <div className="flex items-center gap-4 mb-4">
-          <button onClick={() => navigate(-1)} className="text-white">
+          <button onClick={() => navigate(-1)} className="text-white" aria-label="Go back">
             <ChevronLeft size={24} />
           </button>
           <h1 className="text-xl font-bold text-white">Pay TV Subscription</h1>
+        </div>
+        <div className="text-white/80 text-xs">
+          <Breadcrumbs items={[{ label: 'Bills', href: '/bills' }, { label: 'TV' }]} />
         </div>
       </div>
 
@@ -132,10 +136,11 @@ export default function PayTV() {
           </div>
 
           <div>
-            <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+            <label htmlFor="smartCard" className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
               Smart Card Number / IUC Number
             </label>
             <input
+              id="smartCard"
               type="text"
               value={smartCardNumber}
               onChange={(e) => setSmartCardNumber(e.target.value)}
@@ -146,12 +151,13 @@ export default function PayTV() {
           </div>
 
           <div>
-            <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+            <label htmlFor="tvAmount" className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
               Amount
             </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
               <input
+                id="tvAmount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -170,10 +176,11 @@ export default function PayTV() {
 
           {variations.length > 0 && (
             <div>
-              <label className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
+              <label htmlFor="tvBouquet" className="block text-sm text-[#7d7c93] dark:text-gray-400 mb-2">
                 Select Bouquet
               </label>
               <select
+                id="tvBouquet"
                 value={variationCode}
                 onChange={(e) => {
                   const code = e.target.value;

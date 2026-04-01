@@ -1,9 +1,6 @@
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { pool } from '../config/db.js';
-
-function hashCode(code) {
-  return crypto.createHash('sha256').update(code).digest('hex');
-}
 
 export function generateOtp() {
   // Use cryptographically strong RNG for OTPs
@@ -42,29 +39,35 @@ export async function createOtp({ userId = null, email, purpose, ttlMinutes = 10
   }
 
   const code = generateOtp();
+  const codeHash = await bcrypt.hash(code, 12);
   const expires = new Date(Date.now() + ttlMinutes * 60 * 1000);
   await pool.query(
     'INSERT INTO email_otps (id, user_id, email, purpose, code_hash, expires_at) VALUES (UUID(), ?, ?, ?, ?, ?)',
-    [userId, email, purpose, hashCode(code), expires]
+    [userId, email, purpose, codeHash, expires]
   );
   return { code, expires };
 }
 
 export async function verifyOtp({ email, purpose, code }) {
-  const codeHash = hashCode(code);
   const [rows] = await pool.query(
-    `SELECT id, user_id, expires_at, consumed_at
+    `SELECT id, user_id, expires_at, consumed_at, code_hash
      FROM email_otps
-     WHERE email = ? AND purpose = ? AND code_hash = ?
+     WHERE email = ? AND purpose = ?
      ORDER BY created_at DESC
-     LIMIT 1`,
-    [email, purpose, codeHash]
+     LIMIT 5`,
+    [email, purpose]
   );
   if (!rows.length) return null;
-  const row = rows[0];
-  if (row.consumed_at) return null;
-  if (new Date(row.expires_at) < new Date()) return null;
 
-  await pool.query('UPDATE email_otps SET consumed_at = NOW() WHERE id = ?', [row.id]);
-  return row;
+  for (const row of rows) {
+    if (row.consumed_at) continue;
+    if (new Date(row.expires_at) < new Date()) continue;
+    const matches = await bcrypt.compare(code, row.code_hash);
+    if (!matches) continue;
+
+    await pool.query('UPDATE email_otps SET consumed_at = NOW() WHERE id = ?', [row.id]);
+    return row;
+  }
+
+  return null;
 }

@@ -382,7 +382,7 @@ const [rows] = await pool.query(
 
 ### UNSAFE - DO NOT USE:
 ```javascript
-// ❌ SQL Injection Risk
+// X SQL Injection Risk
 const rows = await pool.query(`
   SELECT * FROM users WHERE email = '${email}'
 `);

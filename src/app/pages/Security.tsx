@@ -95,10 +95,11 @@ export default function Security() {
           <form onSubmit={handlePinSubmit} className="space-y-4">
             {security?.pinSet && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="currentPin" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Current PIN
                 </label>
                 <input
+                  id="currentPin"
                   type="password"
                   value={pinForm.currentPin}
                   onChange={(e) => setPinForm({ ...pinForm, currentPin: e.target.value })}
@@ -109,10 +110,11 @@ export default function Security() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="newPin" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 New PIN
               </label>
               <input
+                id="newPin"
                 type="password"
                 value={pinForm.newPin}
                 onChange={(e) => setPinForm({ ...pinForm, newPin: e.target.value })}
@@ -135,10 +137,11 @@ export default function Security() {
           <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Security Question</h2>
           <form onSubmit={handleQuestionSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="securityQuestion" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Question
               </label>
               <select
+                id="securityQuestion"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
@@ -155,10 +158,11 @@ export default function Security() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="securityAnswer" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Answer
               </label>
               <input
+                id="securityAnswer"
                 type="text"
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}

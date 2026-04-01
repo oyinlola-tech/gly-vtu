@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { authAPI, userAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -88,10 +88,10 @@ export default function VerifyDevice() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label id="verifyOtpLabel" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               OTP Code
             </label>
-            <div className="flex justify-center">
+            <div className="flex justify-center" role="group" aria-labelledby="verifyOtpLabel">
               <OTPInput value={code} onChange={setCode} autoFocus />
             </div>
           </div>
@@ -115,10 +115,10 @@ export default function VerifyDevice() {
           {totpRequired && (
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label id="verifyTotpLabel" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Authenticator Code
                 </label>
-                <div className="flex justify-center">
+                <div className="flex justify-center" role="group" aria-labelledby="verifyTotpLabel">
                   <OTPInput value={totpCode} onChange={setTotpCode} />
                 </div>
               </div>

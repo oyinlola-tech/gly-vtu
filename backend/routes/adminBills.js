@@ -3,6 +3,7 @@ import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -41,7 +42,7 @@ router.post('/categories', requireAdmin, requirePermission('bills:write'), async
     entityId: code,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.bill_category.create)', { error: logger.format(err) }));
   return res.status(201).json({ message: 'Category created' });
 });
 
@@ -66,7 +67,7 @@ router.put('/categories/:id', requireAdmin, requirePermission('bills:write'), as
     entityId: req.params.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.bill_category.update)', { error: logger.format(err) }));
   return res.json({ message: 'Category updated' });
 });
 
@@ -108,7 +109,7 @@ router.post('/providers', requireAdmin, requirePermission('bills:write'), async 
     entityId: code,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.bill_provider.create)', { error: logger.format(err) }));
   return res.status(201).json({ message: 'Provider created' });
 });
 
@@ -133,7 +134,7 @@ router.put('/providers/:id', requireAdmin, requirePermission('bills:write'), asy
     entityId: req.params.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.bill_provider.update)', { error: logger.format(err) }));
   return res.json({ message: 'Provider updated' });
 });
 
@@ -177,7 +178,7 @@ router.post('/pricing', requireAdmin, requirePermission('pricing:write'), async 
     entityId: String(providerId),
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.pricing.create)', { error: logger.format(err) }));
   return res.status(201).json({ message: 'Pricing created' });
 });
 
@@ -202,7 +203,7 @@ router.put('/pricing/:id', requireAdmin, requirePermission('pricing:write'), asy
     entityId: req.params.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
-  }).catch(console.error);
+  }).catch((err) => logger.error('Audit log failed (admin.pricing.update)', { error: logger.format(err) }));
   return res.json({ message: 'Pricing updated' });
 });
 

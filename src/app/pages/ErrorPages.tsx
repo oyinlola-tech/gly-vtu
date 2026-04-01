@@ -1,4 +1,4 @@
-import { AlertTriangle, Home, RefreshCw, Shield, HelpCircle } from 'lucide-react';
+import { Home, RefreshCw, HelpCircle } from 'lucide-react';
 
 interface ErrorPageProps {
   code?: 400 | 401 | 403 | 404 | 500 | 502 | 503 | 429;

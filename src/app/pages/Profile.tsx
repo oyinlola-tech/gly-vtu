@@ -59,7 +59,7 @@ export default function Profile() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-24 rounded-b-[24px]">
         <div className="flex items-center gap-4">
-          <Link to="/more" className="text-white">
+          <Link to="/more" className="text-white" aria-label="Back to settings">
             <ChevronLeft size={24} />
           </Link>
           <h1 className="text-xl font-bold text-white">Profile Settings</h1>

@@ -104,7 +104,7 @@ export default function Transactions() {
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-8 sticky top-0 z-30 backdrop-blur">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="text-white">
+            <Link to="/dashboard" className="text-white" aria-label="Back to dashboard">
               <ChevronLeft size={24} />
             </Link>
             <h1 className="text-xl font-bold text-white">Transactions</h1>

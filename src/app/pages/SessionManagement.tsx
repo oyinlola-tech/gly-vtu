@@ -110,7 +110,7 @@ export default function SessionManagement() {
                       Last seen: {session.last_seen ? new Date(session.last_seen).toLocaleString() : 'Unknown'}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {session.ip_address || 'IP unknown'} Â· {session.user_agent || 'Device'}
+                      {session.ip_address || 'IP unknown'} - {session.user_agent || 'Device'}
                     </p>
                     <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
                       <MapPin size={12} />

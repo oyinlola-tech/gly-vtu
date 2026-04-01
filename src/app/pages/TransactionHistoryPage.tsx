@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowDown, ArrowUp, Filter, Download, Search, Calendar } from 'lucide-react';
+import { ArrowDown, ArrowUp, Filter, Download, Search } from 'lucide-react';
 import { userAPI } from '../../services/api';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import { toast } from 'sonner';
@@ -154,10 +154,11 @@ export function TransactionHistoryPage() {
         {showFilters && (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+              <label htmlFor="txnSearch" className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <div className="relative">
                 <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
                 <input
+                  id="txnSearch"
                   type="text"
                   placeholder="Reference or description"
                   value={filters.search}
@@ -168,8 +169,9 @@ export function TransactionHistoryPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+              <label htmlFor="txnType" className="block text-sm font-medium text-gray-700 mb-2">Type</label>
               <select
+                id="txnType"
                 value={filters.type}
                 onChange={(e) => setFilters({ ...filters, type: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -183,8 +185,9 @@ export function TransactionHistoryPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+              <label htmlFor="txnStatus" className="block text-sm font-medium text-gray-700 mb-2">Status</label>
               <select
+                id="txnStatus"
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -198,8 +201,9 @@ export function TransactionHistoryPage() {
 
             <div className="flex gap-2">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">From</label>
+                <label htmlFor="txnFrom" className="block text-sm font-medium text-gray-700 mb-2">From</label>
                 <input
+                  id="txnFrom"
                   type="date"
                   value={filters.dateFrom}
                   onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
@@ -207,8 +211,9 @@ export function TransactionHistoryPage() {
                 />
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
+                <label htmlFor="txnTo" className="block text-sm font-medium text-gray-700 mb-2">To</label>
                 <input
+                  id="txnTo"
                   type="date"
                   value={filters.dateTo}
                   onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Eye, EyeOff, AlertCircle, CheckCircle, Lock, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Eye, EyeOff, AlertCircle, CheckCircle, Lock } from 'lucide-react';
 import { authAPI } from '../../services/api';
 
 export function PasswordChangeForm() {
@@ -17,7 +17,7 @@ export function PasswordChangeForm() {
     { min: 1, check: /[A-Z]/.test(newPassword), label: 'One uppercase letter' },
     { min: 1, check: /[a-z]/.test(newPassword), label: 'One lowercase letter' },
     { min: 1, check: /[0-9]/.test(newPassword), label: 'One number' },
-    { min: 1, check: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword), label: 'One special character' },
+    { min: 1, check: /[!@#$%^&*()_+\-=[\]{};"':\\|,.<>\/?]/.test(newPassword), label: 'One special character' },
   ];
 
   const meetsAllRequirements = passwordRequirements.every(req => req.check);
@@ -87,11 +87,12 @@ export function PasswordChangeForm() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Current Password */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label htmlFor="currentPassword" className="block text-sm font-semibold text-gray-700 mb-2">
               Current Password
             </label>
             <div className="relative">
               <input
+                id="currentPassword"
                 type={showPasswords.current ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -103,6 +104,7 @@ export function PasswordChangeForm() {
                 type="button"
                 onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
                 className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700"
+                aria-label={showPasswords.current ? 'Hide current password' : 'Show current password'}
               >
                 {showPasswords.current ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -111,11 +113,12 @@ export function PasswordChangeForm() {
 
           {/* New Password */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label htmlFor="newPassword" className="block text-sm font-semibold text-gray-700 mb-2">
               New Password
             </label>
             <div className="relative">
               <input
+                id="newPassword"
                 type={showPasswords.new ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -127,6 +130,7 @@ export function PasswordChangeForm() {
                 type="button"
                 onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
                 className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700"
+                aria-label={showPasswords.new ? 'Hide new password' : 'Show new password'}
               >
                 {showPasswords.new ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -175,11 +179,12 @@ export function PasswordChangeForm() {
 
           {/* Confirm Password */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700 mb-2">
               Confirm New Password
             </label>
             <div className="relative">
               <input
+                id="confirmPassword"
                 type={showPasswords.confirm ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -191,6 +196,7 @@ export function PasswordChangeForm() {
                 type="button"
                 onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
                 className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700"
+                aria-label={showPasswords.confirm ? 'Hide confirm password' : 'Show confirm password'}
               >
                 {showPasswords.confirm ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import { billsAPI } from '../../services/api';
@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import Breadcrumbs from '../components/Breadcrumbs';
 import type { BillProvider } from '../../types/bills';
 
 export default function BuyAirtime() {
@@ -151,10 +152,13 @@ export default function BuyAirtime() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
       <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-24 rounded-b-[24px]">
         <div className="flex items-center gap-4">
-          <Link to="/dashboard" className="text-white">
+          <Link to="/dashboard" className="text-white" aria-label="Back to dashboard">
             <ChevronLeft size={24} />
           </Link>
           <h1 className="text-xl font-bold text-white">Buy Airtime</h1>
+        </div>
+        <div className="mt-3 text-white/80 text-xs">
+          <Breadcrumbs items={[{ label: 'Bills', href: '/bills' }, { label: 'Airtime' }]} />
         </div>
       </div>
 
@@ -168,7 +172,7 @@ export default function BuyAirtime() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <label htmlFor="airtimeNetwork" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                 Select Network
               </label>
               {!manualNetwork ? (
@@ -197,6 +201,7 @@ export default function BuyAirtime() {
                 </div>
               ) : (
                 <select
+                  id="airtimeNetwork"
                   value={formData.network}
                   onChange={(e) => setFormData({ ...formData, network: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
@@ -212,10 +217,11 @@ export default function BuyAirtime() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="airtimePhone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Phone Number
               </label>
               <input
+                id="airtimePhone"
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -234,7 +240,7 @@ export default function BuyAirtime() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="airtimeAmount" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Amount
               </label>
               <div className="grid grid-cols-3 gap-2 mb-3">
@@ -256,6 +262,7 @@ export default function BuyAirtime() {
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
                 <input
+                  id="airtimeAmount"
                   type="number"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}

@@ -95,10 +95,11 @@ export default function KYC() {
             {level === 1 ? (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="bvn" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     BVN (optional if NIN provided)
                   </label>
                   <input
+                    id="bvn"
                     type="text"
                     value={formData.bvn}
                     onChange={(e) => setFormData({ ...formData, bvn: e.target.value })}
@@ -106,10 +107,11 @@ export default function KYC() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="nin" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     NIN (optional if BVN provided)
                   </label>
                   <input
+                    id="nin"
                     type="text"
                     value={formData.nin}
                     onChange={(e) => setFormData({ ...formData, nin: e.target.value })}
@@ -120,10 +122,11 @@ export default function KYC() {
             ) : (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="dob" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Date of Birth
                   </label>
                   <input
+                    id="dob"
                     type="date"
                     value={formData.dob}
                     onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
@@ -132,10 +135,11 @@ export default function KYC() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Address
                   </label>
                   <textarea
+                    id="address"
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"

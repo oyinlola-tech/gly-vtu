@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle, Shield, Lock, Smartphone } from 'lucide-react
 import { Link } from 'react-router';
 import { userAPI } from '../../services/api';
 import ActivityTimeline from '../components/ActivityTimeline';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 interface SecurityStatus {
   pinSet: boolean;
@@ -90,6 +91,9 @@ export function SecurityDashboard() {
 
   return (
     <div className="py-6 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+      <div className="mb-6">
+        <Breadcrumbs items={[{ label: 'Settings', href: '/more' }, { label: 'Security Dashboard' }]} />
+      </div>
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Security Dashboard</h1>
 
       {error && (
