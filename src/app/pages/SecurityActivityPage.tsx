@@ -233,7 +233,7 @@ export function SecurityActivityPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredEvents.map((event, _) => (
+          {filteredEvents.map((event) => (
             <button
               key={event.id}
               onClick={() => setSelectedEvent(event)}

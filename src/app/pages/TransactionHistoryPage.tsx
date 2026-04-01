@@ -40,9 +40,9 @@ export function TransactionHistoryPage() {
       const data = await userAPI.getTransactions?.();
       setTransactions(data || []);
       setError(null);
-    } catch (err) {
+    } catch {
       setError('Failed to load transactions');
-      console.error(err);
+      console.error('Failed to load transactions');
     } finally {
       setLoading(false);
     }
@@ -80,7 +80,7 @@ export function TransactionHistoryPage() {
       a.href = url;
       a.download = `transactions-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
-    } catch (err) {
+    } catch {
       setError('Failed to export transactions');
     }
   }

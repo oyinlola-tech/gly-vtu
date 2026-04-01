@@ -310,7 +310,7 @@ router.put('/kyc', requireUser, validateRequest(kycSubmissionSchema), async (req
             bankName: account.bank_name,
           }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
         }
-      } catch (_) {
+      } catch {
         // Keep KYC submission; reserved account can be retried later.
       }
     }

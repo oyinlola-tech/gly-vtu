@@ -76,8 +76,8 @@ export function WalletManagementPage() {
       setTopupAmount('');
       setSelectedOption(null);
       await loadWalletData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to initiate topup');
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'Failed to initiate topup');
     } finally {
       setTopupLoading(false);
     }

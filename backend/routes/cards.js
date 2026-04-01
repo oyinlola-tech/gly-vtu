@@ -191,7 +191,7 @@ router.post('/', requireUser, validateRequest(cardCreateSchema), async (req, res
     }).catch((err) => logger.error('Audit log failed (card.create)', { error: logger.format(err) }));
 
     return respond(201, { message: 'Card created', card });
-  } catch (_) {
+  } catch {
     await conn.rollback();
     return res.status(500).json({ error: 'Card creation failed' });
   } finally {

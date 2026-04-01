@@ -9,22 +9,29 @@ import {
   Download,
 } from 'lucide-react';
 import { transactionsAPI } from '../../services/api';
+import type { Transaction } from '../../types/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function TransactionDetails() {
   const { id } = useParams();
-  const [transaction, setTransaction] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    transactionsAPI
-      .getById(id)
-      .then((data) => setTransaction(data))
-      .catch(() => setError('Transaction not found'))
-      .finally(() => setLoading(false));
+    const loadTransaction = async () => {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const data = await transactionsAPI.getById(id);
+        setTransaction(data);
+      } catch {
+        setError('Transaction not found');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadTransaction();
   }, [id]);
 
   const formatAmount = (amount: number) =>

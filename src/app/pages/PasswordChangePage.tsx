@@ -55,8 +55,8 @@ export function PasswordChangeForm() {
       setNewPassword('');
       setConfirmPassword('');
       setTimeout(() => setSuccess(false), 5000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to change password');
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'Failed to change password');
     } finally {
       setLoading(false);
     }

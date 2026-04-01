@@ -404,7 +404,7 @@ async function setupSwaggerDocs(appInstance) {
   try {
     const raw = fs.readFileSync(swaggerPath, 'utf-8');
     swaggerDocument = JSON.parse(raw);
-  } catch (_) {
+  } catch {
     if (process.env.NODE_ENV === 'production') {
       logger.warn('Swagger file missing. Run `npm run swagger` to generate it.');
       return;

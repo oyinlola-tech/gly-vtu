@@ -92,7 +92,7 @@ export default function Login() {
       }
       persistLoginHint();
       navigate('/dashboard');
-    } catch (err) {
+    } catch {
       setError('Invalid email or password');
     } finally {
       setLoading(false);

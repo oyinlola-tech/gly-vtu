@@ -20,16 +20,16 @@ export default function SendMoney() {
         </div>
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 space-y-4">
           <Link
-            to="/send/swift-pay"
+            to="/send/gly-vtu"
             className="flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <div className="w-12 h-12 bg-[#f1f5f9] dark:bg-gray-800 rounded-full flex items-center justify-center">
               <User className="text-[#235697]" size={24} />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-gray-900 dark:text-white">Swift Pay User</p>
+              <p className="font-semibold text-gray-900 dark:text-white">GLY VTU User</p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Send to a Swift Pay User or invite phone contact
+                Send to a GLY VTU user or invite phone contact
               </p>
             </div>
             <ChevronLeft size={20} className="rotate-180 text-gray-400" />

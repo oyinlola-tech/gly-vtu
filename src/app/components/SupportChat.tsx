@@ -11,6 +11,13 @@ interface Message {
   timestamp: Date;
 }
 
+interface APIMessage {
+  id: string;
+  body: string;
+  sender_type: string;
+  created_at: string;
+}
+
 interface SupportChatProps {
   onClose: () => void;
 }
@@ -36,7 +43,7 @@ export default function SupportChat({ onClose }: SupportChatProps) {
       .getMine()
       .then((data) => {
         if (!mounted) return;
-        const incoming = (data?.messages || []).map((msg: any) => ({
+        const incoming = (data?.messages || []).map((msg: APIMessage) => ({
           id: msg.id,
           text: msg.body,
           sender: msg.sender_type === 'admin' ? 'admin' : 'user',

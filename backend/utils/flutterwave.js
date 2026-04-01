@@ -141,7 +141,7 @@ export function verifyFlutterwaveWebhook(req) {
       return false;
     }
     return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  } catch (_) {
+  } catch {
     return false;
   }
 }

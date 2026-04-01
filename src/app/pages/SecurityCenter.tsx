@@ -84,7 +84,11 @@ export default function SecurityCenter() {
     }
   };
 
-  const deviceId = useMemo(() => tokenStore.getDeviceId(), []);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    tokenStore.getDeviceId().then(setDeviceId).catch(() => setDeviceId(null));
+  }, []);
   const enrichedSessions = useMemo(
     () =>
       (sessions || []).map((session) => ({

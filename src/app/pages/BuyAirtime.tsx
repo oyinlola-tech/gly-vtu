@@ -61,7 +61,7 @@ export default function BuyAirtime() {
     if (formData.network !== detected) {
       setFormData((prev) => ({ ...prev, network: detected }));
     }
-  }, [formData.phone, manualNetwork]);
+  }, [formData.phone, manualNetwork, formData.network]);
 
   const providerName =
     providers.find((p) => p.code === formData.network)?.name || formData.network.toUpperCase();
@@ -70,7 +70,7 @@ export default function BuyAirtime() {
     try {
       const response = await billsAPI.getProviders('airtime');
       setProviders(response || []);
-    } catch (err) {
+    } catch {
       console.error('Failed to load providers');
     }
   };
@@ -105,7 +105,7 @@ export default function BuyAirtime() {
       if (response?.checkoutUrl) {
         window.location.href = response.checkoutUrl;
       }
-    } catch (err) {
+    } catch {
       setError('Card payment failed');
     } finally {
       setLoading(false);
@@ -140,7 +140,7 @@ export default function BuyAirtime() {
           recipientBank: `${formData.network} Airtime`,
         },
       });
-    } catch (err) {
+    } catch {
       setError('Transaction failed');
     } finally {
       setLoading(false);

@@ -11,6 +11,21 @@ import type {
   BillsPayRequest,
   BillsPayResponse,
 } from '../types/bills';
+import type {
+  User,
+  Transaction,
+  WalletInfo,
+  TopupOption,
+  SecurityStatus,
+  SecurityAlert,
+  Session,
+  KYCLimits,
+  TOTPSetup,
+  Bank,
+  Conversation,
+  SecurityQuestion,
+  SendMoneyResponse,
+} from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/app/api';
 const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || '/app/admin/api';
@@ -125,7 +140,7 @@ async function refreshAdminAccessToken() {
 async function request<T>(
   base: string,
   path: string,
-  options: RequestInit = {},
+  options: globalThis.RequestInit = {},
   config: { auth?: boolean; admin?: boolean } = {}
 ): Promise<T> {
   const { auth = true, admin = false } = config;
@@ -311,7 +326,7 @@ export const authAPI = {
 
   // Additional auth methods for security pages
   getProfile: async () => {
-    return request<any>(API_BASE_URL, '/auth/me');
+    return request<User>(API_BASE_URL, '/auth/me');
   },
 
   changePassword: async (currentPassword: string, newPassword: string) => {
@@ -358,7 +373,7 @@ export const authAPI = {
 // ============= USER APIs =============
 export const userAPI = {
   getProfile: async () => {
-    return request<any>(API_BASE_URL, '/user/profile');
+    return request<User>(API_BASE_URL, '/user/profile');
   },
 
   submitKYC: async (data: { level: 2 | 3; payload: Record<string, any> }) => {
@@ -378,7 +393,7 @@ export const userAPI = {
   },
 
   getKycLimits: async () => {
-    return request<any>(API_BASE_URL, '/user/kyc/limits');
+    return request<KYCLimits>(API_BASE_URL, '/user/kyc/limits');
   },
 
   changePassword: async (currentPassword: string, newPassword: string) => {
@@ -390,7 +405,7 @@ export const userAPI = {
   },
 
   getSessions: async () => {
-    return request<any[]>(API_BASE_URL, '/user/sessions');
+    return request<Session[]>(API_BASE_URL, '/user/sessions');
   },
 
   revokeSession: async (id: string) => {
@@ -409,20 +424,20 @@ export const userAPI = {
   },
 
   getSecurityStatus: async () => {
-    return request<any>(API_BASE_URL, '/user/security');
+    return request<SecurityStatus>(API_BASE_URL, '/user/security');
   },
   getSecurityEvents: async (params?: { limit?: number; offset?: number }) => {
     const search = new URLSearchParams();
     if (params?.limit) search.set('limit', String(params.limit));
     if (params?.offset) search.set('offset', String(params.offset));
     const query = search.toString();
-    return request<any[]>(
+    return request<SecurityAlert[]>(
       API_BASE_URL,
       `/user/security-events${query ? `?${query}` : ''}`
     );
   },
   getSecurityAlerts: async () => {
-    return request<{ alerts: any[] }>(API_BASE_URL, '/user/security-alerts');
+    return request<{ alerts: SecurityAlert[] }>(API_BASE_URL, '/user/security-alerts');
   },
   requestDataExport: async () => {
     return request<{ success: boolean }>(API_BASE_URL, '/user/data-export', { method: 'POST' });
@@ -482,7 +497,7 @@ export const userAPI = {
   },
 
   getSecurityQuestion: async () => {
-    return request<any>(API_BASE_URL, '/user/security-question');
+    return request<SecurityQuestion>(API_BASE_URL, '/user/security-question');
   },
 
   setSecurityQuestion: async (question: string, answer: string) => {
@@ -504,13 +519,13 @@ export const userAPI = {
     return request<any>(API_BASE_URL, '/user/totp/setup', { method: 'POST' });
   },
   enableTotp: async (token: string) => {
-    return request<any>(API_BASE_URL, '/user/totp/enable', {
+    return request<{ message: string }>(API_BASE_URL, '/user/totp/enable', {
       method: 'POST',
       body: JSON.stringify({ token }),
     });
   },
   disableTotp: async (payload: { token?: string; backupCode?: string }) => {
-    return request<any>(API_BASE_URL, '/user/totp/disable', {
+    return request<{ message: string }>(API_BASE_URL, '/user/totp/disable', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -518,19 +533,19 @@ export const userAPI = {
 
   // Wallet & Transaction methods
   getTransactions: async () => {
-    return request<any[]>(API_BASE_URL, '/transactions');
+    return request<Transaction[]>(API_BASE_URL, '/transactions');
   },
 
   getWalletInfo: async () => {
-    return request<any>(API_BASE_URL, '/wallet/info');
+    return request<WalletInfo>(API_BASE_URL, '/wallet/info');
   },
 
   getTopupOptions: async () => {
-    return request<any[]>(API_BASE_URL, '/wallet/topup-options');
+    return request<TopupOption[]>(API_BASE_URL, '/wallet/topup-options');
   },
 
   initiateTopup: async (providerId: string, amount: number) => {
-    return request<any>(API_BASE_URL, '/wallet/topup', {
+    return request<{ checkoutUrl?: string }>(API_BASE_URL, '/wallet/topup', {
       method: 'POST',
       body: JSON.stringify({ providerId, amount }),
     });
@@ -540,7 +555,7 @@ export const userAPI = {
 // ============= WALLET APIs =============
 export const walletAPI = {
   getBalance: async () => {
-    return request<any>(API_BASE_URL, '/wallet/balance');
+    return request<{ balance: number }>(API_BASE_URL, '/wallet/balance');
   },
 
   sendMoney: async (data: {
@@ -552,7 +567,7 @@ export const walletAPI = {
     to?: string;
     channel?: string;
   }) => {
-    return request<any>(API_BASE_URL, '/wallet/send', {
+    return request<SendMoneyResponse>(API_BASE_URL, '/wallet/send', {
       method: 'POST',
       headers: { 'X-Idempotency-Key': createIdempotencyKey() },
       body: JSON.stringify(data),
@@ -663,11 +678,11 @@ export const billsAPI = {
 // ============= BANKS APIs =============
 export const banksAPI = {
   getBanks: async () => {
-    return request<any[]>(API_BASE_URL, '/banks');
+    return request<Bank[]>(API_BASE_URL, '/banks');
   },
 
   resolveAccount: async (data: { accountNumber: string; bankCode: string }) => {
-    return request<any>(API_BASE_URL, '/banks/resolve', {
+    return request<{ accountName: string }>(API_BASE_URL, '/banks/resolve', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -698,10 +713,10 @@ export const notificationsAPI = {
 // ============= CONVERSATIONS APIs =============
 export const conversationsAPI = {
   getMine: async () => {
-    return request<any>(API_BASE_URL, '/conversations/me');
+    return request<Conversation>(API_BASE_URL, '/conversations/me');
   },
   send: async (text: string) => {
-    return request<any>(API_BASE_URL, '/conversations/send', {
+    return request<{ message: string }>(API_BASE_URL, '/conversations/send', {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
@@ -731,9 +746,9 @@ export const cardsAPI = {
     });
   },
   getSettings: async (cardId: string) => {
-    return request<any>(API_BASE_URL, `/cards/${cardId}/settings`);
+    return request<Record<string, unknown>>(API_BASE_URL, `/cards/${cardId}/settings`);
   },
-  updateSettings: async (cardId: string, payload: any) => {
+  updateSettings: async (cardId: string, payload: Record<string, unknown>) => {
     return request<{ message: string }>(API_BASE_URL, `/cards/${cardId}/settings`, {
       method: 'PUT',
       body: JSON.stringify(payload),

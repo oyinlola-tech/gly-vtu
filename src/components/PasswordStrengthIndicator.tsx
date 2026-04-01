@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-// @ts-ignore - zxcvbn does not have TypeScript types available
+import React, { useMemo } from 'react';
+// @ts-expect-error - zxcvbn does not have TypeScript types available
 import zxcvbn from 'zxcvbn';
 
 /**
@@ -19,19 +19,13 @@ interface ZxcvbnResult {
 }
 
 export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthIndicatorProps) {
-  const [strength, setStrength] = useState(0);
-  const [feedback, setFeedback] = useState('');
-
-  useEffect(() => {
+  const { strength, feedback } = useMemo(() => {
     if (!password) {
-      setStrength(0);
-      setFeedback('');
-      return;
+      return { strength: 0, feedback: '' };
     }
 
-    // @ts-ignore - zxcvbn does not have TypeScript types available
+    // @ts-expect-error - zxcvbn does not have TypeScript types available
     const result = zxcvbn(password) as ZxcvbnResult;
-    setStrength(result.score);
 
     // Generate feedback message
     const messages = [
@@ -42,7 +36,7 @@ export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthInd
       'Strong. Excellent password strength!',
     ];
 
-    setFeedback(messages[result.score]);
+    return { strength: result.score, feedback: messages[result.score] };
   }, [password]);
 
   const colors = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e'];

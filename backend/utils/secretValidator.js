@@ -11,6 +11,7 @@ export class SecretValidator {
     'JWT_ADMIN_SECRET',
     'COOKIE_ENC_SECRET',
     'PII_ENCRYPTION_KEY',
+    'PII_HASH_SECRET',
     'DB_PASSWORD',
     'FLW_SECRET_KEY',
     'VTPASS_API_KEY',

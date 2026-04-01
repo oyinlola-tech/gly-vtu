@@ -36,7 +36,7 @@ export default function SendToBank() {
     try {
       const response = await banksAPI.getBanks();
       setBanks(response || []);
-    } catch (err) {
+    } catch {
       console.error('Failed to load banks');
     }
   };
@@ -45,7 +45,7 @@ export default function SendToBank() {
     try {
       const response = await walletAPI.getBalance();
       setBalance(Number(response?.balance || 0));
-    } catch (err) {
+    } catch {
       console.error('Failed to load balance');
     }
   };
@@ -67,7 +67,7 @@ export default function SendToBank() {
         return;
       }
       setAccountName(response.accountName || '');
-    } catch (err) {
+    } catch {
       setError('Unable to verify account');
       setAccountName('');
     } finally {
@@ -119,7 +119,7 @@ export default function SendToBank() {
           recipientBank: formData.bankName,
         },
       });
-    } catch (err) {
+    } catch {
       setError('Transaction failed');
     } finally {
       setLoading(false);

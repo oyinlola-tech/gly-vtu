@@ -149,7 +149,7 @@ router.get('/variations', async (req, res) => {
   try {
     const data = await getServiceVariations(String(serviceID));
     return res.json(data?.content || {});
-  } catch (_) {
+  } catch {
     return res.status(502).json({ error: 'Unable to fetch variations' });
   }
 });
@@ -191,7 +191,7 @@ router.post('/quote', requireUser, validateRequest(billsQuoteSchema), async (req
         total: resolvedAmount,
         currency: 'NGN',
       });
-    } catch (_) {
+    } catch {
       return res.status(502).json({ error: 'Unable to fetch quote' });
     }
   }
@@ -379,7 +379,7 @@ router.post('/pay', billsLimiter, requireUser, validateRequest(billsPaySchema), 
         vtpassRes = await buyService(payload);
         const responseCode = vtpassRes?.response_description || vtpassRes?.code || '';
         status = responseCode === '000' || responseCode === 'SUCCESS' ? 'success' : 'pending';
-      } catch (_) {
+      } catch {
         status = 'failed';
       }
 
@@ -453,7 +453,7 @@ router.post('/pay', billsLimiter, requireUser, validateRequest(billsPaySchema), 
         status,
         vtpass: vtpassRes ? sanitizeVtpassPayload(vtpassRes) : null,
       });
-    } catch (_) {
+    } catch {
       return res.status(502).json({ error: 'VTpass payment failed' });
     }
   }

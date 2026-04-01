@@ -143,7 +143,7 @@ function AppContent() {
             }
           />
           <Route
-            path="/send/swift-pay"
+            path="/send/gly-vtu"
             element={
               <PrivateRoute>
                 <SendToUser />

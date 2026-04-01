@@ -3,6 +3,11 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { ensureAdminTotpColumns } from '../docs/migrations/2026-03-30_admin_totp.js';
+import { ensureAccountLockoutColumns } from '../docs/migrations/2026-04-01_account_lockout.js';
+import {
+  ensurePiiEncryptionColumns,
+  ensurePiiEncryptionIndexes,
+} from '../docs/migrations/2026-04-01_pii_encryption.js';
 import {
   encryptPII,
   encryptJson,
@@ -494,10 +499,13 @@ export async function initDatabase() {
     await seedDefaults(conn);
     await seedAdmin(conn);
     await ensureUserSecurityColumns(conn);
+    await ensureAccountLockoutColumns(conn, DB_NAME);
     await ensureUserLoginLockColumns(conn);
     await ensureUserPhoneNullable(conn);
     await ensureUserEmailNullable(conn);
     await ensureUserFullNameNullable(conn);
+    await ensurePiiEncryptionColumns(conn, DB_NAME);
+    await ensurePiiEncryptionIndexes(conn, DB_NAME);
     await ensureUserPiiColumns(conn);
     await ensureUserPiiIndexes(conn);
     await migrateUserPii(conn);

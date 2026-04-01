@@ -41,8 +41,8 @@ export default function TransactionDetailsPage() {
       const data = await transactionsAPI.getById(id as string);
       setTransaction(data);
       setError(null);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load transaction details');
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'Failed to load transaction details');
     } finally {
       setLoading(false);
     }
@@ -64,8 +64,8 @@ export default function TransactionDetailsPage() {
       a.download = `transaction-receipt-${id}.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to download receipt');
+    } catch (err: unknown) {
+      toast.error((err as Error)?.message || 'Failed to download receipt');
     }
   }
 

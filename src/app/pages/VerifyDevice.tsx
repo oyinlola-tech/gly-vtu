@@ -51,7 +51,7 @@ export default function VerifyDevice() {
         return;
       }
       navigate('/dashboard');
-    } catch (err) {
+    } catch {
       setError('Verification failed. Please try again.');
     } finally {
       setLoading(false);

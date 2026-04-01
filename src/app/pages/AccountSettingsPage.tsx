@@ -63,8 +63,9 @@ export function AccountSettingsPage() {
       setEditing(false);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to update profile');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update profile';
+      setError(message);
     } finally {
       setLoading(false);
     }

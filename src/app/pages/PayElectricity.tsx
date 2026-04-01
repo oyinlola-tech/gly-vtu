@@ -79,7 +79,7 @@ export default function PayElectricity() {
       if (response?.checkoutUrl) {
         window.location.href = response.checkoutUrl;
       }
-    } catch (err) {
+    } catch {
       setError('Card payment failed');
     } finally {
       setLoading(false);
@@ -319,7 +319,7 @@ export default function PayElectricity() {
                   recipientBank: 'Electricity',
                 },
               });
-            } catch (err) {
+            } catch {
               setError('Transaction failed');
             } finally {
               setLoading(false);

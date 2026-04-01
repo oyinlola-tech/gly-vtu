@@ -16,6 +16,14 @@ import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
+function isEmail(value) {
+  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function isPhone(value) {
+  return typeof value === 'string' && /^(\+234|0)[789][0-9]{9}$/.test(value.trim());
+}
+
 
 router.get('/balance', requireUser, async (req, res) => {
   /*
@@ -135,6 +143,10 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
     bankName = bank.name;
   } else {
     if (!to) return respond(400, { error: 'Recipient required' });
+    const validRecipient = isEmail(to) || isPhone(to);
+    if (!validRecipient) {
+      return respond(400, { error: 'Recipient must be an email or phone number' });
+    }
     const [targets] = await pool.query(
       'SELECT id FROM users WHERE email_hash = ? OR phone_hash = ? LIMIT 1',
       [hashEmail(to), hashPhone(to)]
@@ -287,7 +299,7 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
       reference,
       status: isBank ? 'pending' : 'success',
     });
-  } catch (_) {
+  } catch {
     await conn.rollback();
     return res.status(500).json({ error: 'Transfer failed' });
   } finally {

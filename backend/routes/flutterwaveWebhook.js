@@ -252,7 +252,7 @@ router.post('/', webhookLimiter, async (req, res) => {
     ]);
 
     await conn.commit();
-  } catch (_) {
+  } catch {
     await conn.rollback();
     return res.status(500).json({ error: 'Failed to credit wallet' });
   } finally {

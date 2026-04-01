@@ -155,7 +155,17 @@ export function hashPIIForSearch(plaintext, field = '') {
   if (!plaintext) return null;
 
   // Use HMAC for deterministic hashing
-  const secret = process.env.PII_HASH_SECRET || process.env.JWT_SECRET;
+  const secret = process.env.PII_HASH_SECRET;
+  if (!secret) {
+    throw new Error(
+      'CRITICAL: PII_HASH_SECRET environment variable must be set. ' +
+      'Do not fall back to JWT_SECRET. ' +
+      'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error('CRITICAL: PII_HASH_SECRET must be at least 32 characters');
+  }
   return crypto
     .createHmac('sha256', secret + field)
     .update(plaintext)

@@ -161,7 +161,7 @@ export default function AdminDashboard() {
   const recentUsers = useMemo(() => users.slice(0, 5), [users]);
   const recentTransactions = useMemo(() => transactions.slice(0, 10), [transactions]);
   const [expandedTx, setExpandedTx] = useState<string | null>(null);
-  const getTxnMeta = (meta: any) => {
+  const getTxnMeta = (meta: unknown) => {
     if (!meta) return null;
     if (typeof meta === 'string') {
       try {

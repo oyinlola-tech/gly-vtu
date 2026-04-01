@@ -56,7 +56,7 @@ export function decryptCookieValue(value) {
     decipher.setAuthTag(tag);
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
     return plaintext.toString('utf8');
-  } catch (_) {
+  } catch {
     return null;
   }
 }

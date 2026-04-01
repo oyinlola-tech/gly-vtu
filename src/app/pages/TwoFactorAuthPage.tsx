@@ -33,8 +33,8 @@ export function TwoFactorAuthPage() {
     try {
       const profile = await authAPI.getProfile?.();
       setTwoFactorEnabled(profile?.totp_enabled || false);
-    } catch (err) {
-      console.error('Failed to load 2FA status', err);
+    } catch {
+      console.error('Failed to load 2FA status');
     }
   }
 
@@ -49,9 +49,9 @@ export function TwoFactorAuthPage() {
         qrCode: setupData.qrCode,
         verified: false,
       });
-    } catch (err) {
+    } catch {
       setError('Failed to initiate 2FA setup');
-      console.error(err);
+      console.error('Failed to initiate 2FA setup');
     } finally {
       setLoading(false);
     }
@@ -74,8 +74,8 @@ export function TwoFactorAuthPage() {
       }));
       setSuccess('2FA verification successful!');
       codeInputRef.current?.blur();
-    } catch (err: any) {
-      setError(err.message || 'Failed to verify code');
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'Failed to verify code');
     } finally {
       setLoading(false);
     }
@@ -91,9 +91,9 @@ export function TwoFactorAuthPage() {
       setCode('');
       setSuccess('Two-factor authentication enabled!');
       setTimeout(() => setSuccess(null), 5000);
-    } catch (err) {
+    } catch {
       setError('Failed to enable 2FA');
-      console.error(err);
+      console.error('Failed to enable 2FA');
     } finally {
       setLoading(false);
     }
@@ -107,7 +107,7 @@ export function TwoFactorAuthPage() {
       setTwoFactorEnabled(false);
       setSuccess('Two-factor authentication disabled');
       setTimeout(() => setSuccess(null), 5000);
-    } catch (err) {
+    } catch {
       setError('Failed to disable 2FA');
     } finally {
       setLoading(false);
