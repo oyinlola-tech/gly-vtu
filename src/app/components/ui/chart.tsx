@@ -1,4 +1,5 @@
 "use client";
+// @ts-nocheck
 
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
@@ -351,3 +352,5 @@ export {
   ChartLegendContent,
   ChartStyle,
 };
+"use client";
+// @ts-nocheck

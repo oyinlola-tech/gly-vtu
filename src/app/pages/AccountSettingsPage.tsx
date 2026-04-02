@@ -40,9 +40,9 @@ export function AccountSettingsPage() {
         accountNumber: data.account_number,
         bankName: data.bank_name,
         kycLevel: data.kyc_level,
-        kycStatus: data.kyc_status,
+        kycStatus: data.kyc_status || 'pending',
         createdAt: data.created_at,
-        lastActivityAt: data.last_activity_at,
+        lastActivityAt: data.last_activity_at || '',
       });
       setFormData({ fullName: data.full_name, phone: data.phone });
       setError(null);

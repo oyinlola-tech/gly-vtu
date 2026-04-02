@@ -471,7 +471,7 @@ export default function AdminDashboard() {
                         {txn.vtpass_status && (
                           <p>VTpass status: {txn.vtpass_status}</p>
                         )}
-                        {txn.metadata && (
+                        {txn.metadata != null && (
                           <pre className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg overflow-x-auto">
                             {metaString}
                           </pre>

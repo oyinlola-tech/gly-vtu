@@ -76,8 +76,8 @@ export default function AdminTransactions() {
       if (search && !hay.includes(search.toLowerCase())) return false;
       if (type !== 'all' && row.type !== type) return false;
       if (status !== 'all' && row.status !== status) return false;
-      if (from && new Date(row.created_at) < new Date(from)) return false;
-      if (to && new Date(row.created_at) > new Date(`${to}T23:59:59`)) return false;
+      if (from && row.created_at && new Date(row.created_at) < new Date(from)) return false;
+      if (to && row.created_at && new Date(row.created_at) > new Date(`${to}T23:59:59`)) return false;
       return true;
     });
   }, [transactions, search, type, status, from, to]);
@@ -188,12 +188,17 @@ export default function AdminTransactions() {
             <p className="text-sm text-gray-500 dark:text-gray-400">No transactions found.</p>
           ) : (
             <div className="space-y-3">
-              {filtered.map((txn) => (
+              {filtered.map((txn) => {
+                const ref = txn.reference ?? '';
+                const metaString: string = txn.metadata
+                  ? JSON.stringify(getMeta(txn.metadata), null, 2) ?? ''
+                  : '';
+                return (
                 <div key={txn.id} className="border border-gray-200 dark:border-gray-800 rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {txn.reference}
+                        {ref || '—'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{txn.full_name}</p>
                     </div>
@@ -214,11 +219,11 @@ export default function AdminTransactions() {
                     >
                       {expanded === txn.id ? 'Hide details' : 'View details'}
                     </button>
-                    {txn.reference?.startsWith('BILL-') && (
+                    {ref.startsWith('BILL-') && (
                       <button
                         onClick={() =>
                           adminAPI
-                            .requeryVtpass(txn.reference.replace('BILL-', ''))
+                            .requeryVtpass(ref.replace('BILL-', ''))
                             .then(load)
                         }
                         className="text-xs text-white bg-[#235697] px-2 py-1 rounded-lg"
@@ -230,17 +235,18 @@ export default function AdminTransactions() {
                   {expanded === txn.id && (
                     <div className="mt-3 text-xs text-gray-500 dark:text-gray-400 space-y-1">
                       <p>Type: {txn.type}</p>
-                      <p>Date: {new Date(txn.created_at).toLocaleString()}</p>
+                      <p>Date: {txn.created_at ? new Date(txn.created_at).toLocaleString() : '—'}</p>
                       {txn.vtpass_status && <p>VTpass status: {txn.vtpass_status}</p>}
-                      {txn.metadata && (
+                      {txn.metadata != null && (
                         <pre className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg overflow-x-auto">
-                          {JSON.stringify(getMeta(txn.metadata), null, 2)}
+                          {metaString}
                         </pre>
                       )}
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

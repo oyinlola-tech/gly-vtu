@@ -88,7 +88,7 @@ export default function AdminReview() {
                         })}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(topup.created_at).toLocaleString()}
+                        {topup.created_at ? new Date(topup.created_at).toLocaleString() : '—'}
                       </p>
                     </div>
                   </div>
@@ -144,7 +144,7 @@ export default function AdminReview() {
                         })}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(adj.created_at).toLocaleString()}
+                        {adj.created_at ? new Date(adj.created_at).toLocaleString() : '—'}
                       </p>
                     </div>
                   </div>

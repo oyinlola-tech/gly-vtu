@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft, Laptop, MapPin, Smartphone, Tablet, Trash2 } from 'lucide-react';
 import { tokenStore, userAPI } from '../../services/api';
@@ -21,7 +21,7 @@ export default function SessionManagement() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState<string | null>(null);
-  const deviceId = useMemo(() => tokenStore.getDeviceId(), []);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
 
   const loadSessions = async () => {
     setLoading(true);
@@ -37,6 +37,7 @@ export default function SessionManagement() {
 
   useEffect(() => {
     loadSessions();
+    tokenStore.getDeviceId().then((id) => setDeviceId(id));
   }, []);
 
   const getIcon = (ua: string) => {

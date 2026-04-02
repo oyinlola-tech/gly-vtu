@@ -5,16 +5,20 @@ import BottomNav from '../components/BottomNav';
 import { cardsAPI } from '../../services/api';
 
 export default function Cards() {
-  const virtualCardProvider = (import.meta.env.VITE_VIRTUAL_CARD_PROVIDER || '').trim();
-  const virtualCardStatus = (import.meta.env.VITE_VIRTUAL_CARD_STATUS || 'coming_soon').toLowerCase();
+  const env = (import.meta as unknown as { env?: { VITE_VIRTUAL_CARD_PROVIDER?: string; VITE_VIRTUAL_CARD_STATUS?: string } }).env;
+  const virtualCardProvider = (env?.VITE_VIRTUAL_CARD_PROVIDER || '').trim();
+  const virtualCardStatus = (env?.VITE_VIRTUAL_CARD_STATUS || 'coming_soon').toLowerCase();
   const virtualCardReady = virtualCardStatus === 'live';
   type Card = {
+    id?: string;
     card_id: string;
     status?: string;
     brand?: string;
     last4?: string;
     currency?: string;
     balance?: number;
+    masked_pan?: string;
+    expiry?: string;
   };
   type CardSettings = {
     daily_limit?: number | null;
@@ -40,7 +44,7 @@ export default function Cards() {
   const loadCards = async () => {
     try {
       const data = await cardsAPI.list();
-      setCards(data || []);
+      setCards((data || []) as Card[]);
     } catch {
       setCards([]);
     }
@@ -86,8 +90,8 @@ export default function Cards() {
     try {
       const data = (await cardsAPI.getSettings(card.card_id)) as CardSettings;
       setSettings({
-        dailyLimit: data?.daily_limit ?? '',
-        monthlyLimit: data?.monthly_limit ?? '',
+        dailyLimit: data?.daily_limit != null ? String(data.daily_limit) : '',
+        monthlyLimit: data?.monthly_limit != null ? String(data.monthly_limit) : '',
         merchantLocks: data?.merchant_locks ?? '',
         autoFreeze: data?.auto_freeze ? true : false,
       });

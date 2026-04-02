@@ -470,12 +470,12 @@ export default function SecurityCenter() {
                   <div
                     key={event.id}
                     className={`border rounded-xl p-3 flex items-start gap-3 ${eventTone(
-                      event.severity
+                      event.severity || 'low'
                     )}`}
                   >
                     <AlertTriangle size={16} className="mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm font-semibold">{formatEventName(event.event_type)}</p>
+                      <p className="text-sm font-semibold">{formatEventName(event.event_type || '')}</p>
                       <p className="text-xs text-gray-600">
                         {event.created_at ? new Date(event.created_at).toLocaleString() : 'Unknown'} ·{' '}
                         {event.ip_address || 'IP unknown'}

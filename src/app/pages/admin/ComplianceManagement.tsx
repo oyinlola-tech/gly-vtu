@@ -19,7 +19,7 @@ export default function ComplianceManagement() {
   useEffect(() => {
     adminAPI
       .getComplianceQueue?.()
-      .then((data) => setItems(data || []))
+      .then((data) => setItems((data || []) as ComplianceItem[]))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, []);

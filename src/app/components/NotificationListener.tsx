@@ -9,7 +9,8 @@ export default function NotificationListener() {
   useEffect(() => {
     wsRef.current?.close();
     if (!user?.id) return;
-    const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
+    const env = (import.meta as unknown as { env?: { VITE_WS_URL?: string } }).env;
+    const wsUrl = env?.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
     const ws = new WebSocket(`${wsUrl}?role=user`);
     wsRef.current = ws;
     ws.onmessage = (event) => {

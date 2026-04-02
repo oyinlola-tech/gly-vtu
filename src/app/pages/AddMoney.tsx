@@ -20,7 +20,7 @@ export default function AddMoney() {
         setAccount({
           accountNumber: profile.account_number,
           bankName: profile.bank_name,
-          accountName: profile.account_name || profile.full_name,
+          accountName: profile.full_name,
         })
       )
       .catch(() => null);
@@ -59,7 +59,7 @@ export default function AddMoney() {
                     <p className="font-semibold text-gray-900 dark:text-white">{account.accountNumber}</p>
                   </div>
                   <button
-                    onClick={() => handleCopy(account.accountNumber)}
+                    onClick={() => account.accountNumber && handleCopy(account.accountNumber)}
                     className="text-[#235697] hover:text-[#1e4a7f]"
                   >
                     <Copy size={18} />

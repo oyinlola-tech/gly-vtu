@@ -2,15 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { userAPI } from '../../services/api';
-
-interface SecurityAlert {
-  id: string;
-  title: string;
-  message: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  actionUrl?: string;
-  createdAt?: string;
-}
+import type { SecurityAlert } from '../../types/api';
 
 export default function SecurityAlertBanner() {
   const { user } = useAuth();
@@ -27,7 +19,7 @@ export default function SecurityAlertBanner() {
       .getSecurityAlerts?.()
       .then((data) => {
         if (!mounted) return;
-        setAlerts(data?.alerts || []);
+        setAlerts((data?.alerts || []) as SecurityAlert[]);
       })
       .catch(() => null)
       .finally(() => mounted && setLoading(false));
@@ -43,7 +35,7 @@ export default function SecurityAlertBanner() {
 
   if (!user || loading || activeAlerts.length === 0) return null;
 
-  const tone = (severity: SecurityAlert['severity']) => {
+  const tone = (severity: SecurityAlert['severity'] = 'low') => {
     if (severity === 'critical') return 'border-red-300 bg-red-50 text-red-900';
     if (severity === 'high') return 'border-red-200 bg-red-50 text-red-900';
     if (severity === 'medium') return 'border-yellow-200 bg-yellow-50 text-yellow-900';
@@ -61,14 +53,14 @@ export default function SecurityAlertBanner() {
             <AlertTriangle className="mt-0.5 flex-shrink-0" size={18} />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h4 className="font-semibold text-sm">{alert.title}</h4>
+                <h4 className="font-semibold text-sm">{alert.title || 'Security alert'}</h4>
                 {alert.createdAt && (
                   <span className="text-xs text-gray-500">
                     {new Date(alert.createdAt).toLocaleString()}
                   </span>
                 )}
               </div>
-              <p className="text-sm opacity-90">{alert.message}</p>
+              <p className="text-sm opacity-90">{alert.message || 'Please review your account activity.'}</p>
               {alert.actionUrl && (
                 <a
                   href={alert.actionUrl}

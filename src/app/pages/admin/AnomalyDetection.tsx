@@ -18,7 +18,7 @@ export default function AnomalyDetection() {
   useEffect(() => {
     adminAPI
       .getAnomalies?.()
-      .then((data) => setAnomalies(data || []))
+      .then((data) => setAnomalies((data || []) as Anomaly[]))
       .catch(() => setAnomalies([]))
       .finally(() => setLoading(false));
   }, []);

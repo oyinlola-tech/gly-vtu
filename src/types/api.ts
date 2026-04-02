@@ -6,6 +6,7 @@ export type User = {
   totp_enabled?: boolean;
   kyc_level: number;
   kyc_status?: string;
+  account_name?: string;
   account_number?: string;
   bank_name?: string;
   created_at: string;
@@ -103,9 +104,14 @@ export type SecurityStatus = {
 
 export type SecurityAlert = {
   id: string;
-  type: string;
-  message: string;
-  created_at: string;
+  type?: string;
+  message?: string;
+  created_at?: string;
+  title?: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  actionUrl?: string;
+  createdAt?: string;
+  event_type?: string;
 };
 
 export type Session = {
@@ -121,6 +127,7 @@ export type KYCLimits = {
   daily_limit: number;
   monthly_limit: number;
   currency: string;
+  status?: string;
 };
 
 export type TOTPSetup = {
@@ -149,6 +156,7 @@ export type Conversation = {
   email?: string;
   last_message?: string;
   updated_at?: string;
+  messages?: ConversationMessage[];
 };
 
 export type SecurityQuestion = {

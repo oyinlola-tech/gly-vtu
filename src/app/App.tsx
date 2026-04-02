@@ -39,9 +39,15 @@ const AddMoney = lazy(() => import('./pages/AddMoney'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Security = lazy(() => import('./pages/Security'));
 const SecurityCenter = lazy(() => import('./pages/SecurityCenter'));
-const SecurityDashboard = lazy(() => import('./pages/SecurityDashboard'));
-const PasswordChangePage = lazy(() => import('./pages/PasswordChangePage'));
-const SecurityActivityPage = lazy(() => import('./pages/SecurityActivityPage'));
+const SecurityDashboard = lazy(() =>
+  import('./pages/SecurityDashboard').then((m) => ({ default: m.SecurityDashboard }))
+);
+const PasswordChangePage = lazy(() =>
+  import('./pages/PasswordChangePage').then((m) => ({ default: m.PasswordChangeForm }))
+);
+const SecurityActivityPage = lazy(() =>
+  import('./pages/SecurityActivityPage').then((m) => ({ default: m.SecurityActivityPage }))
+);
 const TwoFactorSetup = lazy(() => import('./pages/TwoFactorSetup'));
 const DeviceManagement = lazy(() => import('./pages/DeviceManagement'));
 const Notifications = lazy(() => import('./pages/Notifications'));
@@ -52,8 +58,12 @@ const KYC = lazy(() => import('./pages/KYC'));
 const KycStatusLimits = lazy(() => import('./pages/KycStatusLimits'));
 const CompliancePolicies = lazy(() => import('./pages/CompliancePolicies'));
 const Disputes = lazy(() => import('./pages/Disputes'));
-const WalletManagementPage = lazy(() => import('./pages/WalletManagementPage'));
-const TransactionHistoryPage = lazy(() => import('./pages/TransactionHistoryPage'));
+const WalletManagementPage = lazy(() =>
+  import('./pages/WalletManagementPage').then((m) => ({ default: m.WalletManagementPage }))
+);
+const TransactionHistoryPage = lazy(() =>
+  import('./pages/TransactionHistoryPage').then((m) => ({ default: m.TransactionHistoryPage }))
+);
 const TransactionDetailsPage = lazy(() => import('./pages/TransactionDetailsPage'));
 const SessionManagement = lazy(() => import('./pages/SessionManagement'));
 const TransactionReceipt = lazy(() => import('./pages/TransactionReceipt'));

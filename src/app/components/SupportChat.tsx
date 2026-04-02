@@ -53,7 +53,8 @@ export default function SupportChat({ onClose }: SupportChatProps) {
       })
       .catch(() => null);
 
-    const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
+    const env = (import.meta as unknown as { env?: { VITE_WS_URL?: string } }).env;
+    const wsUrl = env?.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
     if (user?.id) {
       const ws = new WebSocket(`${wsUrl}?role=user`);
       wsRef.current = ws;

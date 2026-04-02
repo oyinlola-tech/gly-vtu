@@ -33,7 +33,7 @@ export default function Transactions() {
           }
         }
         const meta = (metadata && typeof metadata === 'object') ? (metadata as Record<string, unknown>) : {};
-        const direction =
+        const direction: Direction =
           txn.type === 'receive' || txn.type === 'topup' ? 'credit' : 'debit';
         const recipient =
           (meta.provider as string) ||

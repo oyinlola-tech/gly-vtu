@@ -22,7 +22,7 @@ export default function SecurityEventsDashboard() {
     setLoading(true);
     try {
       const data = await adminAPI.getSecurityEvents?.({ severity: filters.severity, type: filters.type });
-      setEvents(data || []);
+      setEvents((data || []) as SecurityEvent[]);
     } catch {
       setEvents([]);
     } finally {

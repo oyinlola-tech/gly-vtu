@@ -131,7 +131,7 @@ export default function AdminAuditLogs() {
                       </p>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(log.created_at).toLocaleString()}
+                      {log.created_at ? new Date(log.created_at).toLocaleString() : '—'}
                     </p>
                   </div>
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-1">

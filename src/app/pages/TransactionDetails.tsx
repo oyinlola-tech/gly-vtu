@@ -125,7 +125,7 @@ export default function TransactionDetails() {
                 </p>
                 {transaction.recipient.account && (
                   <button
-                    onClick={() => copyText(transaction.recipient.account)}
+                  onClick={() => transaction.recipient?.account && copyText(transaction.recipient.account)}
                     className="mt-1 text-xs text-[#235697] inline-flex items-center gap-1"
                   >
                     {transaction.recipient.account}

@@ -13,7 +13,7 @@ export default function KYC() {
   };
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [level, setLevel] = useState<1 | 2>(1);
+  const [level, setLevel] = useState<2 | 3>(2);
   const [formData, setFormData] = useState({
     bvn: '',
     nin: '',
@@ -36,7 +36,7 @@ export default function KYC() {
     setMessage('');
     try {
       const payload =
-        level === 1
+        level === 2
           ? { bvn: formData.bvn || undefined, nin: formData.nin || undefined }
           : { dob: formData.dob, address: formData.address };
       await userAPI.submitKYC({ level, payload });
@@ -81,11 +81,11 @@ export default function KYC() {
           )}
 
           <div className="flex gap-3 mb-6">
-            {[1, 2].map((lvl) => (
+            {[2, 3].map((lvl) => (
               <button
                 key={lvl}
                 type="button"
-                onClick={() => setLevel(lvl as 1 | 2)}
+                onClick={() => setLevel(lvl as 2 | 3)}
                 className={`flex-1 py-3 rounded-xl font-semibold ${
                   level === lvl
                     ? 'bg-[#235697] text-white'
@@ -98,7 +98,7 @@ export default function KYC() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {level === 1 ? (
+            {level === 2 ? (
               <>
                 <div>
                   <label htmlFor="bvn" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

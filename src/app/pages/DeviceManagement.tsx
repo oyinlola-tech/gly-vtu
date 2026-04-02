@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft, Laptop, Smartphone, Tablet, Trash2 } from 'lucide-react';
 import { tokenStore, userAPI } from '../../services/api';
@@ -21,7 +21,7 @@ export default function DeviceManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const deviceId = useMemo(() => tokenStore.getDeviceId(), []);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
 
   const loadDevices = async () => {
     setLoading(true);
@@ -37,6 +37,7 @@ export default function DeviceManagement() {
 
   useEffect(() => {
     loadDevices();
+    tokenStore.getDeviceId().then((id) => setDeviceId(id));
   }, []);
 
   const getIcon = (ua: string) => {
