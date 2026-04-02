@@ -6,6 +6,12 @@ import { requirePermission } from '../middleware/permissions.js';
 import { emitToAdmins, emitToUser } from '../utils/realtime.js';
 import { logAudit } from '../utils/audit.js';
 import { applyUserPII } from '../utils/encryption.js';
+import {
+  validateParams,
+  validateRequest,
+  adminConversationIdParamSchema,
+  adminConversationSendSchema,
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -21,26 +27,26 @@ router.get('/', requireAdmin, requirePermission('support:chat'), async (req, res
   return res.json(rows.map((row) => applyUserPII(row)));
 });
 
-router.get('/:id/messages', requireAdmin, requirePermission('support:chat'), async (req, res) => {
+router.get('/:id/messages', requireAdmin, requirePermission('support:chat'), validateParams(adminConversationIdParamSchema), async (req, res) => {
   const [rows] = await pool.query(
     `SELECT id, sender_type, sender_id, body, created_at
      FROM conversation_messages
      WHERE conversation_id = ?
      ORDER BY created_at ASC
      LIMIT 200`,
-    [req.params.id]
+    [req.validatedParams.id]
   );
   return res.json(rows);
 });
 
-router.post('/:id/send', requireAdmin, requirePermission('support:chat'), async (req, res) => {
-  const { text } = req.body || {};
+router.post('/:id/send', requireAdmin, requirePermission('support:chat'), validateParams(adminConversationIdParamSchema), validateRequest(adminConversationSendSchema), async (req, res) => {
+  const { text } = req.validated || req.body || {};
   const body = String(text || '').trim();
   if (!body) return res.status(400).json({ error: 'Message required' });
 
   const [[conversation]] = await pool.query(
     'SELECT id, user_id FROM conversations WHERE id = ? LIMIT 1',
-    [req.params.id]
+    [req.validatedParams.id]
   );
   if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
 

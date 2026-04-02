@@ -7,6 +7,8 @@ import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII } from '../utils/encryption.js';
 import { runFullReconciliation } from '../utils/reconciliation.js';
+import { hydrateTransactionMetadata } from '../utils/transactionMetadata.js';
+import { validateParams, adminReferenceParamSchema } from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -85,8 +87,9 @@ router.post(
   '/held-topups/:reference/approve',
   requireAdmin,
   requirePermission('transactions:write'),
+  validateParams(adminReferenceParamSchema),
   async (req, res) => {
-    const reference = req.params.reference;
+    const reference = req.validatedParams.reference;
     const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
     const idem = await checkIdempotency({
       userId: req.admin.sub,
@@ -106,16 +109,21 @@ router.post(
       });
       return res.status(status).json(payload);
     }
-    const [[tx]] = await pool.query(
-      'SELECT user_id, amount, status FROM transactions WHERE reference = ? AND type = ? LIMIT 1',
-      [reference, 'topup']
-    );
-    if (!tx) return respond(404, { error: 'Transaction not found' });
-    if (tx.status !== 'pending') return respond(400, { error: 'Not pending' });
-
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+      const [[tx]] = await conn.query(
+        'SELECT id, user_id, amount, status FROM transactions WHERE reference = ? AND type = ? FOR UPDATE',
+        [reference, 'topup']
+      );
+      if (!tx) {
+        await conn.rollback();
+        return respond(404, { error: 'Transaction not found' });
+      }
+      if (tx.status !== 'pending') {
+        await conn.rollback();
+        return respond(400, { error: 'Not pending' });
+      }
       await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
         tx.amount,
         tx.user_id,
@@ -161,8 +169,9 @@ router.post(
   '/held-topups/:reference/reject',
   requireAdmin,
   requirePermission('transactions:write'),
+  validateParams(adminReferenceParamSchema),
   async (req, res) => {
-    const reference = req.params.reference;
+    const reference = req.validatedParams.reference;
     const [[tx]] = await pool.query(
       'SELECT user_id, amount, status FROM transactions WHERE reference = ? AND type = ? LIMIT 1',
       [reference, 'topup']

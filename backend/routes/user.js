@@ -34,6 +34,22 @@ import {
   validateRequest,
   updateProfileSchema,
   kycSubmissionSchema,
+  validateQuery,
+  validateParams,
+  securityEventsQuerySchema,
+  deviceIdParamSchema,
+  deviceLabelSchema,
+  pinSetupSchema,
+  pinChangeSchema,
+  pinVerifySchema,
+  biometricSchema,
+  accountClosureRequestSchema,
+  accountClosureCancelQuerySchema,
+  securityQuestionSetSchema,
+  securityQuestionEnableSchema,
+  securityQuestionVerifySchema,
+  totpEnableSchema,
+  totpDisableSchema,
 } from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
 import { applyUserPII, decryptJson, encryptJson, hashPhone, encryptPII } from '../utils/encryption.js';
@@ -434,10 +450,10 @@ function csvEscape(value) {
   return str;
 }
 
-router.get('/security-events', requireUser, async (req, res) => {
-  const exportCsv = String(req.query.export || '').toLowerCase() === 'csv';
-  const limit = Math.min(Number(req.query.limit || 50), 200);
-  const offset = Math.max(Number(req.query.offset || 0), 0);
+router.get('/security-events', requireUser, validateQuery(securityEventsQuerySchema), async (req, res) => {
+  const exportCsv = String(req.validatedQuery?.export || '').toLowerCase() === 'csv';
+  const limit = Math.min(Number(req.validatedQuery?.limit || 50), 200);
+  const offset = Math.max(Number(req.validatedQuery?.offset || 0), 0);
 
   const [rows] = await pool.query(
     `SELECT id, event_type, severity, ip_address, user_agent, metadata, created_at
@@ -528,15 +544,15 @@ router.get('/sessions', requireUser, async (req, res) => {
   return res.json(rows);
 });
 
-router.post('/sessions/:id/revoke', requireUser, async (req, res) => {
+router.post('/sessions/:id/revoke', requireUser, validateParams(deviceIdParamSchema), async (req, res) => {
   const [deviceRows] = await pool.query(
     'SELECT device_id FROM user_devices WHERE id = ? AND user_id = ? LIMIT 1',
-    [req.params.id, req.user.sub]
+    [req.validatedParams.id, req.user.sub]
   );
   const device = deviceRows?.[0];
   if (!device) return res.status(404).json({ error: 'Device not found' });
   await pool.query('UPDATE user_devices SET trusted = 0 WHERE id = ? AND user_id = ?', [
-    req.params.id,
+    req.validatedParams.id,
     req.user.sub,
   ]);
   await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ? AND device_id = ?', [
@@ -555,19 +571,16 @@ router.post('/sessions/:id/revoke', requireUser, async (req, res) => {
   return res.json({ message: 'Session revoked' });
 });
 
-router.post('/sessions/:id/label', requireUser, async (req, res) => {
-  const label = String(req.body?.label || '').trim();
-  if (!label || label.length > 80) {
-    return res.status(400).json({ error: 'Label is required (max 80 chars)' });
-  }
+router.post('/sessions/:id/label', requireUser, validateParams(deviceIdParamSchema), validateRequest(deviceLabelSchema), async (req, res) => {
+  const label = String(req.validated?.label || '').trim();
   const [rows] = await pool.query(
     'SELECT id FROM user_devices WHERE id = ? AND user_id = ? LIMIT 1',
-    [req.params.id, req.user.sub]
+    [req.validatedParams.id, req.user.sub]
   );
   if (!rows.length) return res.status(404).json({ error: 'Device not found' });
   await pool.query('UPDATE user_devices SET label = ? WHERE id = ? AND user_id = ?', [
     label,
-    req.params.id,
+    req.validatedParams.id,
     req.user.sub,
   ]);
   return res.json({ message: 'Device label updated' });
@@ -629,7 +642,7 @@ router.post('/password/change', requireUser, validateRequest(changePasswordSchem
   return res.json({ message: 'Password updated' });
 });
 
-router.post('/pin/setup', requireUser, async (req, res) => {
+router.post('/pin/setup', requireUser, validateRequest(pinSetupSchema), async (req, res) => {
   /*
     #swagger.tags = ['User']
     #swagger.summary = 'Create transaction PIN'
@@ -637,7 +650,7 @@ router.post('/pin/setup', requireUser, async (req, res) => {
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/PinSetupRequest' } }
     #swagger.responses[200] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { pin } = req.body || {};
+  const { pin } = req.validated || req.body || {};
   const pinError = validatePinComplexity(pin);
   if (pinError) return res.status(400).json({ error: pinError });
   const [[row]] = await pool.query(
@@ -660,7 +673,7 @@ router.post('/pin/setup', requireUser, async (req, res) => {
   return res.json({ message: 'Transaction PIN created' });
 });
 
-router.post('/pin/change', requireUser, async (req, res) => {
+router.post('/pin/change', requireUser, validateRequest(pinChangeSchema), async (req, res) => {
   /*
     #swagger.tags = ['User']
     #swagger.summary = 'Change transaction PIN'
@@ -669,7 +682,7 @@ router.post('/pin/change', requireUser, async (req, res) => {
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
     #swagger.responses[400] = { description: 'Invalid PIN', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { currentPin, newPin } = req.body || {};
+  const { currentPin, newPin } = req.validated || req.body || {};
   const pinError = validatePinComplexity(newPin);
   if (pinError) return res.status(400).json({ error: pinError });
   try {
@@ -690,7 +703,7 @@ router.post('/pin/change', requireUser, async (req, res) => {
   return res.json({ message: 'Transaction PIN updated' });
 });
 
-router.post('/pin/verify', requireUser, async (req, res) => {
+router.post('/pin/verify', requireUser, validateRequest(pinVerifySchema), async (req, res) => {
   /*
     #swagger.tags = ['User']
     #swagger.summary = 'Verify transaction PIN'
@@ -702,7 +715,7 @@ router.post('/pin/verify', requireUser, async (req, res) => {
     }
     #swagger.responses[400] = { description: 'Invalid PIN', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { pin } = req.body || {};
+  const { pin } = req.validated || req.body || {};
   if (!isValidPin(pin)) return res.status(400).json({ error: 'PIN must be exactly 6 digits' });
   try {
     await verifyTransactionPin(req.user.sub, pin);
@@ -712,7 +725,7 @@ router.post('/pin/verify', requireUser, async (req, res) => {
   }
 });
 
-router.post('/biometric', requireUser, async (req, res) => {
+router.post('/biometric', requireUser, validateRequest(biometricSchema), async (req, res) => {
   /*
     #swagger.tags = ['User']
     #swagger.summary = 'Enable or disable biometric login'
@@ -720,7 +733,7 @@ router.post('/biometric', requireUser, async (req, res) => {
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/BiometricRequest' } }
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { enabled } = req.body || {};
+  const { enabled } = req.validated || req.body || {};
   const [[row]] = await pool.query(
     'SELECT transaction_pin_hash FROM users WHERE id = ?',
     [req.user.sub]
@@ -822,8 +835,8 @@ router.get('/security-alerts', requireUser, async (req, res) => {
   return res.json({ alerts });
 });
 
-router.post('/account/closure-request', requireUser, async (req, res) => {
-  const { reason, feedbackMessage } = req.body || {};
+router.post('/account/closure-request', requireUser, validateRequest(accountClosureRequestSchema), async (req, res) => {
+  const { reason, feedbackMessage } = req.validated || req.body || {};
   const cleanupReason = String(reason || '').trim();
   if (!cleanupReason) {
     return res.status(400).json({ error: 'Reason is required' });
@@ -897,8 +910,8 @@ router.post('/account/closure-cancel', requireUser, async (req, res) => {
   return res.json({ success: true });
 });
 
-router.get('/account/closure/cancel', async (req, res) => {
-  const token = String(req.query.token || '').trim();
+router.get('/account/closure/cancel', validateQuery(accountClosureCancelQuerySchema), async (req, res) => {
+  const token = String(req.validatedQuery?.token || '').trim();
   if (!token) return res.status(400).json({ error: 'Token required' });
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const [rows] = await pool.query(
@@ -958,8 +971,8 @@ router.get('/security-question', requireUser, async (req, res) => {
   });
 });
 
-router.post('/security-question/set', requireUser, async (req, res) => {
-  const { question, answer } = req.body || {};
+router.post('/security-question/set', requireUser, validateRequest(securityQuestionSetSchema), async (req, res) => {
+  const { question, answer } = req.validated || req.body || {};
   if (!question || !answer) {
     return res.status(400).json({ error: 'Question and answer are required' });
   }
@@ -991,8 +1004,8 @@ router.post('/security-question/set', requireUser, async (req, res) => {
   return res.json({ message: 'Security question updated' });
 });
 
-router.post('/security-question/enable', requireUser, async (req, res) => {
-  const { enabled } = req.body || {};
+router.post('/security-question/enable', requireUser, validateRequest(securityQuestionEnableSchema), async (req, res) => {
+  const { enabled } = req.validated || req.body || {};
   const [[row]] = await pool.query(
     'SELECT security_question FROM users WHERE id = ?',
     [req.user.sub]
@@ -1016,8 +1029,8 @@ router.post('/security-question/enable', requireUser, async (req, res) => {
   return res.json({ message: enabled ? 'Security question enabled' : 'Security question disabled' });
 });
 
-router.post('/security-question/verify', requireUser, async (req, res) => {
-  const { answer } = req.body || {};
+router.post('/security-question/verify', requireUser, validateRequest(securityQuestionVerifySchema), async (req, res) => {
+  const { answer } = req.validated || req.body || {};
   if (!answer) return res.status(400).json({ error: 'Answer required' });
   const [[row]] = await pool.query(
     'SELECT security_answer_hash FROM users WHERE id = ?',
@@ -1054,8 +1067,8 @@ router.post('/totp/setup', requireUser, async (req, res) => {
   });
 });
 
-router.post('/totp/enable', requireUser, async (req, res) => {
-  const { token } = req.body || {};
+router.post('/totp/enable', requireUser, validateRequest(totpEnableSchema), async (req, res) => {
+  const { token } = req.validated || req.body || {};
   if (!token) return res.status(400).json({ error: 'TOTP code required' });
 
   const [[user]] = await pool.query(
@@ -1077,8 +1090,8 @@ router.post('/totp/enable', requireUser, async (req, res) => {
   return res.json({ enabled: true, backupCodes });
 });
 
-router.post('/totp/disable', requireUser, async (req, res) => {
-  const { token, backupCode } = req.body || {};
+router.post('/totp/disable', requireUser, validateRequest(totpDisableSchema), async (req, res) => {
+  const { token, backupCode } = req.validated || req.body || {};
   const [[user]] = await pool.query(
     'SELECT totp_secret, totp_backup_codes, backup_codes_used FROM users WHERE id = ?',
     [req.user.sub]
@@ -1113,4 +1126,3 @@ router.post('/totp/disable', requireUser, async (req, res) => {
 });
 
 export default router;
-

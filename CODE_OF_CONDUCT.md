@@ -6,6 +6,9 @@ The Software is proprietary and confidential. You may not disclose, share, or ma
 ## Our Pledge
 We are committed to providing a respectful, harassment-free collaboration environment for all authorized contributors.
 
+## Scope
+This code of conduct applies to all project spaces, private channels, and any direct communication related to GLY VTU.
+
 ## Expected Behavior
 - Be kind and professional.
 - Communicate clearly and constructively.
@@ -19,3 +22,6 @@ We are committed to providing a respectful, harassment-free collaboration enviro
 
 ## Enforcement
 The project owner, Oluwayemi Oyinlola Michael, is responsible for enforcement and may take appropriate action, including removing access.
+
+## Contact
+If you need to report a concern, contact the project owner directly via the portfolio site listed in `SUPPORT.md`.

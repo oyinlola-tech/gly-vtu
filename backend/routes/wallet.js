@@ -12,7 +12,12 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { checkWithdrawalAnomaly, checkNewRecipientAnomaly } from '../utils/anomalies.js';
 import { applyUserPII, hashEmail, hashPhone } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
-import { validateRequest, walletSendSchema, walletReceiveSchema } from '../middleware/requestValidation.js';
+import {
+  validateRequest,
+  walletSendSchema,
+  walletReceiveSchema,
+  recipientLookupSchema
+} from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
 import { createTransfer } from '../utils/flutterwave.js';
 
@@ -118,8 +123,8 @@ router.get('/balance', requireUser, async (req, res) => {
   return res.json(rows[0]);
 });
 
-router.post('/recipient-lookup', requireUser, async (req, res) => {
-  const recipient = String(req.body?.recipient || '').trim();
+router.post('/recipient-lookup', requireUser, validateRequest(recipientLookupSchema), async (req, res) => {
+  const recipient = String(req.validated?.recipient || '').trim();
   if (!recipient) return res.status(400).json({ error: 'Recipient required' });
   if (!isEmail(recipient) && !isPhone(recipient)) {
     return res.status(400).json({ error: 'Recipient must be an email or phone number' });

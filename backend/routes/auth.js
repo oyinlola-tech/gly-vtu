@@ -27,7 +27,11 @@ import { verifyTotp, verifyBackupCode } from '../utils/totp.js';
 import { 
   registrationSchema, 
   loginSchema,
-  validateRequest 
+  validateRequest,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  verifyDeviceSchema,
+  securityQuestionSchema
 } from '../middleware/requestValidation.js';
 import { encryptPII, encryptJson, hashEmail, hashPhone, applyUserPII } from '../utils/encryption.js';
 import { logger } from '../utils/logger.js';
@@ -501,7 +505,7 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
   });
 });
 
-router.post('/verify-device', otpLimiter, async (req, res) => {
+router.post('/verify-device', otpLimiter, validateRequest(verifyDeviceSchema), async (req, res) => {
   /*
     #swagger.tags = ['Auth']
     #swagger.summary = 'Verify new device with OTP'
@@ -513,7 +517,7 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
     #swagger.responses[200] = { description: 'Device verified', schema: { $ref: '#/definitions/AuthLoginResponse' } }
     #swagger.responses[400] = { description: 'Invalid OTP or payload', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { email, code, deviceId: bodyDeviceId, label, securityAnswer } = req.body || {};
+  const { email, code, deviceId: bodyDeviceId, label, securityAnswer } = req.validated || req.body || {};
   const deviceId = bodyDeviceId || req.cookies?.[DEVICE_ID_COOKIE] || null;
   if (!email || !deviceId) {
     return res.status(400).json({ error: 'Missing fields' });
@@ -556,8 +560,8 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
   }
 
   if (user?.totp_enabled) {
-    const totpToken = req.body?.totp || null;
-    const backupCode = req.body?.backupCode || null;
+    const totpToken = req.validated?.totp || null;
+    const backupCode = req.validated?.backupCode || null;
     if (!totpToken && !backupCode) {
       return res.json({ totpRequired: true });
     }
@@ -627,7 +631,7 @@ router.post('/verify-device', otpLimiter, async (req, res) => {
   });
 });
 
-router.post('/forgot-password', otpLimiter, async (req, res) => {
+router.post('/forgot-password', otpLimiter, validateRequest(forgotPasswordSchema), async (req, res) => {
   /*
     #swagger.tags = ['Auth']
     #swagger.summary = 'Request password reset OTP'
@@ -638,7 +642,7 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
     }
     #swagger.responses[200] = { description: 'OTP dispatched', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { email } = req.body || {};
+  const { email } = req.validated || req.body || {};
   if (!email) return res.status(400).json({ error: 'Email required' });
   const [rows] = await pool.query('SELECT id FROM users WHERE email_hash = ? LIMIT 1', [
     hashEmail(email),
@@ -670,7 +674,7 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
   return res.json({ message: 'OTP sent if account exists' });
 });
 
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', validateRequest(resetPasswordSchema), async (req, res) => {
   /*
     #swagger.tags = ['Auth']
     #swagger.summary = 'Reset password using OTP'
@@ -682,7 +686,7 @@ router.post('/reset-password', async (req, res) => {
     #swagger.responses[200] = { description: 'Password reset', schema: { $ref: '#/definitions/MessageResponse' } }
     #swagger.responses[400] = { description: 'Invalid OTP or payload', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { email, code, newPassword } = req.body || {};
+  const { email, code, newPassword } = req.validated || req.body || {};
   if (!email || !code || !newPassword) {
     return res.status(400).json({ error: 'Missing fields' });
   }
@@ -911,8 +915,8 @@ router.get('/csrf', (req, res) => {
   return res.json({ csrfToken: token });
 });
 
-router.post('/security-question', async (req, res) => {
-  const { email } = req.body || {};
+router.post('/security-question', validateRequest(securityQuestionSchema), async (req, res) => {
+  const { email } = req.validated || req.body || {};
   if (!email) return res.json({ enabled: false, question: null });
   const [rows] = await pool.query(
     'SELECT security_question, security_question_enabled FROM users WHERE email_hash = ? LIMIT 1',

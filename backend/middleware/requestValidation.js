@@ -75,7 +75,11 @@ export const loginSchema = Joi.object({
     .optional()
     .messages({
       'string.length': 'TOTP code must be 6 digits'
-    })
+    }),
+  backupCode: Joi.string()
+    .min(6)
+    .max(12)
+    .optional()
 });
 
 export const changePasswordSchema = Joi.object({
@@ -182,6 +186,30 @@ export const walletTransferSchema = Joi.object({
     .optional()
 });
 
+export const forgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+});
+
+export const resetPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+  code: Joi.string().length(6).pattern(/^\d+$/).required(),
+  newPassword: Joi.string().min(10).max(128).required(),
+});
+
+export const verifyDeviceSchema = Joi.object({
+  email: Joi.string().email().required(),
+  code: Joi.string().length(6).pattern(/^\d+$/).optional(),
+  securityAnswer: Joi.string().min(2).max(200).optional(),
+  deviceId: Joi.string().guid({ version: 'uuidv4' }).optional(),
+  label: Joi.string().max(120).optional(),
+  totp: Joi.string().length(6).pattern(/^\d+$/).optional(),
+  backupCode: Joi.string().min(6).max(12).optional(),
+}).or('code', 'securityAnswer');
+
+export const securityQuestionSchema = Joi.object({
+  email: Joi.string().email().required(),
+});
+
 export const walletSendSchema = Joi.object({
   amount: Joi.number()
     .required()
@@ -230,6 +258,61 @@ export const walletReceiveSchema = Joi.object({
   note: Joi.string()
     .max(500)
     .optional(),
+});
+
+export const recipientLookupSchema = Joi.object({
+  recipient: Joi.string()
+    .trim()
+    .max(254)
+    .required()
+    .messages({
+      'any.required': 'Recipient is required',
+      'string.max': 'Recipient is too long'
+    }),
+});
+
+// ============================================================================
+// ADMIN AUTH SCHEMAS
+// ============================================================================
+
+export const adminLoginSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(8).max(128).required(),
+  totp: Joi.string().length(6).pattern(/^\d+$/).optional(),
+  backupCode: Joi.string().min(6).max(12).optional(),
+  deviceId: Joi.string().guid({ version: 'uuidv4' }).optional(),
+});
+
+export const adminForgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+});
+
+export const adminResetPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+  code: Joi.string().length(6).pattern(/^\d+$/).required(),
+  newPassword: Joi.string().min(10).max(128).required(),
+});
+
+export const adminTotpEnableSchema = Joi.object({
+  token: Joi.string().length(6).pattern(/^\d+$/).required(),
+});
+
+export const adminTotpDisableSchema = Joi.object({
+  token: Joi.string().length(6).pattern(/^\d+$/).optional(),
+  backupCode: Joi.string().min(6).max(12).optional(),
+}).or('token', 'backupCode');
+
+// ============================================================================
+// TRANSACTIONS SCHEMAS
+// ============================================================================
+
+export const transactionIdParamSchema = Joi.object({
+  id: Joi.string().guid({ version: 'uuidv4' }).required(),
+});
+
+export const statementSchema = Joi.object({
+  startDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required(),
+  endDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required(),
 });
 
 export const cardAdditionSchema = Joi.object({
@@ -408,6 +491,228 @@ export const billsPayCardSchema = Joi.object({
   variationCode: Joi.string().max(100).optional(),
 });
 
+export const billsProvidersQuerySchema = Joi.object({
+  category: Joi.string().max(60).required(),
+});
+
+export const billsVariationsQuerySchema = Joi.object({
+  serviceID: Joi.string().max(60).required(),
+});
+
+// ============================================================================
+// CARDS SCHEMAS
+// ============================================================================
+
+export const cardIdParamSchema = Joi.object({
+  cardId: Joi.string().max(80).required(),
+});
+
+export const cardSettingsSchema = Joi.object({
+  dailyLimit: Joi.number().min(100).max(100_000_000).optional(),
+  monthlyLimit: Joi.number().min(100).max(1_000_000_000).optional(),
+  merchantLocks: Joi.string().max(500).allow('').optional(),
+  autoFreeze: Joi.boolean().optional(),
+});
+
+export const cardAuthorizeSchema = Joi.object({
+  amount: Joi.number().min(1).max(1_000_000_000).required(),
+  merchant: Joi.string().min(2).max(120).required(),
+});
+
+// ============================================================================
+// USER SCHEMAS
+// ============================================================================
+
+export const securityEventsQuerySchema = Joi.object({
+  export: Joi.string().valid('csv', 'json').optional(),
+  limit: Joi.number().min(1).max(200).optional(),
+  offset: Joi.number().min(0).max(10_000).optional(),
+});
+
+export const deviceIdParamSchema = Joi.object({
+  id: Joi.string().guid({ version: 'uuidv4' }).required(),
+});
+
+export const deviceLabelSchema = Joi.object({
+  label: Joi.string().max(120).required(),
+});
+
+export const pinSetupSchema = Joi.object({
+  pin: Joi.string().length(6).pattern(/^\d+$/).required(),
+});
+
+export const pinChangeSchema = Joi.object({
+  currentPin: Joi.string().length(6).pattern(/^\d+$/).required(),
+  newPin: Joi.string().length(6).pattern(/^\d+$/).required(),
+});
+
+export const pinVerifySchema = Joi.object({
+  pin: Joi.string().length(6).pattern(/^\d+$/).required(),
+});
+
+export const biometricSchema = Joi.object({
+  enabled: Joi.boolean().required(),
+});
+
+export const accountClosureRequestSchema = Joi.object({
+  reason: Joi.string().min(3).max(500).required(),
+  feedbackMessage: Joi.string().max(1000).optional(),
+});
+
+export const accountClosureCancelQuerySchema = Joi.object({
+  token: Joi.string().min(32).max(128).required(),
+});
+
+export const securityQuestionSetSchema = Joi.object({
+  question: Joi.string().min(5).max(200).required(),
+  answer: Joi.string().min(2).max(200).required(),
+});
+
+export const securityQuestionEnableSchema = Joi.object({
+  enabled: Joi.boolean().required(),
+});
+
+export const securityQuestionVerifySchema = Joi.object({
+  answer: Joi.string().min(2).max(200).required(),
+});
+
+export const totpEnableSchema = Joi.object({
+  token: Joi.string().length(6).pattern(/^\d+$/).required(),
+});
+
+export const totpDisableSchema = Joi.object({
+  token: Joi.string().length(6).pattern(/^\d+$/).optional(),
+  backupCode: Joi.string().min(6).max(12).optional(),
+}).or('token', 'backupCode');
+
+// ============================================================================
+// ADMIN SCHEMAS
+// ============================================================================
+
+export const adminUserIdParamSchema = Joi.object({
+  id: Joi.string().guid({ version: 'uuidv4' }).required(),
+});
+
+export const adminKycUpdateSchema = Joi.object({
+  status: Joi.string().valid('verified', 'rejected', 'pending').required(),
+  level: Joi.number().valid(1, 2, 3).required(),
+});
+
+export const adminBillsCategorySchema = Joi.object({
+  code: Joi.string().max(60).required(),
+  name: Joi.string().max(120).required(),
+  description: Joi.string().max(300).required(),
+});
+
+export const adminBillsCategoryUpdateSchema = Joi.object({
+  name: Joi.string().max(120).required(),
+  description: Joi.string().max(300).required(),
+  active: Joi.boolean().required(),
+});
+
+export const adminBillsProviderSchema = Joi.object({
+  categoryId: Joi.string().max(60).required(),
+  name: Joi.string().max(120).required(),
+  code: Joi.string().max(60).required(),
+  logoUrl: Joi.string().uri().max(500).allow('', null).optional(),
+});
+
+export const adminBillsProviderUpdateSchema = Joi.object({
+  name: Joi.string().max(120).required(),
+  code: Joi.string().max(60).required(),
+  logoUrl: Joi.string().uri().max(500).allow('', null).optional(),
+  active: Joi.boolean().required(),
+});
+
+export const adminPricingSchema = Joi.object({
+  providerId: Joi.string().max(60).required(),
+  baseFee: Joi.number().min(0).max(5_000_000).optional(),
+  markupType: Joi.string().valid('flat', 'percent').optional(),
+  markupValue: Joi.number().min(0).max(100_000).optional(),
+  currency: Joi.string().length(3).optional(),
+});
+
+export const adminPricingUpdateSchema = Joi.object({
+  baseFee: Joi.number().min(0).max(5_000_000).optional(),
+  markupType: Joi.string().valid('flat', 'percent').optional(),
+  markupValue: Joi.number().min(0).max(100_000).optional(),
+  currency: Joi.string().length(3).optional(),
+  active: Joi.boolean().required(),
+});
+
+export const adminManagementCreateSchema = Joi.object({
+  name: Joi.string().min(2).max(120).required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(10).max(128).required(),
+  role: Joi.string().min(2).max(60).required(),
+});
+
+export const adminRoleUpdateSchema = Joi.object({
+  role: Joi.string().min(2).max(60).required(),
+});
+
+export const adminAdjustmentCreateSchema = Joi.object({
+  userId: Joi.string().guid({ version: 'uuidv4' }).required(),
+  type: Joi.string().valid('credit', 'debit').required(),
+  amount: Joi.number().min(1).max(1_000_000_000).required(),
+  reason: Joi.string().max(500).optional(),
+});
+
+export const adminAdjustmentsQuerySchema = Joi.object({
+  status: Joi.string().valid('pending', 'approved', 'rejected').optional(),
+});
+
+export const adminAdjustmentIdParamSchema = Joi.object({
+  id: Joi.string().max(80).required(),
+});
+
+export const adminReferenceParamSchema = Joi.object({
+  reference: Joi.string().max(120).required(),
+});
+
+export const adminFinanceExportQuerySchema = Joi.object({
+  format: Joi.string().valid('csv', 'pdf').optional(),
+  from: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+export const adminFinanceBalancesQuerySchema = Joi.object({
+  limit: Joi.number().min(1).max(200).optional(),
+  offset: Joi.number().min(0).max(10_000).optional(),
+});
+
+export const adminConversationIdParamSchema = Joi.object({
+  id: Joi.string().guid({ version: 'uuidv4' }).required(),
+});
+
+export const adminConversationSendSchema = Joi.object({
+  text: Joi.string().min(1).max(2000).required(),
+});
+
+export const adminNotificationSchema = Joi.object({
+  title: Joi.string().min(2).max(200).required(),
+  body: Joi.string().min(2).max(2000).required(),
+  type: Joi.string().valid('info', 'warning', 'success', 'error').optional(),
+  userId: Joi.string().guid({ version: 'uuidv4' }).optional(),
+  force: Joi.boolean().optional(),
+  data: Joi.object().optional(),
+});
+
+export const adminFlutterwaveRequerySchema = Joi.object({
+  userId: Joi.string().guid({ version: 'uuidv4' }).optional(),
+  accountReference: Joi.string().max(120).optional(),
+}).or('userId', 'accountReference');
+
+export const adminVtpassEventsQuerySchema = Joi.object({
+  limit: Joi.number().min(1).max(200).optional(),
+  offset: Joi.number().min(0).max(10_000).optional(),
+  status: Joi.string().max(20).optional(),
+});
+
+export const adminVtpassRequerySchema = Joi.object({
+  requestId: Joi.string().max(120).required(),
+});
+
 export const cardCreateSchema = Joi.object({
   amount: Joi.number().required().min(100).max(5_000_000).integer(),
   currency: Joi.string().length(3).optional(),
@@ -518,11 +823,23 @@ export default {
   // Schemas
   registrationSchema,
   loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  verifyDeviceSchema,
+  securityQuestionSchema,
   changePasswordSchema,
   billPaymentSchema,
   walletTransferSchema,
   walletSendSchema,
   walletReceiveSchema,
+  recipientLookupSchema,
+  adminLoginSchema,
+  adminForgotPasswordSchema,
+  adminResetPasswordSchema,
+  adminTotpEnableSchema,
+  adminTotpDisableSchema,
+  transactionIdParamSchema,
+  statementSchema,
   cardAdditionSchema,
   kycSchema,
   kycPayloadSchema,
@@ -530,6 +847,47 @@ export default {
   billsQuoteSchema,
   billsPaySchema,
   billsPayCardSchema,
+  billsProvidersQuerySchema,
+  billsVariationsQuerySchema,
+  cardIdParamSchema,
+  cardSettingsSchema,
+  cardAuthorizeSchema,
+  securityEventsQuerySchema,
+  deviceIdParamSchema,
+  deviceLabelSchema,
+  pinSetupSchema,
+  pinChangeSchema,
+  pinVerifySchema,
+  biometricSchema,
+  accountClosureRequestSchema,
+  accountClosureCancelQuerySchema,
+  securityQuestionSetSchema,
+  securityQuestionEnableSchema,
+  securityQuestionVerifySchema,
+  totpEnableSchema,
+  totpDisableSchema,
+  adminUserIdParamSchema,
+  adminKycUpdateSchema,
+  adminBillsCategorySchema,
+  adminBillsCategoryUpdateSchema,
+  adminBillsProviderSchema,
+  adminBillsProviderUpdateSchema,
+  adminPricingSchema,
+  adminPricingUpdateSchema,
+  adminManagementCreateSchema,
+  adminRoleUpdateSchema,
+  adminAdjustmentCreateSchema,
+  adminAdjustmentsQuerySchema,
+  adminAdjustmentIdParamSchema,
+  adminReferenceParamSchema,
+  adminFinanceExportQuerySchema,
+  adminFinanceBalancesQuerySchema,
+  adminConversationIdParamSchema,
+  adminConversationSendSchema,
+  adminNotificationSchema,
+  adminFlutterwaveRequerySchema,
+  adminVtpassEventsQuerySchema,
+  adminVtpassRequerySchema,
   cardCreateSchema,
   updateProfileSchema,
   // Middleware

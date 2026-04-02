@@ -4,6 +4,17 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
 import { logger } from '../utils/logger.js';
+import {
+  validateParams,
+  validateRequest,
+  adminBillsCategorySchema,
+  adminBillsCategoryUpdateSchema,
+  adminBillsProviderSchema,
+  adminBillsProviderUpdateSchema,
+  adminPricingSchema,
+  adminPricingUpdateSchema,
+  adminAdjustmentIdParamSchema,
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -20,7 +31,7 @@ router.get('/categories', requireAdmin, requirePermission('bills:read'), async (
   return res.json(rows);
 });
 
-router.post('/categories', requireAdmin, requirePermission('bills:write'), async (req, res) => {
+router.post('/categories', requireAdmin, requirePermission('bills:write'), validateRequest(adminBillsCategorySchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Bills']
     #swagger.summary = 'Create bill category'
@@ -28,7 +39,7 @@ router.post('/categories', requireAdmin, requirePermission('bills:write'), async
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/AdminBillsCategoryRequest' } }
     #swagger.responses[201] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { code, name, description } = req.body || {};
+  const { code, name, description } = req.validated || req.body || {};
   if (!code || !name || !description) return res.status(400).json({ error: 'Missing fields' });
   await pool.query(
     'INSERT INTO bill_categories (code, name, description, active) VALUES (?, ?, ?, 1)',
@@ -46,7 +57,7 @@ router.post('/categories', requireAdmin, requirePermission('bills:write'), async
   return res.status(201).json({ message: 'Category created' });
 });
 
-router.put('/categories/:id', requireAdmin, requirePermission('bills:write'), async (req, res) => {
+router.put('/categories/:id', requireAdmin, requirePermission('bills:write'), validateParams(adminAdjustmentIdParamSchema), validateRequest(adminBillsCategoryUpdateSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Bills']
     #swagger.summary = 'Update bill category'
@@ -54,17 +65,17 @@ router.put('/categories/:id', requireAdmin, requirePermission('bills:write'), as
     #swagger.parameters['body'] = { in: 'body', schema: { $ref: '#/definitions/AdminBillsCategoryUpdateRequest' } }
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { name, description, active } = req.body || {};
+  const { name, description, active } = req.validated || req.body || {};
   await pool.query(
     'UPDATE bill_categories SET name = ?, description = ?, active = ? WHERE id = ?',
-    [name, description, active ? 1 : 0, req.params.id]
+    [name, description, active ? 1 : 0, req.validatedParams.id]
   );
   logAudit({
     actorType: 'admin',
     actorId: req.admin.sub,
     action: 'admin.bill_category.update',
     entityType: 'bill_category',
-    entityId: req.params.id,
+    entityId: req.validatedParams.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
   }).catch((err) => logger.error('Audit log failed (admin.bill_category.update)', { error: logger.format(err) }));
@@ -87,7 +98,7 @@ router.get('/providers', requireAdmin, requirePermission('bills:read'), async (r
   return res.json(rows);
 });
 
-router.post('/providers', requireAdmin, requirePermission('bills:write'), async (req, res) => {
+router.post('/providers', requireAdmin, requirePermission('bills:write'), validateRequest(adminBillsProviderSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Bills']
     #swagger.summary = 'Create bill provider'
@@ -95,7 +106,7 @@ router.post('/providers', requireAdmin, requirePermission('bills:write'), async 
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/AdminBillsProviderRequest' } }
     #swagger.responses[201] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { categoryId, name, code, logoUrl } = req.body || {};
+  const { categoryId, name, code, logoUrl } = req.validated || req.body || {};
   if (!categoryId || !name || !code) return res.status(400).json({ error: 'Missing fields' });
   await pool.query(
     'INSERT INTO bill_providers (category_id, name, code, logo_url, active) VALUES (?, ?, ?, ?, 1)',
@@ -113,7 +124,7 @@ router.post('/providers', requireAdmin, requirePermission('bills:write'), async 
   return res.status(201).json({ message: 'Provider created' });
 });
 
-router.put('/providers/:id', requireAdmin, requirePermission('bills:write'), async (req, res) => {
+router.put('/providers/:id', requireAdmin, requirePermission('bills:write'), validateParams(adminAdjustmentIdParamSchema), validateRequest(adminBillsProviderUpdateSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Bills']
     #swagger.summary = 'Update bill provider'
@@ -121,17 +132,17 @@ router.put('/providers/:id', requireAdmin, requirePermission('bills:write'), asy
     #swagger.parameters['body'] = { in: 'body', schema: { $ref: '#/definitions/AdminBillsProviderUpdateRequest' } }
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { name, code, logoUrl, active } = req.body || {};
+  const { name, code, logoUrl, active } = req.validated || req.body || {};
   await pool.query(
     'UPDATE bill_providers SET name = ?, code = ?, logo_url = ?, active = ? WHERE id = ?',
-    [name, code, logoUrl || null, active ? 1 : 0, req.params.id]
+    [name, code, logoUrl || null, active ? 1 : 0, req.validatedParams.id]
   );
   logAudit({
     actorType: 'admin',
     actorId: req.admin.sub,
     action: 'admin.bill_provider.update',
     entityType: 'bill_provider',
-    entityId: req.params.id,
+    entityId: req.validatedParams.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
   }).catch((err) => logger.error('Audit log failed (admin.bill_provider.update)', { error: logger.format(err) }));
@@ -156,7 +167,7 @@ router.get('/pricing', requireAdmin, requirePermission('pricing:read'), async (r
   return res.json(rows);
 });
 
-router.post('/pricing', requireAdmin, requirePermission('pricing:write'), async (req, res) => {
+router.post('/pricing', requireAdmin, requirePermission('pricing:write'), validateRequest(adminPricingSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Bills']
     #swagger.summary = 'Create pricing rule'
@@ -164,7 +175,7 @@ router.post('/pricing', requireAdmin, requirePermission('pricing:write'), async 
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/AdminPricingRequest' } }
     #swagger.responses[201] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { providerId, baseFee, markupType, markupValue, currency } = req.body || {};
+  const { providerId, baseFee, markupType, markupValue, currency } = req.validated || req.body || {};
   if (!providerId) return res.status(400).json({ error: 'Missing provider' });
   await pool.query(
     'INSERT INTO bill_pricing (provider_id, base_fee, markup_type, markup_value, currency, active) VALUES (?, ?, ?, ?, ?, 1)',
@@ -182,7 +193,7 @@ router.post('/pricing', requireAdmin, requirePermission('pricing:write'), async 
   return res.status(201).json({ message: 'Pricing created' });
 });
 
-router.put('/pricing/:id', requireAdmin, requirePermission('pricing:write'), async (req, res) => {
+router.put('/pricing/:id', requireAdmin, requirePermission('pricing:write'), validateParams(adminAdjustmentIdParamSchema), validateRequest(adminPricingUpdateSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Bills']
     #swagger.summary = 'Update pricing rule'
@@ -190,17 +201,17 @@ router.put('/pricing/:id', requireAdmin, requirePermission('pricing:write'), asy
     #swagger.parameters['body'] = { in: 'body', schema: { $ref: '#/definitions/AdminPricingUpdateRequest' } }
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { baseFee, markupType, markupValue, currency, active } = req.body || {};
+  const { baseFee, markupType, markupValue, currency, active } = req.validated || req.body || {};
   await pool.query(
     'UPDATE bill_pricing SET base_fee = ?, markup_type = ?, markup_value = ?, currency = ?, active = ? WHERE id = ?',
-    [baseFee || 0, markupType || 'flat', markupValue || 0, currency || 'NGN', active ? 1 : 0, req.params.id]
+    [baseFee || 0, markupType || 'flat', markupValue || 0, currency || 'NGN', active ? 1 : 0, req.validatedParams.id]
   );
   logAudit({
     actorType: 'admin',
     actorId: req.admin.sub,
     action: 'admin.pricing.update',
     entityType: 'pricing',
-    entityId: req.params.id,
+    entityId: req.validatedParams.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
   }).catch((err) => logger.error('Audit log failed (admin.pricing.update)', { error: logger.format(err) }));

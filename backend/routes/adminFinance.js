@@ -9,6 +9,16 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 import { checkAdminAdjustmentAnomaly } from '../utils/anomalies.js';
 import { applyUserPII } from '../utils/encryption.js';
+import {
+  validateQuery,
+  validateParams,
+  validateRequest,
+  adminFinanceBalancesQuerySchema,
+  adminFinanceExportQuerySchema,
+  adminAdjustmentsQuerySchema,
+  adminAdjustmentCreateSchema,
+  adminAdjustmentIdParamSchema,
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 const ADMIN_ADJUSTMENT_MAX = Number(process.env.ADMIN_ADJUSTMENT_MAX || 1000000);
@@ -44,7 +54,7 @@ router.get('/overview', requireAdmin, requirePermission('finance:read'), async (
   });
 });
 
-router.get('/balances', requireAdmin, requirePermission('finance:read'), async (req, res) => {
+router.get('/balances', requireAdmin, requirePermission('finance:read'), validateQuery(adminFinanceBalancesQuerySchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Finance']
     #swagger.summary = 'List user wallet balances'
@@ -53,8 +63,8 @@ router.get('/balances', requireAdmin, requirePermission('finance:read'), async (
     #swagger.parameters['offset'] = { in: 'query', type: 'number' }
     #swagger.responses[200] = { description: 'Balances', schema: { type: 'array', items: { $ref: '#/definitions/WalletBalanceRow' } } }
   */
-  const limit = Math.min(Number(req.query.limit || 100), 200);
-  const offset = Number(req.query.offset || 0);
+  const limit = Math.min(Number(req.validatedQuery?.limit || 100), 200);
+  const offset = Number(req.validatedQuery?.offset || 0);
   const [rows] = await pool.query(
     `SELECT u.id, u.full_name, u.email, u.full_name_encrypted, u.email_encrypted, w.balance, w.currency, w.updated_at
      FROM wallets w
@@ -66,7 +76,7 @@ router.get('/balances', requireAdmin, requirePermission('finance:read'), async (
   return res.json(rows.map((row) => applyUserPII(row)));
 });
 
-router.get('/export', requireAdmin, requirePermission('finance:read'), async (req, res) => {
+router.get('/export', requireAdmin, requirePermission('finance:read'), validateQuery(adminFinanceExportQuerySchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Finance']
     #swagger.summary = 'Export finance report'
@@ -76,10 +86,10 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), async (re
     #swagger.parameters['to'] = { in: 'query', type: 'string' }
     #swagger.responses[200] = { description: 'CSV or PDF report' }
   */
-  const format = (req.query.format || 'csv').toString().toLowerCase();
+  const format = (req.validatedQuery?.format || 'csv').toString().toLowerCase();
   const safeFormat = format === 'pdf' ? 'pdf' : 'csv';
-  const fromRaw = req.query.from;
-  const toRaw = req.query.to;
+  const fromRaw = req.validatedQuery?.from;
+  const toRaw = req.validatedQuery?.to;
   const fromDate = fromRaw ? new Date(fromRaw) : null;
   const toDate = toRaw ? new Date(toRaw) : null;
   const filters = [];
@@ -159,8 +169,8 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), async (re
   res.send(csv);
 });
 
-router.get('/adjustments', requireAdmin, requirePermission('transactions:read'), async (req, res) => {
-  const status = req.query.status;
+router.get('/adjustments', requireAdmin, requirePermission('transactions:read'), validateQuery(adminAdjustmentsQuerySchema), async (req, res) => {
+  const status = req.validatedQuery?.status;
   const params = [];
   const where = status ? 'WHERE status = ?' : '';
   if (status) params.push(status);
@@ -180,8 +190,9 @@ router.post(
   '/adjustments',
   requireAdmin,
   requirePermission('transactions:write'),
+  validateRequest(adminAdjustmentCreateSchema),
   async (req, res) => {
-    const { userId, type, amount, reason } = req.body || {};
+    const { userId, type, amount, reason } = req.validated || req.body || {};
     const numericAmount = Number(amount);
     if (!userId || !['credit', 'debit'].includes(type)) {
       return res.status(400).json({ error: 'Invalid request' });
@@ -232,8 +243,9 @@ router.post(
   '/adjustments/:id/approve',
   requireAdmin,
   requirePermission('transactions:write'),
+  validateParams(adminAdjustmentIdParamSchema),
   async (req, res) => {
-    const id = req.params.id;
+    const id = req.validatedParams.id;
     const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
     const idem = await checkIdempotency({
       userId: req.admin.sub,
@@ -253,16 +265,21 @@ router.post(
       });
       return res.status(status).json(payload);
     }
-    const [[adj]] = await pool.query(
-      'SELECT id, user_id, type, amount, status FROM admin_adjustments WHERE id = ? LIMIT 1',
-      [id]
-    );
-    if (!adj) return respond(404, { error: 'Adjustment not found' });
-    if (adj.status !== 'pending') return respond(400, { error: 'Not pending' });
-
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+      const [[adj]] = await conn.query(
+        'SELECT id, user_id, type, amount, status FROM admin_adjustments WHERE id = ? FOR UPDATE',
+        [id]
+      );
+      if (!adj) {
+        await conn.rollback();
+        return respond(404, { error: 'Adjustment not found' });
+      }
+      if (adj.status !== 'pending') {
+        await conn.rollback();
+        return respond(400, { error: 'Not pending' });
+      }
       const [walletRows] = await conn.query(
         'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
         [adj.user_id]
@@ -348,8 +365,9 @@ router.post(
   '/adjustments/:id/reject',
   requireAdmin,
   requirePermission('transactions:write'),
+  validateParams(adminAdjustmentIdParamSchema),
   async (req, res) => {
-    const id = req.params.id;
+    const id = req.validatedParams.id;
     const [[adj]] = await pool.query(
       'SELECT id, status FROM admin_adjustments WHERE id = ? LIMIT 1',
       [id]

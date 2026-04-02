@@ -515,9 +515,18 @@ export async function initDatabase() {
     await ensureUserPiiIndexes(conn);
     await migrateUserPii(conn);
     await ensureRefreshTokenFamilyColumns(conn);
+    await ensureRefreshTokenIndexes(conn);
     await ensureIdempotencyTable(conn);
     await ensureTransactionReferenceUnique(conn);
+    await ensureTransactionIndexes(conn);
     await ensureBillOrderReferenceUnique(conn);
+    await ensureSecurityEventIndexes(conn);
+    await ensureAuditLogIndexes(conn);
+    await ensureNotificationIndexes(conn);
+    await ensureUserDeviceIndexes(conn);
+    await ensureVtpassEventIndexes(conn);
+    await ensureFlutterwaveEventColumns(conn);
+    await ensureFlutterwaveEventIndexes(conn);
     await ensureAdminAdjustmentsTable(conn);
     await ensureBillProviderLogoColumn(conn);
     await ensureBillOrderProviderNullable(conn);
@@ -804,6 +813,187 @@ async function ensureBillOrderReferenceUnique(conn) {
   );
   if (!rows[0]?.c) {
     await conn.query('ALTER TABLE bill_orders ADD UNIQUE KEY uniq_bill_reference (reference)');
+  }
+}
+
+async function ensureRefreshTokenIndexes(conn) {
+  const indexes = [
+    { name: 'uniq_refresh_token', ddl: 'ALTER TABLE refresh_tokens ADD UNIQUE KEY uniq_refresh_token (token_hash)' },
+    { name: 'idx_refresh_family', ddl: 'ALTER TABLE refresh_tokens ADD INDEX idx_refresh_family (refresh_family_id)' },
+    { name: 'idx_refresh_device', ddl: 'ALTER TABLE refresh_tokens ADD INDEX idx_refresh_device (device_id)' },
+    { name: 'idx_refresh_revoked', ddl: 'ALTER TABLE refresh_tokens ADD INDEX idx_refresh_revoked (revoked_at)' },
+    { name: 'idx_refresh_created', ddl: 'ALTER TABLE refresh_tokens ADD INDEX idx_refresh_created (created_at)' },
+  ];
+  for (const idx of indexes) {
+    const [rows] = await conn.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'refresh_tokens' AND INDEX_NAME = ?`,
+      [DB_NAME, idx.name]
+    );
+    if (!rows[0]?.c) {
+      await conn.query(idx.ddl);
+    }
+  }
+}
+
+async function ensureTransactionIndexes(conn) {
+  const indexes = [
+    { name: 'idx_tx_user_created', ddl: 'ALTER TABLE transactions ADD INDEX idx_tx_user_created (user_id, created_at)' },
+    { name: 'idx_tx_status_type', ddl: 'ALTER TABLE transactions ADD INDEX idx_tx_status_type (status, type)' },
+  ];
+  for (const idx of indexes) {
+    const [rows] = await conn.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'transactions' AND INDEX_NAME = ?`,
+      [DB_NAME, idx.name]
+    );
+    if (!rows[0]?.c) {
+      await conn.query(idx.ddl);
+    }
+  }
+}
+
+async function ensureSecurityEventIndexes(conn) {
+  const indexes = [
+    { name: 'idx_event_actor_created', ddl: 'ALTER TABLE security_events ADD INDEX idx_event_actor_created (actor_type, actor_id, created_at)' },
+  ];
+  for (const idx of indexes) {
+    const [rows] = await conn.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'security_events' AND INDEX_NAME = ?`,
+      [DB_NAME, idx.name]
+    );
+    if (!rows[0]?.c) {
+      await conn.query(idx.ddl);
+    }
+  }
+}
+
+async function ensureAuditLogIndexes(conn) {
+  const indexes = [
+    { name: 'idx_audit_actor_created', ddl: 'ALTER TABLE audit_logs ADD INDEX idx_audit_actor_created (actor_type, actor_id, created_at)' },
+  ];
+  for (const idx of indexes) {
+    const [rows] = await conn.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'audit_logs' AND INDEX_NAME = ?`,
+      [DB_NAME, idx.name]
+    );
+    if (!rows[0]?.c) {
+      await conn.query(idx.ddl);
+    }
+  }
+}
+
+async function ensureNotificationIndexes(conn) {
+  const indexes = [
+    { name: 'idx_notification_user_created', ddl: 'ALTER TABLE notifications ADD INDEX idx_notification_user_created (user_id, created_at)' },
+    { name: 'idx_notification_read', ddl: 'ALTER TABLE notifications ADD INDEX idx_notification_read (read_at)' },
+  ];
+  for (const idx of indexes) {
+    const [rows] = await conn.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'notifications' AND INDEX_NAME = ?`,
+      [DB_NAME, idx.name]
+    );
+    if (!rows[0]?.c) {
+      await conn.query(idx.ddl);
+    }
+  }
+}
+
+async function ensureUserDeviceIndexes(conn) {
+  const indexes = [
+    { name: 'idx_device_user_last', ddl: 'ALTER TABLE user_devices ADD INDEX idx_device_user_last (user_id, last_seen)' },
+    { name: 'idx_device_id', ddl: 'ALTER TABLE user_devices ADD INDEX idx_device_id (device_id)' },
+  ];
+  for (const idx of indexes) {
+    const [rows] = await conn.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'user_devices' AND INDEX_NAME = ?`,
+      [DB_NAME, idx.name]
+    );
+    if (!rows[0]?.c) {
+      await conn.query(idx.ddl);
+    }
+  }
+}
+
+async function ensureVtpassEventIndexes(conn) {
+  const indexes = [
+    { name: 'idx_vtpass_status', ddl: 'ALTER TABLE vtpass_events ADD INDEX idx_vtpass_status (status)' },
+    { name: 'idx_vtpass_updated', ddl: 'ALTER TABLE vtpass_events ADD INDEX idx_vtpass_updated (updated_at)' },
+  ];
+  for (const idx of indexes) {
+    const [rows] = await conn.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'vtpass_events' AND INDEX_NAME = ?`,
+      [DB_NAME, idx.name]
+    );
+    if (!rows[0]?.c) {
+      await conn.query(idx.ddl);
+    }
+  }
+}
+
+async function ensureFlutterwaveEventColumns(conn) {
+  const [cols] = await conn.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'flutterwave_events'`,
+    [DB_NAME]
+  );
+  const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+  if (!existing.has('processed_at')) {
+    await conn.query(
+      'ALTER TABLE flutterwave_events ADD COLUMN processed_at TIMESTAMP NULL'
+    );
+    await conn.query(
+      'UPDATE flutterwave_events SET processed_at = created_at WHERE processed_at IS NULL'
+    );
+  }
+}
+
+async function ensureFlutterwaveEventIndexes(conn) {
+  const indexes = [
+    { name: 'uniq_event_id', ddl: 'ALTER TABLE flutterwave_events ADD UNIQUE KEY uniq_event_id (event_id)', unique: true },
+    { name: 'idx_event_id', ddl: 'ALTER TABLE flutterwave_events ADD INDEX idx_event_id (event_id)', unique: false },
+    { name: 'idx_flw_ref', ddl: 'ALTER TABLE flutterwave_events ADD INDEX idx_flw_ref (flw_ref)', unique: false },
+    { name: 'idx_tx_ref', ddl: 'ALTER TABLE flutterwave_events ADD INDEX idx_tx_ref (tx_ref)', unique: false },
+    { name: 'idx_processed_at', ddl: 'ALTER TABLE flutterwave_events ADD INDEX idx_processed_at (processed_at)', unique: false },
+  ];
+
+  for (const idx of indexes) {
+    const [rows] = await conn.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'flutterwave_events' AND INDEX_NAME = ?`,
+      [DB_NAME, idx.name]
+    );
+    if (rows[0]?.c) continue;
+    if (idx.name === 'uniq_event_id') {
+      const [[dup]] = await conn.query(
+        `SELECT COUNT(*) AS c FROM (
+           SELECT event_id FROM flutterwave_events
+           WHERE event_id IS NOT NULL
+           GROUP BY event_id HAVING COUNT(*) > 1
+         ) t`
+      );
+      if (!dup?.c) {
+        await conn.query(idx.ddl);
+      }
+      continue;
+    }
+    if (idx.name === 'idx_event_id') {
+      // Add non-unique event_id index only if unique index wasn't created
+      const [uniqRows] = await conn.query(
+        `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.STATISTICS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'flutterwave_events' AND INDEX_NAME = 'uniq_event_id'`,
+        [DB_NAME]
+      );
+      if (!uniqRows[0]?.c) {
+        await conn.query(idx.ddl);
+      }
+      continue;
+    }
+    await conn.query(idx.ddl);
   }
 }
 

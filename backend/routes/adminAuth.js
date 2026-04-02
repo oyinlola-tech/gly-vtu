@@ -28,6 +28,14 @@ import {
   hashBackupCodes,
   verifyBackupCode,
 } from '../utils/totp.js';
+import {
+  validateRequest,
+  adminLoginSchema,
+  adminForgotPasswordSchema,
+  adminResetPasswordSchema,
+  adminTotpEnableSchema,
+  adminTotpDisableSchema
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -105,7 +113,7 @@ function requireCsrfForCookieRefresh(req) {
   return Boolean(csrfCookie && csrfHeader && csrfCookie === csrfHeader);
 }
 
-router.post('/login', adminLoginPerEmailLimiter, adminLoginLimiter, otpLimiter, async (req, res) => {
+router.post('/login', adminLoginPerEmailLimiter, adminLoginLimiter, otpLimiter, validateRequest(adminLoginSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Auth']
     #swagger.summary = 'Admin login'
@@ -113,13 +121,13 @@ router.post('/login', adminLoginPerEmailLimiter, adminLoginLimiter, otpLimiter, 
     #swagger.responses[200] = { description: 'Logged in', schema: { $ref: '#/definitions/AdminLoginResponse' } }
     #swagger.responses[401] = { description: 'Invalid credentials', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { email, password, deviceId: bodyDeviceId } = req.body || {};
+  const { email, password, deviceId: bodyDeviceId } = req.validated || req.body || {};
   const deviceId = bodyDeviceId || req.cookies?.[DEVICE_ID_COOKIE] || null;
   if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
 
   const [rows] = await pool.query(
     'SELECT * FROM admin_users WHERE email = ? LIMIT 1',
-    [email]
+    [String(email).trim().toLowerCase()]
   );
   if (!rows.length) return res.status(401).json({ error: 'Invalid credentials' });
 
@@ -196,8 +204,8 @@ router.post('/login', adminLoginPerEmailLimiter, adminLoginLimiter, otpLimiter, 
     });
   }
 
-  const totpToken = req.body?.totp || null;
-  const backupCode = req.body?.backupCode || null;
+  const totpToken = req.validated?.totp || null;
+  const backupCode = req.validated?.backupCode || null;
   if (!totpToken && !backupCode) {
     return res.json({ totpRequired: true });
   }
@@ -281,8 +289,8 @@ router.post('/totp/setup', requireAdmin, async (req, res) => {
   });
 });
 
-router.post('/totp/enable', requireAdmin, async (req, res) => {
-  const { token } = req.body || {};
+router.post('/totp/enable', requireAdmin, validateRequest(adminTotpEnableSchema), async (req, res) => {
+  const { token } = req.validated || req.body || {};
   if (!token) return res.status(400).json({ error: 'TOTP code required' });
   const [[admin]] = await pool.query(
     'SELECT id, totp_secret FROM admin_users WHERE id = ? LIMIT 1',
@@ -303,8 +311,8 @@ router.post('/totp/enable', requireAdmin, async (req, res) => {
   return res.json({ enabled: true, backupCodes });
 });
 
-router.post('/totp/disable', requireAdmin, async (req, res) => {
-  const { token, backupCode } = req.body || {};
+router.post('/totp/disable', requireAdmin, validateRequest(adminTotpDisableSchema), async (req, res) => {
+  const { token, backupCode } = req.validated || req.body || {};
   const [[admin]] = await pool.query(
     'SELECT id, totp_secret, totp_backup_codes, backup_codes_used FROM admin_users WHERE id = ? LIMIT 1',
     [req.admin.sub]
@@ -350,6 +358,9 @@ router.post('/refresh', async (req, res) => {
     return res.status(403).json({ error: 'CSRF validation failed' });
   }
   const deviceId = req.body?.deviceId || req.cookies?.[DEVICE_ID_COOKIE] || null;
+  if (cookieToken && !deviceId) {
+    return res.status(400).json({ error: 'Device ID required' });
+  }
   const incoming = cookieToken ? decryptCookieValue(cookieToken) : req.body?.refreshToken;
   if (!incoming) return res.status(400).json({ error: 'Refresh token required' });
 
@@ -444,16 +455,18 @@ router.get('/me', requireAdmin, async (req, res) => {
   return res.json(rows[0]);
 });
 
-router.post('/forgot-password', otpLimiter, async (req, res) => {
+router.post('/forgot-password', otpLimiter, validateRequest(adminForgotPasswordSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Auth']
     #swagger.summary = 'Request admin password reset OTP'
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/ForgotPasswordRequest' } }
     #swagger.responses[200] = { description: 'OTP dispatched', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { email } = req.body || {};
+  const { email } = req.validated || req.body || {};
   if (!email) return res.status(400).json({ error: 'Email required' });
-  const [rows] = await pool.query('SELECT id FROM admin_users WHERE email = ? LIMIT 1', [email]);
+  const [rows] = await pool.query('SELECT id FROM admin_users WHERE email = ? LIMIT 1', [
+    String(email).trim().toLowerCase()
+  ]);
   if (!rows.length) return res.json({ message: 'OTP sent if account exists' });
   try {
     const { code } = await createOtp({
@@ -480,14 +493,14 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
   return res.json({ message: 'OTP sent if account exists' });
 });
 
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', validateRequest(adminResetPasswordSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Auth']
     #swagger.summary = 'Reset admin password using OTP'
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/ResetPasswordRequest' } }
     #swagger.responses[200] = { description: 'Password reset', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { email, code, newPassword } = req.body || {};
+  const { email, code, newPassword } = req.validated || req.body || {};
   if (!email || !code || !newPassword) {
     return res.status(400).json({ error: 'Missing fields' });
   }
@@ -506,7 +519,7 @@ router.post('/reset-password', async (req, res) => {
   });
   await pool.query('UPDATE admin_users SET password_hash = ? WHERE email = ?', [
     passwordHash,
-    email,
+    String(email).trim().toLowerCase(),
   ]);
   await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE admin_id = ?', [
     otp.user_id,

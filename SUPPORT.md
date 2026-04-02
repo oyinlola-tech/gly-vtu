@@ -18,3 +18,6 @@ Support includes:
 Support does not include:
 - Public or community support channels
 - Use by unlicensed or unauthorized parties
+
+## Security Reports
+Security issues should follow the private reporting flow in `SECURITY.md`.

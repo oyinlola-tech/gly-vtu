@@ -11,7 +11,11 @@ The Software is proprietary and confidential. You may not disclose, share, or ma
 2. Work on a feature branch.
 3. Keep changes scoped and well-documented.
 4. Update or add tests where applicable.
-5. Update relevant documentation (`README.md`, `API.md`, `CHANGELOG.md`).
+5. Update relevant documentation (`README.md`, `SECURITY.md`, `SUPPORT.md`).
+
+## Quality Checks
+- Run `npm run lint` for linting.
+- Run `npm run typecheck` for type checking.
 
 ## Code Style
 - Prefer clear, explicit code over cleverness.

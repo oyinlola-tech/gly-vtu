@@ -31,6 +31,9 @@ import {
   billsQuoteSchema,
   billsPaySchema,
   billsPayCardSchema,
+  validateQuery,
+  billsProvidersQuerySchema,
+  billsVariationsQuerySchema,
 } from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
 
@@ -76,7 +79,7 @@ router.get('/categories', async (req, res) => {
   return res.json(rows);
 });
 
-router.get('/providers', async (req, res) => {
+router.get('/providers', validateQuery(billsProvidersQuerySchema), async (req, res) => {
   /*
     #swagger.tags = ['Bills']
     #swagger.summary = 'List bill providers by category code'
@@ -91,7 +94,7 @@ router.get('/providers', async (req, res) => {
     }
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { category } = req.query;
+  const { category } = req.validatedQuery || req.query;
   if (!category) return res.status(400).json({ error: 'Category required' });
 
   if (vtpassEnabled) {
@@ -129,7 +132,7 @@ router.get('/providers', async (req, res) => {
   return res.json(rows);
 });
 
-router.get('/variations', async (req, res) => {
+router.get('/variations', validateQuery(billsVariationsQuerySchema), async (req, res) => {
   /*
     #swagger.tags = ['Bills']
     #swagger.summary = 'List service variations (plans)'
@@ -141,7 +144,7 @@ router.get('/variations', async (req, res) => {
     #swagger.responses[200] = { description: 'Variations', schema: { type: 'object' } }
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { serviceID } = req.query;
+  const { serviceID } = req.validatedQuery || req.query;
   if (!serviceID || !isValidServiceId(serviceID)) {
     return res.status(400).json({ error: 'Service ID required' });
   }
@@ -673,4 +676,3 @@ router.post('/pay-card', billsLimiter, requireUser, validateRequest(billsPayCard
 });
 
 export default router;
-

@@ -30,4 +30,9 @@ This codebase includes:
 - Rate limiting for public and auth endpoints
 - Restricted direct browser access to `/api/*` (use `/app/*` via proxy)
 
+Additional safeguards:
+- Webhook IP allowlists for Flutterwave and VTpass (required in production)
+- Admin and user lockout protections
+- TOTP support for admin authentication
+
 Review `.env.example` for required secrets and hardening flags.

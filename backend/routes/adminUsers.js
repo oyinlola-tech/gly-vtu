@@ -8,6 +8,12 @@ import { createVirtualAccountForCustomer } from '../utils/flutterwave.js';
 import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
 import { applyUserPII, decryptJson } from '../utils/encryption.js';
 import { logger } from '../utils/logger.js';
+import {
+  validateParams,
+  validateRequest,
+  adminUserIdParamSchema,
+  adminKycUpdateSchema,
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -24,7 +30,7 @@ router.get('/', requireAdmin, requirePermission('users:read'), async (req, res) 
   return res.json(rows.map((row) => applyUserPII(row)));
 });
 
-router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req, res) => {
+router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), validateParams(adminUserIdParamSchema), validateRequest(adminKycUpdateSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Users']
     #swagger.summary = 'Update user KYC status'
@@ -32,7 +38,7 @@ router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req,
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/AdminKycUpdateRequest' } }
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { status, level } = req.body || {};
+  const { status, level } = req.validated || req.body || {};
   if (!['verified', 'rejected', 'pending'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
@@ -43,11 +49,11 @@ router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req,
   await pool.query('UPDATE users SET kyc_status = ?, kyc_level = ? WHERE id = ?', [
     status,
     nextLevel,
-    req.params.id,
+    req.validatedParams.id,
   ]);
   const [[userRaw]] = await pool.query(
     'SELECT id, full_name, email, full_name_encrypted, email_encrypted FROM users WHERE id = ?',
-    [req.params.id]
+    [req.validatedParams.id]
   );
   const user = applyUserPII(userRaw);
   if (user?.email) {
@@ -62,7 +68,7 @@ router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req,
     actorId: req.admin.sub,
     action: 'admin.kyc.update',
     entityType: 'user',
-    entityId: req.params.id,
+    entityId: req.validatedParams.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
     metadata: { status, level: Number(level || 1) },
@@ -70,7 +76,7 @@ router.put('/:id/kyc', requireAdmin, requirePermission('users:kyc'), async (req,
   return res.json({ message: 'KYC updated' });
 });
 
-router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:write'), async (req, res) => {
+router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:write'), validateParams(adminUserIdParamSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Users']
     #swagger.summary = 'Create reserved account for user'
@@ -78,7 +84,7 @@ router.post('/:id/reserved-account', requireAdmin, requirePermission('accounts:w
     #swagger.responses[200] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
     #swagger.responses[409] = { description: 'Already exists', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const userId = req.params.id;
+  const userId = req.validatedParams.id;
   const [existing] = await pool.query(
     'SELECT id FROM reserved_accounts WHERE user_id = ? LIMIT 1',
     [userId]

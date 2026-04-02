@@ -12,6 +12,7 @@ import { applyUserPII } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
+const MAX_TOPUP_AMOUNT = Number(process.env.TOPUP_MAX_AMOUNT || 10_000_000);
 
 // Utility to get request IP
 function getRequestIp(req) {
@@ -92,7 +93,7 @@ router.post('/', webhookLimiter, async (req, res) => {
   // SECURITY: Deduplicate webhook events using Flutterwave's unique event ID
   // This prevents double-crediting if Flutterwave retries webhook delivery
   // Each webhook has a unique id field that identifies it across retries
-  const eventId = data.id || data.event_id;
+  const eventId = data.id || data.event_id || data.flw_ref || data.tx_ref;
   if (eventId) {
     // Check if this event was already processed in the last 5 minutes
     const [[existing]] = await pool.query(
@@ -109,17 +110,24 @@ router.post('/', webhookLimiter, async (req, res) => {
     }
   }
 
-  await pool.query(
-    `INSERT INTO flutterwave_events (id, event_id, tx_ref, flw_ref, status, raw_payload)
-     VALUES (UUID(), ?, ?, ?, ?, ?)`,
-    [
-      data.id || null,
-      data.tx_ref || null,
-      data.flw_ref || null,
-      status || 'unknown',
-      JSON.stringify(sanitizeFlutterwaveWebhook(payload)),
-    ]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO flutterwave_events (id, event_id, tx_ref, flw_ref, status, raw_payload, processed_at)
+       VALUES (UUID(), ?, ?, ?, ?, ?, NOW())`,
+      [
+        eventId || null,
+        data.tx_ref || null,
+        data.flw_ref || null,
+        status || 'unknown',
+        JSON.stringify(sanitizeFlutterwaveWebhook(payload)),
+      ]
+    );
+  } catch (err) {
+    if (err?.code === 'ER_DUP_ENTRY') {
+      return res.json({ message: 'OK' });
+    }
+    throw err;
+  }
 
   if (event !== 'charge.completed') {
     return res.json({ message: 'Ignored' });
@@ -143,13 +151,35 @@ router.post('/', webhookLimiter, async (req, res) => {
   if (!txRef) return res.json({ message: 'No tx_ref' });
 
   const [[account]] = await pool.query(
-    'SELECT user_id, account_number, bank_name FROM reserved_accounts WHERE account_reference = ? AND provider = ? LIMIT 1',
+    'SELECT user_id, account_number, bank_name, status FROM reserved_accounts WHERE account_reference = ? AND provider = ? LIMIT 1',
     [txRef, 'flutterwave']
   );
   if (!account) return res.json({ message: 'Account not found' });
+  if (String(account.status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+    logSecurityEvent({
+      type: 'webhook.flutterwave.inactive_account',
+      severity: 'medium',
+      actorType: 'system',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { tx_ref: txRef, status: account.status || null },
+    }).catch(() => null);
+    return res.json({ message: 'Account inactive' });
+  }
 
   const amount = Number(data.amount || 0);
   if (!amount || amount <= 0) return res.json({ message: 'Invalid amount' });
+  if (amount > MAX_TOPUP_AMOUNT) {
+    logSecurityEvent({
+      type: 'webhook.flutterwave.amount_exceeds_limit',
+      severity: 'high',
+      actorType: 'system',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { amount, max: MAX_TOPUP_AMOUNT, tx_ref: txRef },
+    }).catch(() => null);
+    return res.json({ message: 'Amount exceeds limit' });
+  }
 
   const reference = `FLW-${data.flw_ref || data.id || txRef}`;
 

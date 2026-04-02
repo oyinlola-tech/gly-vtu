@@ -5,6 +5,13 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission, rolePermissions } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
 import { logger } from '../utils/logger.js';
+import {
+  validateParams,
+  validateRequest,
+  adminManagementCreateSchema,
+  adminRoleUpdateSchema,
+  adminAdjustmentIdParamSchema,
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -31,7 +38,7 @@ router.get('/roles', requireAdmin, requirePermission('admin:manage'), async (req
   return res.json(Object.keys(rolePermissions));
 });
 
-router.post('/', requireAdmin, requirePermission('admin:manage'), async (req, res) => {
+router.post('/', requireAdmin, requirePermission('admin:manage'), validateRequest(adminManagementCreateSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Management']
     #swagger.summary = 'Create an admin user'
@@ -39,7 +46,7 @@ router.post('/', requireAdmin, requirePermission('admin:manage'), async (req, re
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/AdminCreateRequest' } }
     #swagger.responses[201] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { name, email, password, role } = req.body || {};
+  const { name, email, password, role } = req.validated || req.body || {};
   if (!name || !email || !password || !role) {
     return res.status(400).json({ error: 'Missing fields' });
   }
@@ -47,7 +54,8 @@ router.post('/', requireAdmin, requirePermission('admin:manage'), async (req, re
     return res.status(400).json({ error: 'Invalid role' });
   }
 
-  const [existing] = await pool.query('SELECT id FROM admin_users WHERE email = ?', [email]);
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const [existing] = await pool.query('SELECT id FROM admin_users WHERE email = ?', [normalizedEmail]);
   if (existing.length) return res.status(409).json({ error: 'Admin already exists' });
 
   const passwordHash = await argon2.hash(password, {
@@ -58,7 +66,7 @@ router.post('/', requireAdmin, requirePermission('admin:manage'), async (req, re
   });
   await pool.query(
     'INSERT INTO admin_users (id, name, email, password_hash, role) VALUES (UUID(), ?, ?, ?, ?)',
-    [name, email, passwordHash, role]
+    [name, normalizedEmail, passwordHash, role]
   );
 
   logAudit({
@@ -75,7 +83,7 @@ router.post('/', requireAdmin, requirePermission('admin:manage'), async (req, re
   return res.status(201).json({ message: 'Admin created' });
 });
 
-router.put('/:id/role', requireAdmin, requirePermission('admin:manage'), async (req, res) => {
+router.put('/:id/role', requireAdmin, requirePermission('admin:manage'), validateParams(adminAdjustmentIdParamSchema), validateRequest(adminRoleUpdateSchema), async (req, res) => {
   /*
     #swagger.tags = ['Admin Management']
     #swagger.summary = 'Update admin role'
@@ -83,17 +91,17 @@ router.put('/:id/role', requireAdmin, requirePermission('admin:manage'), async (
     #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/AdminRoleUpdateRequest' } }
     #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { role } = req.body || {};
+  const { role } = req.validated || req.body || {};
   if (!role || !rolePermissions[role]) {
     return res.status(400).json({ error: 'Invalid role' });
   }
-  await pool.query('UPDATE admin_users SET role = ? WHERE id = ?', [role, req.params.id]);
+  await pool.query('UPDATE admin_users SET role = ? WHERE id = ?', [role, req.validatedParams.id]);
   logAudit({
     actorType: 'admin',
     actorId: req.admin.sub,
     action: 'admin.role.update',
     entityType: 'admin',
-    entityId: req.params.id,
+    entityId: req.validatedParams.id,
     ip: req.ip,
     userAgent: req.headers['user-agent'],
     metadata: { role },

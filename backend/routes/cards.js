@@ -11,7 +11,14 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII, decryptJson } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
-import { validateRequest, cardCreateSchema } from '../middleware/requestValidation.js';
+import {
+  validateRequest,
+  validateParams,
+  cardCreateSchema,
+  cardIdParamSchema,
+  cardSettingsSchema,
+  cardAuthorizeSchema,
+} from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
@@ -199,8 +206,8 @@ router.post('/', requireUser, validateRequest(cardCreateSchema), async (req, res
   }
 });
 
-router.get('/:cardId/settings', requireUser, async (req, res) => {
-  const { cardId } = req.params;
+router.get('/:cardId/settings', requireUser, validateParams(cardIdParamSchema), async (req, res) => {
+  const { cardId } = req.validatedParams;
   const [[card]] = await pool.query(
     'SELECT card_id FROM virtual_cards WHERE card_id = ? AND user_id = ? LIMIT 1',
     [cardId, req.user.sub]
@@ -215,9 +222,9 @@ router.get('/:cardId/settings', requireUser, async (req, res) => {
   );
 });
 
-router.put('/:cardId/settings', requireUser, async (req, res) => {
-  const { cardId } = req.params;
-  const { dailyLimit, monthlyLimit, merchantLocks, autoFreeze } = req.body || {};
+router.put('/:cardId/settings', requireUser, validateParams(cardIdParamSchema), validateRequest(cardSettingsSchema), async (req, res) => {
+  const { cardId } = req.validatedParams;
+  const { dailyLimit, monthlyLimit, merchantLocks, autoFreeze } = req.validated || req.body || {};
   const [[card]] = await pool.query(
     'SELECT card_id FROM virtual_cards WHERE card_id = ? AND user_id = ? LIMIT 1',
     [cardId, req.user.sub]
@@ -243,9 +250,9 @@ router.put('/:cardId/settings', requireUser, async (req, res) => {
   return res.json({ message: 'Card settings updated' });
 });
 
-router.post('/:cardId/authorize', requireUser, async (req, res) => {
-  const { cardId } = req.params;
-  const { amount, merchant } = req.body || {};
+router.post('/:cardId/authorize', requireUser, validateParams(cardIdParamSchema), validateRequest(cardAuthorizeSchema), async (req, res) => {
+  const { cardId } = req.validatedParams;
+  const { amount, merchant } = req.validated || req.body || {};
   if (!isValidAmount(amount, 1, 1_000_000_000)) {
     return res.status(400).json({ error: 'Invalid amount' });
   }
@@ -325,8 +332,8 @@ router.post('/:cardId/authorize', requireUser, async (req, res) => {
   return res.json({ approved: true });
 });
 
-router.post('/:cardId/freeze', requireUser, async (req, res) => {
-  const { cardId } = req.params;
+router.post('/:cardId/freeze', requireUser, validateParams(cardIdParamSchema), async (req, res) => {
+  const { cardId } = req.validatedParams;
   if (!cardId) return res.status(400).json({ error: 'Card ID required' });
   await blockVirtualCard(cardId);
   await pool.query('UPDATE virtual_cards SET status = ? WHERE card_id = ? AND user_id = ?', [
@@ -337,8 +344,8 @@ router.post('/:cardId/freeze', requireUser, async (req, res) => {
   return res.json({ message: 'Card frozen' });
 });
 
-router.post('/:cardId/unfreeze', requireUser, async (req, res) => {
-  const { cardId } = req.params;
+router.post('/:cardId/unfreeze', requireUser, validateParams(cardIdParamSchema), async (req, res) => {
+  const { cardId } = req.validatedParams;
   if (!cardId) return res.status(400).json({ error: 'Card ID required' });
   await unblockVirtualCard(cardId);
   await pool.query('UPDATE virtual_cards SET status = ? WHERE card_id = ? AND user_id = ?', [

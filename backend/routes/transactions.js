@@ -4,6 +4,12 @@ import { requireUser } from '../middleware/auth.js';
 import { generateStatementPdf, sendStatementEmail, generateReceiptPdf } from '../utils/email.js';
 import { applyUserPII } from '../utils/encryption.js';
 import { hydrateTransactionMetadata } from '../utils/transactionMetadata.js';
+import {
+  validateRequest,
+  validateParams,
+  transactionIdParamSchema,
+  statementSchema
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -60,6 +66,16 @@ async function buildStatementData({ userId, startDate, endDate }) {
   return { rows: enriched, openingBalance, closingBalance };
 }
 
+function parseDate(value) {
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dateDiffDays(start, end) {
+  const ms = end.getTime() - start.getTime();
+  return Math.ceil(ms / (24 * 60 * 60 * 1000));
+}
+
 router.get('/', requireUser, async (req, res) => {
   /*
     #swagger.tags = ['Transactions']
@@ -85,10 +101,10 @@ router.get('/', requireUser, async (req, res) => {
   return res.json(mapped);
 });
 
-router.get('/:id', requireUser, async (req, res) => {
+router.get('/:id', requireUser, validateParams(transactionIdParamSchema), async (req, res) => {
   const [rows] = await pool.query(
     'SELECT id, type, amount, fee, total, status, reference, metadata, metadata_encrypted, created_at FROM transactions WHERE id = ? AND user_id = ? LIMIT 1',
-    [req.params.id, req.user.sub]
+    [req.validatedParams.id, req.user.sub]
   );
   if (!rows.length) return res.status(404).json({ error: 'Transaction not found' });
 
@@ -118,10 +134,10 @@ router.get('/:id', requireUser, async (req, res) => {
   });
 });
 
-router.get('/:id/receipt', requireUser, async (req, res) => {
+router.get('/:id/receipt', requireUser, validateParams(transactionIdParamSchema), async (req, res) => {
   const [rows] = await pool.query(
     'SELECT id, type, amount, fee, total, status, reference, metadata, metadata_encrypted, created_at FROM transactions WHERE id = ? AND user_id = ? LIMIT 1',
-    [req.params.id, req.user.sub]
+    [req.validatedParams.id, req.user.sub]
   );
   if (!rows.length) return res.status(404).json({ error: 'Transaction not found' });
 
@@ -161,7 +177,7 @@ router.get('/:id/receipt', requireUser, async (req, res) => {
   return res.send(pdf);
 });
 
-router.post('/statement', requireUser, async (req, res) => {
+router.post('/statement', requireUser, validateRequest(statementSchema), async (req, res) => {
   /*
     #swagger.tags = ['Transactions']
     #swagger.summary = 'Email account statement PDF'
@@ -179,13 +195,17 @@ router.post('/statement', requireUser, async (req, res) => {
     }
     #swagger.responses[200] = { description: 'Statement queued', schema: { $ref: '#/definitions/MessageResponse' } }
   */
-  const { startDate, endDate } = req.body || {};
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-  if (!startDate || !endDate || !datePattern.test(startDate) || !datePattern.test(endDate)) {
+  const { startDate, endDate } = req.validated || req.body || {};
+  const start = parseDate(startDate);
+  const end = parseDate(endDate);
+  if (!start || !end) {
     return res.status(400).json({ error: 'Start and end date are required (YYYY-MM-DD)' });
   }
   if (startDate > endDate) {
     return res.status(400).json({ error: 'Start date must be before end date' });
+  }
+  if (dateDiffDays(start, end) > 366) {
+    return res.status(400).json({ error: 'Date range too large (max 366 days)' });
   }
 
   const [[userRaw2]] = await pool.query(
@@ -216,7 +236,7 @@ router.post('/statement', requireUser, async (req, res) => {
   return res.json({ message: 'Statement sent to your email' });
 });
 
-router.post('/statement/download', requireUser, async (req, res) => {
+router.post('/statement/download', requireUser, validateRequest(statementSchema), async (req, res) => {
   /*
     #swagger.tags = ['Transactions']
     #swagger.summary = 'Download account statement PDF'
@@ -233,13 +253,17 @@ router.post('/statement/download', requireUser, async (req, res) => {
       }
     }
   */
-  const { startDate, endDate } = req.body || {};
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-  if (!startDate || !endDate || !datePattern.test(startDate) || !datePattern.test(endDate)) {
+  const { startDate, endDate } = req.validated || req.body || {};
+  const start = parseDate(startDate);
+  const end = parseDate(endDate);
+  if (!start || !end) {
     return res.status(400).json({ error: 'Start and end date are required (YYYY-MM-DD)' });
   }
   if (startDate > endDate) {
     return res.status(400).json({ error: 'Start date must be before end date' });
+  }
+  if (dateDiffDays(start, end) > 366) {
+    return res.status(400).json({ error: 'Date range too large (max 366 days)' });
   }
 
   const [[userRaw3]] = await pool.query(

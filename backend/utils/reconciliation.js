@@ -29,7 +29,7 @@ export async function reconcileFlutterwaveTransactions() {
       SELECT event_id, tx_ref, flw_ref, status, raw_payload, processed_at
       FROM flutterwave_events
       WHERE status = 'successful'
-        AND processed_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+        AND COALESCE(processed_at, created_at) > DATE_SUB(NOW(), INTERVAL 30 DAY)
     `);
 
     const discrepancies = [];
@@ -119,7 +119,7 @@ export async function reconcileVtpassTransactions() {
       SELECT t.id, t.user_id, t.amount, t.total, t.reference, t.status, t.created_at,
              SUBSTRING(t.reference, 6) as request_id
       FROM transactions t
-      WHERE t.type IN ('airtime', 'data', 'electricity', 'tv')
+      WHERE t.type IN ('bill', 'airtime', 'data', 'electricity', 'tv')
         AND t.created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
         AND t.reference LIKE 'BILL-%'
     `);

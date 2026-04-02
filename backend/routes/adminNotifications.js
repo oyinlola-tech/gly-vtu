@@ -5,11 +5,12 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { emitToUser, emitToAllUsers } from '../utils/realtime.js';
 import { logAudit } from '../utils/audit.js';
+import { validateRequest, adminNotificationSchema } from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
-router.post('/', requireAdmin, requirePermission('notify:send'), async (req, res) => {
-  const { title, body, type = 'info', userId, force = false, data } = req.body || {};
+router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest(adminNotificationSchema), async (req, res) => {
+  const { title, body, type = 'info', userId, force = false, data } = req.validated || req.body || {};
   if (!title || !body) {
     return res.status(400).json({ error: 'Title and body are required' });
   }

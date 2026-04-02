@@ -3,11 +3,12 @@ import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { fetchVirtualAccount } from '../utils/flutterwave.js';
+import { validateRequest, adminFlutterwaveRequerySchema } from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
-router.post('/virtual-accounts/requery', requireAdmin, requirePermission('accounts:read'), async (req, res) => {
-  const { userId, accountReference } = req.body || {};
+router.post('/virtual-accounts/requery', requireAdmin, requirePermission('accounts:read'), validateRequest(adminFlutterwaveRequerySchema), async (req, res) => {
+  const { userId, accountReference } = req.validated || req.body || {};
   let row = null;
   if (userId) {
     const [[found]] = await pool.query(

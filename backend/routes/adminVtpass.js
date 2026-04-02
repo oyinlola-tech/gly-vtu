@@ -6,13 +6,19 @@ import { requeryService } from '../utils/vtpass.js';
 import { sendReceiptEmail } from '../utils/email.js';
 import { applyUserPII } from '../utils/encryption.js';
 import { logger } from '../utils/logger.js';
+import {
+  validateQuery,
+  validateRequest,
+  adminVtpassEventsQuerySchema,
+  adminVtpassRequerySchema,
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
-router.get('/events', requireAdmin, requirePermission('bills:read'), async (req, res) => {
-  const limit = Math.min(Number(req.query.limit || 100), 200);
-  const offset = Number(req.query.offset || 0);
-  const status = req.query.status || '';
+router.get('/events', requireAdmin, requirePermission('bills:read'), validateQuery(adminVtpassEventsQuerySchema), async (req, res) => {
+  const limit = Math.min(Number(req.validatedQuery?.limit || 100), 200);
+  const offset = Number(req.validatedQuery?.offset || 0);
+  const status = req.validatedQuery?.status || '';
   const filters = [];
   const params = [];
   if (status) {
@@ -31,8 +37,8 @@ router.get('/events', requireAdmin, requirePermission('bills:read'), async (req,
   return res.json(rows);
 });
 
-router.post('/requery', requireAdmin, requirePermission('bills:read'), async (req, res) => {
-  const { requestId } = req.body || {};
+router.post('/requery', requireAdmin, requirePermission('bills:read'), validateRequest(adminVtpassRequerySchema), async (req, res) => {
+  const { requestId } = req.validated || req.body || {};
   if (!requestId) return res.status(400).json({ error: 'Missing requestId' });
   const data = await requeryService(requestId);
 
@@ -58,7 +64,33 @@ router.post('/requery', requireAdmin, requirePermission('bills:read'), async (re
   );
   if (txRows.length) {
     const tx = txRows[0];
-    if (tx.status !== status) {
+    if (tx.status !== status && status === 'failed') {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        const [[lockedTx]] = await conn.query(
+          'SELECT id, user_id, status, total FROM transactions WHERE id = ? FOR UPDATE',
+          [tx.id]
+        );
+        if (lockedTx && lockedTx.status === 'pending') {
+          await conn.query('UPDATE transactions SET status = ? WHERE id = ?', ['failed', tx.id]);
+          await conn.query('UPDATE bill_orders SET status = ? WHERE reference = ?', [
+            'failed',
+            reference,
+          ]);
+          await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
+            Number(lockedTx.total || 0),
+            lockedTx.user_id,
+          ]);
+        }
+        await conn.commit();
+      } catch (err) {
+        await conn.rollback();
+        logger.error('VTpass requery refund failed', { error: logger.format(err) });
+      } finally {
+        conn.release();
+      }
+    } else if (tx.status !== status) {
       await pool.query('UPDATE transactions SET status = ? WHERE id = ?', [status, tx.id]);
       await pool.query('UPDATE bill_orders SET status = ? WHERE reference = ?', [status, reference]);
     }
