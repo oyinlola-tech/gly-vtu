@@ -10,6 +10,7 @@
     "dev:backend": "node server.js",
     "kyc:health": "node scripts/kyc-health-check.js",
     "lint": "eslint .",
+    "swagger": "node backend/docs/swagger.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

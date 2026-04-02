@@ -97,7 +97,7 @@ export function WalletManagementPage() {
   }
 
   return (
-    <div className="py-6 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+    <div className="fintech-bg py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto rounded-[32px]">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Wallet Management</h1>
@@ -113,7 +113,7 @@ export function WalletManagementPage() {
 
       {/* Wallet Balance Card */}
       {wallet && (
-        <div className="mb-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-xl p-8 text-white">
+        <div className="mb-8 bg-gradient-to-br from-[#235697] via-[#1a4a86] to-[#0b2c57] rounded-2xl shadow-[0_24px_50px_rgba(15,23,42,0.3)] p-8 text-white">
           <div className="flex items-start justify-between mb-12">
             <div className="flex items-center gap-3">
               <Wallet size={32} />
@@ -138,7 +138,7 @@ export function WalletManagementPage() {
             </div>
             <button
               onClick={() => window.location.href = '/send-money'}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition font-semibold"
+              className="flex items-center gap-2 px-4 py-2 bg-white text-[#1a4a86] rounded-xl hover:bg-blue-50 transition font-semibold"
             >
               <Send size={18} />
               Send Money
@@ -166,7 +166,7 @@ export function WalletManagementPage() {
 
       {/* Info Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+        <div className="fintech-card rounded-2xl p-6 border-l-4 border-emerald-500">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-green-100 rounded-lg">
               <TrendingUp className="text-green-600" size={24} />
@@ -180,7 +180,7 @@ export function WalletManagementPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+        <div className="fintech-card rounded-2xl p-6 border-l-4 border-blue-500">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Wallet className="text-blue-600" size={24} />
@@ -194,7 +194,7 @@ export function WalletManagementPage() {
       </div>
 
       {/* Topup Section */}
-      <div className="bg-white rounded-lg shadow-lg p-8">
+      <div className="fintech-card rounded-2xl p-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
           <Plus className="text-blue-600" size={28} />
           Add Funds to Wallet
@@ -214,9 +214,9 @@ export function WalletManagementPage() {
                 <button
                   key={option.id}
                   onClick={() => setSelectedOption(option.id)}
-                  className={`p-4 rounded-lg border-2 transition text-left ${
+                  className={`p-4 rounded-2xl border-2 transition text-left ${
                     selectedOption === option.id
-                      ? 'border-blue-600 bg-blue-50'
+                      ? 'border-[#235697] bg-blue-50/80'
                       : 'border-gray-300 bg-white hover:border-gray-400'
                   }`}
                 >
@@ -255,7 +255,7 @@ export function WalletManagementPage() {
                     setError(null);
                   }}
                   placeholder="Enter amount"
-                  className="w-full pl-16 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full pl-16 pr-4 py-3 fintech-input"
                 />
               </div>
             </div>
@@ -288,7 +288,7 @@ export function WalletManagementPage() {
             <button
               onClick={handleTopup}
               disabled={topupLoading || !topupAmount}
-              className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition font-semibold text-lg"
+              className="w-full px-6 py-3 bg-gradient-to-r from-[#235697] via-[#1a4a86] to-[#0b2c57] text-white rounded-2xl hover:opacity-90 disabled:bg-gray-400 transition font-semibold text-lg"
             >
               {topupLoading ? 'Processing...' : 'Proceed to Payment'}
             </button>
@@ -306,7 +306,7 @@ export function WalletManagementPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="mt-8 bg-white rounded-lg shadow p-6">
+      <div className="mt-8 fintech-card rounded-2xl p-6">
         <h3 className="font-bold text-gray-900 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <a

@@ -3,25 +3,25 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
+  --background: #f5f7fb;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: #0f172a;
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
+  --primary: #0f3d6e;
+  --primary-foreground: #f8fafc;
+  --secondary: #e6eef9;
+  --secondary-foreground: #0f2a47;
+  --muted: #eef2f8;
+  --muted-foreground: #64748b;
+  --accent: #e4f3f1;
+  --accent-foreground: #0f2a47;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
+  --border: rgba(15, 23, 42, 0.12);
   --input: transparent;
-  --input-background: #f3f3f5;
+  --input-background: #f1f5fb;
   --switch-background: #cbced4;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -32,36 +32,36 @@
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #f8fafc;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #0f3d6e;
+  --sidebar-primary-foreground: #f8fafc;
+  --sidebar-accent: #eef2f8;
+  --sidebar-accent-foreground: #0f2a47;
+  --sidebar-border: rgba(15, 23, 42, 0.08);
+  --sidebar-ring: rgba(15, 23, 42, 0.2);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
+  --background: #0b1220;
+  --foreground: #f8fafc;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
   --popover: oklch(0.145 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --primary: #e2e8f0;
+  --primary-foreground: #0b1220;
+  --secondary: #111b2d;
+  --secondary-foreground: #e2e8f0;
+  --muted: #111b2d;
+  --muted-foreground: #94a3b8;
+  --accent: #122033;
+  --accent-foreground: #e2e8f0;
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
+  --border: rgba(148, 163, 184, 0.2);
+  --input: #0f172a;
+  --ring: rgba(148, 163, 184, 0.35);
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --chart-1: oklch(0.488 0.243 264.376);
@@ -69,14 +69,14 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --sidebar: #0b1220;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #63b3ed;
+  --sidebar-primary-foreground: #0b1220;
+  --sidebar-accent: #111b2d;
+  --sidebar-accent-foreground: #e2e8f0;
+  --sidebar-border: rgba(148, 163, 184, 0.2);
+  --sidebar-ring: rgba(148, 163, 184, 0.35);
 }
 
 .high-contrast {
@@ -220,5 +220,38 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+  }
+}
+
+@layer utilities {
+  .fintech-bg {
+    position: relative;
+    background: radial-gradient(circle at 10% 10%, rgba(35, 86, 151, 0.16), transparent 45%),
+      radial-gradient(circle at 90% 20%, rgba(16, 185, 129, 0.12), transparent 40%),
+      linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(241, 245, 251, 0.9));
+  }
+
+  .dark .fintech-bg {
+    background: radial-gradient(circle at 10% 10%, rgba(56, 189, 248, 0.12), transparent 45%),
+      radial-gradient(circle at 90% 20%, rgba(16, 185, 129, 0.08), transparent 40%),
+      linear-gradient(180deg, rgba(11, 18, 32, 0.95), rgba(15, 23, 42, 0.95));
+  }
+
+  .fintech-card {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(16px);
+  }
+
+  .dark .fintech-card {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 20px 40px rgba(2, 6, 23, 0.45);
+  }
+
+  .fintech-input {
+    @apply rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-[#235697] focus:outline-none;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
   }
 }

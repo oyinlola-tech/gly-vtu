@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ClipboardEvent } from 'react';
 import { motion } from 'motion/react';
 
 interface PINInputProps {
@@ -59,6 +59,17 @@ export default function PINInput({
     }
   };
 
+  const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
+    if (!pasted) return;
+    e.preventDefault();
+    const next = Array.from({ length }, (_, i) => pasted[i] || '');
+    setPin(next);
+    const lastIndex = Math.min(pasted.length, length) - 1;
+    inputRefs.current[lastIndex]?.focus();
+    setActiveIndex(lastIndex);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
       <motion.div
@@ -88,7 +99,10 @@ export default function PINInput({
               value={digit}
               onChange={(e) => handleChange(index, e.target.value)}
               onKeyDown={(e) => handleKeyDown(index, e)}
+              onPaste={handlePaste}
               onFocus={() => setActiveIndex(index)}
+              inputMode="numeric"
+              aria-label={`PIN digit ${index + 1}`}
               className={`w-14 h-14 text-center text-2xl font-bold rounded-xl border-2 transition-all ${
                 digit
                   ? 'border-[#235697] bg-[#235697]/5'

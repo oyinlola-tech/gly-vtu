@@ -109,8 +109,8 @@ export default function Transactions() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
-      <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-8 sticky top-0 z-30 backdrop-blur">
+    <div className="min-h-screen fintech-bg pb-32">
+      <div className="bg-gradient-to-br from-[#235697] via-[#1a4a86] to-[#0b2c57] p-6 pb-8 sticky top-0 z-30 backdrop-blur shadow-[0_20px_45px_rgba(15,23,42,0.3)]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <Link to="/dashboard" className="text-white" aria-label="Back to dashboard">
@@ -153,7 +153,7 @@ export default function Transactions() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search transactions..."
-            className="w-full pl-12 pr-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:bg-white/20"
+            className="w-full pl-12 pr-4 py-3 rounded-2xl bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:bg-white/20"
           />
         </div>
 
@@ -183,7 +183,7 @@ export default function Transactions() {
         {loading ? (
           <div className="space-y-3 animate-pulse">
             {[1, 2, 3, 4].map((idx) => (
-              <div key={idx} className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow">
+              <div key={idx} className="fintech-card rounded-xl p-4">
                 <div className="h-4 w-40 bg-gray-200 dark:bg-gray-800 rounded mb-3" />
                 <div className="h-3 w-64 bg-gray-200 dark:bg-gray-800 rounded mb-2" />
                 <div className="h-3 w-32 bg-gray-200 dark:bg-gray-800 rounded" />
@@ -209,7 +209,7 @@ export default function Transactions() {
                     <button
                       key={txn.id}
                       onClick={() => navigate(`/transaction/${txn.id}`)}
-                      className="w-full bg-white dark:bg-gray-900 rounded-xl p-4 flex items-center gap-4 shadow hover:shadow-md transition-shadow"
+                      className="w-full fintech-card rounded-xl p-4 flex items-center gap-4 hover:shadow-lg transition-shadow"
                     >
                       <div
                         className={`w-12 h-12 rounded-full flex items-center justify-center ${

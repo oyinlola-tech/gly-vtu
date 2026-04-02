@@ -182,7 +182,7 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#f6f7fb] dark:bg-[#0b1121] text-gray-900 dark:text-white">
+    <div className="min-h-screen relative overflow-hidden fintech-bg text-gray-900 dark:text-white">
       <div className="pointer-events-none absolute -top-32 -right-32 h-72 w-72 rounded-full bg-gradient-to-br from-[#235697]/30 to-[#7aa0d6]/20 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-0 h-64 w-64 rounded-full bg-gradient-to-tr from-[#114280]/20 to-[#5b8bd3]/30 blur-3xl" />
 
@@ -200,7 +200,7 @@ export default function Register() {
           </div>
         </div>
 
-        <div className="bg-white/90 dark:bg-gray-900/80 backdrop-blur border border-white/60 dark:border-white/10 rounded-[28px] shadow-[0_24px_60px_rgba(15,23,42,0.15)] p-8 md:p-10">
+        <div className="fintech-card rounded-[28px] p-8 md:p-10">
           <div className="flex items-center justify-between mb-6">
             <div>
               <p className="text-xs uppercase tracking-[0.35em] text-gray-500 dark:text-gray-400 font-semibold">
@@ -250,7 +250,7 @@ export default function Register() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    className="w-full px-4 py-4 fintech-input text-gray-900 dark:text-white"
                     placeholder="you@example.com"
                     required
                   />
@@ -421,7 +421,7 @@ export default function Register() {
                       type="password"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                       placeholder="Choose a strong password"
                       required
                     />
@@ -439,7 +439,7 @@ export default function Register() {
                       type="password"
                       value={formData.confirmPassword}
                       onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                       placeholder="Re-enter your password"
                       required
                     />

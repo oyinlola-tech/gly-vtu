@@ -101,26 +101,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
+    <div className="min-h-screen fintech-bg flex flex-col">
       <div className="flex-1 flex flex-col items-center justify-center p-6">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           className="w-full max-w-md"
         >
-          <div className="text-center mb-12">
-            <div className="w-20 h-20 bg-gradient-to-br from-[#235697] to-[#114280] rounded-3xl flex items-center justify-center mx-auto mb-6">
+          <div className="text-center mb-10">
+            <div className="w-20 h-20 bg-gradient-to-br from-[#235697] via-[#1a4a86] to-[#0b2c57] rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-[0_18px_30px_rgba(15,23,42,0.2)]">
               <img
                 src="/assets/logo/gly-vtu.png"
                 alt="GLY VTU logo"
                 className="w-12 h-12 object-contain"
               />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Welcome Back</h1>
-            <p className="text-gray-500 dark:text-gray-400">Sign in to continue to GLY VTU</p>
+            <h1 className="text-3xl md:text-4xl font-semibold font-['Fraunces'] text-gray-900 dark:text-white mb-2">Welcome Back</h1>
+            <p className="text-gray-600 dark:text-gray-300">Sign in to continue to GLY VTU</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 fintech-card rounded-[28px] p-6 md:p-7">
             {registered && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -149,7 +149,7 @@ export default function Login() {
                 type="text"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                 placeholder="Enter your email"
                 required
               />
@@ -165,7 +165,7 @@ export default function Login() {
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                  className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                   placeholder="Enter your password"
                   required
                 />
@@ -199,7 +199,7 @@ export default function Login() {
                     type="text"
                     value={backupCode}
                     onChange={(e) => setBackupCode(e.target.value.trim())}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                     placeholder="Use if you lost access"
                   />
                 </div>
@@ -219,7 +219,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-4 rounded-xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-[#235697] via-[#1a4a86] to-[#0b2c57] text-white py-4 rounded-2xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg"
             >
               {loading ? <LoadingSpinner size="sm" /> : 'Sign In'}
             </button>
@@ -234,12 +234,12 @@ export default function Login() {
 
           <div className="mt-6 space-y-3">
             {lastLoginHint && (
-              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 text-xs text-gray-600 dark:text-gray-300">
+              <div className="fintech-card rounded-xl p-3 text-xs text-gray-600 dark:text-gray-300">
                 Last login on this device: {new Date(lastLoginHint).toLocaleString()}
               </div>
             )}
             {recentDevices.length > 0 && (
-              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3">
+              <div className="fintech-card rounded-xl p-3">
                 <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Recent devices</p>
                 <div className="space-y-2 text-xs text-gray-600 dark:text-gray-400">
                   {recentDevices.map((device) => (

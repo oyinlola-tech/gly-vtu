@@ -99,9 +99,9 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
+    <div className="min-h-screen fintech-bg pb-32">
       {/* Header with Gradient */}
-      <div className="bg-gradient-to-br from-[#235697] to-[#114280] rounded-b-[24px] p-6 pb-24">
+      <div className="bg-gradient-to-br from-[#235697] via-[#1b4e8a] to-[#0b2c57] rounded-b-[28px] p-6 pb-24 shadow-[0_20px_50px_rgba(15,23,42,0.25)]">
         <div className="flex items-center justify-between mb-8">
           <div>
             <p className="text-white/80 text-sm">Hi, {user?.fullName?.split(' ')[0]}</p>
@@ -122,7 +122,7 @@ export default function Dashboard() {
         </div>
 
         {/* Balance Card */}
-        <div className="bg-[#235697] rounded-2xl p-6 relative overflow-hidden shadow-xl">
+        <div className="bg-gradient-to-br from-[#1b4e8a] to-[#0b2c57] rounded-2xl p-6 relative overflow-hidden shadow-[0_20px_40px_rgba(15,23,42,0.35)]">
           <div className="absolute right-0 top-0 w-64 h-64 bg-black/10 rounded-full -mr-32 -mt-32" />
           <div className="relative">
             <div className="flex items-center justify-between mb-4">
@@ -178,7 +178,7 @@ export default function Dashboard() {
       </div>
 
       <div className="px-6 -mt-16">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 mb-6 transition-transform hover:-translate-y-0.5">
+        <div className="fintech-card rounded-2xl p-4 mb-6 transition-transform hover:-translate-y-0.5">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Security Status</p>
@@ -189,19 +189,19 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="grid grid-cols-3 gap-3 text-xs">
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+            <div className="bg-gray-50/80 dark:bg-gray-800/70 rounded-xl p-3">
               <p className="text-gray-500 dark:text-gray-400">2FA</p>
               <p className={`font-semibold ${securityStatus?.totpEnabled ? 'text-green-600' : 'text-yellow-600'}`}>
                 {securityStatus?.totpEnabled ? 'Enabled' : 'Off'}
               </p>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+            <div className="bg-gray-50/80 dark:bg-gray-800/70 rounded-xl p-3">
               <p className="text-gray-500 dark:text-gray-400">PIN</p>
               <p className={`font-semibold ${securityStatus?.pinSet ? 'text-green-600' : 'text-red-600'}`}>
                 {securityStatus?.pinSet ? 'Set' : 'Missing'}
               </p>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+            <div className="bg-gray-50/80 dark:bg-gray-800/70 rounded-xl p-3">
               <p className="text-gray-500 dark:text-gray-400">Devices</p>
               <p className="font-semibold text-gray-900 dark:text-white">{deviceCount}</p>
             </div>
@@ -224,7 +224,7 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 mb-6 transition-transform hover:-translate-y-0.5">
+        <div className="fintech-card rounded-2xl p-4 mb-6 transition-transform hover:-translate-y-0.5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">KYC Tier</p>
@@ -244,7 +244,7 @@ export default function Dashboard() {
           </div>
         </div>
         {/* Quick Actions */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 mb-6">
+        <div className="fintech-card rounded-2xl p-4 mb-6">
           <div className="flex items-center justify-around">
             <Link to="/add-money" className="flex flex-col items-center gap-2">
               <div className="w-14 h-14 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
@@ -271,7 +271,7 @@ export default function Dashboard() {
         <div className="mb-6">
           <h3 className="text-lg font-bold text-[#3a3c4c] dark:text-white mb-4">Get started</h3>
           <div className="space-y-3">
-            <Link to="/add-money" className="bg-white dark:bg-gray-900 rounded-xl p-4 flex items-center gap-4 shadow hover:shadow-md transition-shadow">
+            <Link to="/add-money" className="fintech-card rounded-xl p-4 flex items-center gap-4 hover:shadow-lg transition-shadow">
               <div className="w-10 h-10 rounded-full bg-[#f1f5f9] dark:bg-gray-800 flex items-center justify-center">
                 <Wallet size={20} className="text-[#235697]" />
               </div>
@@ -282,7 +282,7 @@ export default function Dashboard() {
               <span className="text-[#7d7c93]">›</span>
             </Link>
 
-            <Link to="/cards" className="bg-white dark:bg-gray-900 rounded-xl p-4 flex items-center gap-4 shadow hover:shadow-md transition-shadow">
+            <Link to="/cards" className="fintech-card rounded-xl p-4 flex items-center gap-4 hover:shadow-lg transition-shadow">
               <div className="w-10 h-10 rounded-full bg-[#f1f5f9] dark:bg-gray-800 flex items-center justify-center">
                 <CreditCard size={20} className="text-[#235697]" />
               </div>
@@ -321,7 +321,7 @@ export default function Dashboard() {
           </div>
 
           {recentTransactions.length === 0 ? (
-            <div className="bg-white dark:bg-gray-900 rounded-xl p-8 text-center">
+            <div className="fintech-card rounded-xl p-8 text-center">
               <p className="text-[#7d7c93] dark:text-gray-400">You haven&apos;t made any transactions yet.</p>
             </div>
           ) : (
@@ -329,7 +329,7 @@ export default function Dashboard() {
               {recentTransactions.map((transaction) => (
                 <div
                   key={transaction.id}
-                  className="bg-white dark:bg-gray-900 rounded-xl p-4 flex items-center gap-4 shadow"
+                  className="fintech-card rounded-xl p-4 flex items-center gap-4"
                 >
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     transaction.type === 'credit' ? 'bg-green-100' : 'bg-red-100'

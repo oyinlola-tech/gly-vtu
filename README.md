@@ -34,27 +34,284 @@ Portfolio: https://oyinlola.site
 - `scripts/`: Operational utilities (health checks, etc.)
 - `.env.example`: Environment variable template
 
+## Docs Index
+- `README.md`: Project overview and local dev workflow
+- `SECURITY.md`: Security policy and reporting flow
+- `SUPPORT.md`: Support scope and contact
+- `CONTRIBUTING.md`: Contribution rules and checks
+- `CODE_OF_CONDUCT.md`: Collaboration expectations
+- `LICENSE.md`: Proprietary license terms
+
 ## Repository Structure
 ```
 .
-|-- backend/
-|   |-- config/db.js
-|   |-- docs/swagger.js
-|   |-- docs/swagger-output.json
-|   |-- docs/migrations/
-|   |-- middleware/
-|   |-- routes/
-|   |-- utils/
+|-- .github
+|   `-- workflows
+|       |-- codeql.yml
+|       |-- defender-for-devops.yml
+|       `-- njsscan.yml
+|-- backend
+|   |-- config
+|   |   `-- db.js
+|   |-- docs
+|   |   |-- migrations
+|   |   |   |-- 2026-03-30_admin_totp.js
+|   |   |   |-- 2026-04-01_account_lockout.js
+|   |   |   `-- 2026-04-01_pii_encryption.js
+|   |   |-- swagger.js
+|   |   `-- swagger-output.json
+|   |-- middleware
+|   |   |-- adminAuth.js
+|   |   |-- auth.js
+|   |   |-- csrf.js
+|   |   |-- errorHandler.js
+|   |   |-- permissions.js
+|   |   |-- rateLimiters.js
+|   |   `-- requestValidation.js
+|   |-- routes
+|   |   |-- adminAnomalies.js
+|   |   |-- adminAudit.js
+|   |   |-- adminAuth.js
+|   |   |-- adminBills.js
+|   |   |-- adminCompliance.js
+|   |   |-- adminConversations.js
+|   |   |-- adminFinance.js
+|   |   |-- adminFlutterwave.js
+|   |   |-- adminManagement.js
+|   |   |-- adminNotifications.js
+|   |   |-- adminSecurityEvents.js
+|   |   |-- adminTransactions.js
+|   |   |-- adminUsers.js
+|   |   |-- adminVtpass.js
+|   |   |-- auth.js
+|   |   |-- banks.js
+|   |   |-- bills.js
+|   |   |-- cards.js
+|   |   |-- conversations.js
+|   |   |-- flutterwaveWebhook.js
+|   |   |-- notifications.js
+|   |   |-- transactions.js
+|   |   |-- user.js
+|   |   |-- vtpassWebhook.js
+|   |   `-- wallet.js
+|   |-- utils
+|   |   |-- anomalies.js
+|   |   |-- audit.js
+|   |   |-- bankCache.js
+|   |   |-- email.js
+|   |   |-- encryption.js
+|   |   |-- flutterwave.js
+|   |   |-- idempotency.js
+|   |   |-- kycLimits.js
+|   |   |-- kycProvider.js
+|   |   |-- kycVerification.js
+|   |   |-- logger.js
+|   |   |-- otp.js
+|   |   |-- pin.js
+|   |   |-- realtime.js
+|   |   |-- reconciliation.js
+|   |   |-- retention.js
+|   |   |-- sanitize.js
+|   |   |-- secretsManager.js
+|   |   |-- secretValidator.js
+|   |   |-- secureCookie.js
+|   |   |-- securityEvents.js
+|   |   |-- securityQuestionGuard.js
+|   |   |-- securityQuestions.js
+|   |   |-- tokenCleanup.js
+|   |   |-- tokens.js
+|   |   |-- totp.js
+|   |   |-- transactionMetadata.js
+|   |   |-- validation.js
+|   |   `-- vtpass.js
 |   `-- .env.example
-|-- public/
-|-- scripts/kyc-health-check.js
-|-- src/
-|-- server.js
+|-- public
+|   `-- assets
+|       |-- favicon
+|       |   `-- gly-vtu.svg
+|       `-- logo
+|           `-- gly-vtu.png
+|-- scripts
+|   `-- kyc-health-check.js
+|-- src
+|   |-- app
+|   |   |-- components
+|   |   |   |-- figma
+|   |   |   |   `-- ImageWithFallback.tsx
+|   |   |   |-- ui
+|   |   |   |   |-- accordion.tsx
+|   |   |   |   |-- alert.tsx
+|   |   |   |   |-- alert-dialog.tsx
+|   |   |   |   |-- aspect-ratio.tsx
+|   |   |   |   |-- avatar.tsx
+|   |   |   |   |-- badge.tsx
+|   |   |   |   |-- breadcrumb.tsx
+|   |   |   |   |-- button.tsx
+|   |   |   |   |-- calendar.tsx
+|   |   |   |   |-- card.tsx
+|   |   |   |   |-- carousel.tsx
+|   |   |   |   |-- chart.tsx
+|   |   |   |   |-- checkbox.tsx
+|   |   |   |   |-- collapsible.tsx
+|   |   |   |   |-- command.tsx
+|   |   |   |   |-- context-menu.tsx
+|   |   |   |   |-- dialog.tsx
+|   |   |   |   |-- drawer.tsx
+|   |   |   |   |-- dropdown-menu.tsx
+|   |   |   |   |-- form.tsx
+|   |   |   |   |-- hover-card.tsx
+|   |   |   |   |-- input.tsx
+|   |   |   |   |-- input-otp.tsx
+|   |   |   |   |-- label.tsx
+|   |   |   |   |-- menubar.tsx
+|   |   |   |   |-- navigation-menu.tsx
+|   |   |   |   |-- pagination.tsx
+|   |   |   |   |-- popover.tsx
+|   |   |   |   |-- progress.tsx
+|   |   |   |   |-- radio-group.tsx
+|   |   |   |   |-- resizable.tsx
+|   |   |   |   |-- scroll-area.tsx
+|   |   |   |   |-- select.tsx
+|   |   |   |   |-- separator.tsx
+|   |   |   |   |-- sheet.tsx
+|   |   |   |   |-- sidebar.tsx
+|   |   |   |   |-- skeleton.tsx
+|   |   |   |   |-- slider.tsx
+|   |   |   |   |-- sonner.tsx
+|   |   |   |   |-- switch.tsx
+|   |   |   |   |-- table.tsx
+|   |   |   |   |-- tabs.tsx
+|   |   |   |   |-- textarea.tsx
+|   |   |   |   |-- toggle.tsx
+|   |   |   |   |-- toggle-group.tsx
+|   |   |   |   |-- tooltip.tsx
+|   |   |   |   |-- use-mobile.ts
+|   |   |   |   `-- utils.ts
+|   |   |   |-- ActivityTimeline.tsx
+|   |   |   |-- BottomNav.tsx
+|   |   |   |-- Breadcrumbs.tsx
+|   |   |   |-- ConfirmDialog.tsx
+|   |   |   |-- CurrencyInput.tsx
+|   |   |   |-- DeviceFingerprint.tsx
+|   |   |   |-- LoadingSpinner.tsx
+|   |   |   |-- NotificationListener.tsx
+|   |   |   |-- OTPInput.tsx
+|   |   |   |-- PhoneInput.tsx
+|   |   |   |-- PINInput.tsx
+|   |   |   |-- SecurityAlertBanner.tsx
+|   |   |   |-- SplashScreen.tsx
+|   |   |   |-- SupportChat.tsx
+|   |   |   `-- TransactionStatusCard.tsx
+|   |   |-- pages
+|   |   |   |-- admin
+|   |   |   |   |-- AdminAuditLogs.tsx
+|   |   |   |   |-- AdminDashboard.tsx
+|   |   |   |   |-- AdminLogin.tsx
+|   |   |   |   |-- AdminReview.tsx
+|   |   |   |   |-- AdminTransactions.tsx
+|   |   |   |   |-- AnomalyDetection.tsx
+|   |   |   |   |-- ComplianceManagement.tsx
+|   |   |   |   `-- SecurityEventsDashboard.tsx
+|   |   |   |-- AccountClosure.tsx
+|   |   |   |-- AccountClosureCancel.tsx
+|   |   |   |-- AccountSettingsPage.tsx
+|   |   |   |-- AddMoney.tsx
+|   |   |   |-- Bills.tsx
+|   |   |   |-- BiometricSetup.tsx
+|   |   |   |-- BuyAirtime.tsx
+|   |   |   |-- BuyData.tsx
+|   |   |   |-- Cards.tsx
+|   |   |   |-- ComingSoon.tsx
+|   |   |   |-- CompliancePolicies.tsx
+|   |   |   |-- Dashboard.tsx
+|   |   |   |-- DataExport.tsx
+|   |   |   |-- DeviceManagement.tsx
+|   |   |   |-- Disputes.tsx
+|   |   |   |-- Error400.tsx
+|   |   |   |-- Error403.tsx
+|   |   |   |-- Error404.tsx
+|   |   |   |-- Error500.tsx
+|   |   |   |-- ErrorPages.tsx
+|   |   |   |-- ForgotPassword.tsx
+|   |   |   |-- HelpCenter.tsx
+|   |   |   |-- KYC.tsx
+|   |   |   |-- KycStatusLimits.tsx
+|   |   |   |-- Login.tsx
+|   |   |   |-- Maintenance.tsx
+|   |   |   |-- More.tsx
+|   |   |   |-- Notifications.tsx
+|   |   |   |-- Offline.tsx
+|   |   |   |-- PasswordChangePage.tsx
+|   |   |   |-- PayElectricity.tsx
+|   |   |   |-- PayTV.tsx
+|   |   |   |-- Profile.tsx
+|   |   |   |-- Register.tsx
+|   |   |   |-- ResetPassword.tsx
+|   |   |   |-- Security.tsx
+|   |   |   |-- SecurityActivityPage.tsx
+|   |   |   |-- SecurityCenter.tsx
+|   |   |   |-- SecurityDashboard.tsx
+|   |   |   |-- SecurityTips.tsx
+|   |   |   |-- SendMoney.tsx
+|   |   |   |-- SendToBank.tsx
+|   |   |   |-- SendToUser.tsx
+|   |   |   |-- SessionManagement.tsx
+|   |   |   |-- SetPIN.tsx
+|   |   |   |-- TermsPrivacy.tsx
+|   |   |   |-- TransactionDetails.tsx
+|   |   |   |-- TransactionDetailsPage.tsx
+|   |   |   |-- TransactionHistoryPage.tsx
+|   |   |   |-- TransactionReceipt.tsx
+|   |   |   |-- Transactions.tsx
+|   |   |   |-- TransactionSuccess.tsx
+|   |   |   |-- TwoFactorAuthPage.tsx
+|   |   |   |-- TwoFactorSetup.tsx
+|   |   |   |-- VerifyDevice.tsx
+|   |   |   `-- WalletManagementPage.tsx
+|   |   `-- App.tsx
+|   |-- assets
+|   |-- components
+|   |   |-- PasswordStrengthIndicator.tsx
+|   |   |-- SecurityAlert.tsx
+|   |   `-- TransactionStatusBadge.tsx
+|   |-- contexts
+|   |   |-- AdminAuthContext.tsx
+|   |   |-- AuthContext.tsx
+|   |   `-- ThemeContext.tsx
+|   |-- imports
+|   |-- services
+|   |   `-- api.ts
+|   |-- styles
+|   |   |-- fonts.css
+|   |   |-- index.css
+|   |   |-- tailwind.css
+|   |   `-- theme.css
+|   |-- types
+|   |   |-- api.ts
+|   |   `-- bills.ts
+|   |-- main.tsx
+|   `-- vite-env.d.ts
+|-- .env
 |-- .env.example
+|-- .gitignore
+|-- CODE_OF_CONDUCT.md
+|-- CONTRIBUTING.md
+|-- default_shadcn_theme.css
+|-- env.d.ts
+|-- eslint.config.js
+|-- index.html
+|-- LICENSE.md
 |-- package.json
+|-- package-lock.json
+|-- pnpm-workspace.yaml
+|-- postcss.config.mjs
 |-- README.md
-`-- SECURITY.md
+|-- SECURITY.md
+|-- server.js
+|-- SUPPORT.md
+`-- vite.config.ts
 ```
+Generated from the repository on 2026-04-02. Excludes `node_modules/`, `dist/`, and `.git/`.
 
 ## Getting Started
 ### Prerequisites

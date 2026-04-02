@@ -7,21 +7,13 @@ import { sendReceiptEmail } from '../utils/email.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { checkTopupAnomaly } from '../utils/anomalies.js';
 import { logger } from '../utils/logger.js';
+import { getRequestIp } from '../utils/requestIp.js';
 import { webhookLimiter } from '../middleware/rateLimiters.js';
 import { applyUserPII } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
 const MAX_TOPUP_AMOUNT = Number(process.env.TOPUP_MAX_AMOUNT || 10_000_000);
-
-// Utility to get request IP
-function getRequestIp(req) {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    return String(forwarded).split(',')[0].trim();
-  }
-  return req.ip;
-}
 
 // IP whitelist validation for Flutterwave webhooks - MANDATORY in production
 function isIpAllowed(req) {

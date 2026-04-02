@@ -49,8 +49,8 @@ export default function KYC() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
-      <div className="bg-gradient-to-br from-[#235697] to-[#114280] p-6 pb-24 rounded-b-[24px]">
+    <div className="min-h-screen fintech-bg pb-32">
+      <div className="bg-gradient-to-br from-[#235697] via-[#1a4a86] to-[#0b2c57] p-6 pb-24 rounded-b-[28px] shadow-[0_20px_45px_rgba(15,23,42,0.3)]">
         <div className="flex items-center gap-4">
           <Link to="/more" className="text-white">
             <ChevronLeft size={24} />
@@ -61,7 +61,7 @@ export default function KYC() {
 
       <div className="px-6 -mt-16 space-y-6">
         {profile && (
-          <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow">
+          <div className="fintech-card rounded-2xl p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Current Level</p>
             <p className="text-lg font-bold text-gray-900 dark:text-white">
               Level {profile.kyc_level} • {profile.kyc_status}
@@ -73,7 +73,7 @@ export default function KYC() {
           Complete higher KYC levels to unlock higher limits, card issuance, and bank transfers.
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6">
+        <div className="fintech-card rounded-2xl p-6">
           {message && (
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 p-3 rounded-xl text-sm mb-4">
               {message}
@@ -109,7 +109,7 @@ export default function KYC() {
                     type="text"
                     value={formData.bvn}
                     onChange={(e) => setFormData({ ...formData, bvn: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
@@ -121,7 +121,7 @@ export default function KYC() {
                     type="text"
                     value={formData.nin}
                     onChange={(e) => setFormData({ ...formData, nin: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                   />
                 </div>
               </>
@@ -136,7 +136,7 @@ export default function KYC() {
                     type="date"
                     value={formData.dob}
                     onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                     required
                   />
                 </div>
@@ -148,7 +148,7 @@ export default function KYC() {
                     id="address"
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    className="w-full px-4 py-3 fintech-input text-gray-900 dark:text-white"
                     required
                   />
                 </div>
@@ -158,7 +158,7 @@ export default function KYC() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-[#235697] to-[#114280] text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-[#235697] via-[#1a4a86] to-[#0b2c57] text-white py-3 rounded-2xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {loading ? <LoadingSpinner size="sm" /> : 'Submit KYC'}
             </button>

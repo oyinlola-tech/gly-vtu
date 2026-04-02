@@ -7,16 +7,10 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { webhookLimiter } from '../middleware/rateLimiters.js';
 import { applyUserPII } from '../utils/encryption.js';
 import { logger } from '../utils/logger.js';
+import { getRequestIp } from '../utils/requestIp.js';
+import { refundPendingBill } from '../utils/billRefund.js';
 
 const router = express.Router();
-
-function getRequestIp(req) {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    return String(forwarded).split(',')[0].trim();
-  }
-  return req.ip;
-}
 
 function verifyVtpassWebhook(req, secret) {
   if (!secret) return false;
@@ -127,31 +121,7 @@ router.post('/', webhookLimiter, async (req, res) => {
   const tx = txRows[0];
 
   if (tx.status !== status && status === 'failed') {
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-      const [[lockedTx]] = await conn.query(
-        'SELECT id, user_id, status, total FROM transactions WHERE id = ? FOR UPDATE',
-        [tx.id]
-      );
-      if (lockedTx && lockedTx.status === 'pending') {
-        await conn.query('UPDATE transactions SET status = ? WHERE id = ?', ['failed', tx.id]);
-        await conn.query('UPDATE bill_orders SET status = ? WHERE reference = ?', [
-          'failed',
-          reference,
-        ]);
-        await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
-          Number(lockedTx.total || 0),
-          lockedTx.user_id,
-        ]);
-      }
-      await conn.commit();
-    } catch (err) {
-      await conn.rollback();
-      logger.error('VTpass webhook refund failed', { error: logger.format(err) });
-    } finally {
-      conn.release();
-    }
+    await refundPendingBill(reference);
   } else if (tx.status !== status) {
     await pool.query('UPDATE transactions SET status = ? WHERE id = ?', [status, tx.id]);
     await pool.query('UPDATE bill_orders SET status = ? WHERE reference = ?', [status, reference]);

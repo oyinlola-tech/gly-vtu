@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { ClipboardEvent } from 'react';
 
 interface OTPInputProps {
   value: string;
@@ -34,6 +35,19 @@ export default function OTPInput({
     }
   };
 
+  const handlePaste = (event: ClipboardEvent<HTMLInputElement>, root: HTMLDivElement | null) => {
+    const raw = event.clipboardData.getData('text');
+    const cleaned = raw.replace(/\D/g, '').slice(0, length);
+    if (!cleaned) return;
+    event.preventDefault();
+    onChange(cleaned);
+    if (root) {
+      const lastIndex = Math.min(cleaned.length, length) - 1;
+      const target = root.querySelector<HTMLInputElement>(`input[data-otp="${lastIndex}"]`);
+      target?.focus();
+    }
+  };
+
   return (
     <div
       className={`flex items-center justify-center gap-2 ${containerClassName || ''}`}
@@ -53,6 +67,7 @@ export default function OTPInput({
           autoComplete={idx === 0 ? 'one-time-code' : 'off'}
           value={digit}
           onChange={(e) => handleChange(idx, e.target.value, e.currentTarget.closest('div'))}
+          onPaste={(e) => handlePaste(e, e.currentTarget.closest('div'))}
           onKeyDown={(e) => {
             if (e.key === 'Backspace' && !digits[idx] && idx > 0) {
               const prev = (e.currentTarget.closest('div') as HTMLDivElement | null)?.querySelector<HTMLInputElement>(
@@ -61,7 +76,7 @@ export default function OTPInput({
               prev?.focus();
             }
           }}
-          className={`w-12 h-12 text-center text-lg font-semibold rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#235697] focus:outline-none ${inputClassName || ''}`}
+          className={`w-12 h-12 text-center text-lg font-semibold rounded-xl border border-gray-200 bg-white/90 dark:bg-gray-900 focus:ring-2 focus:ring-[#235697] focus:outline-none shadow-[0_8px_18px_rgba(15,23,42,0.08)] ${inputClassName || ''}`}
         />
       ))}
     </div>
