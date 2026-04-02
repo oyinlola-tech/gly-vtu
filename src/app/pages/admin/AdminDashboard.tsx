@@ -425,9 +425,10 @@ export default function AdminDashboard() {
               <div className="space-y-3">
                 {recentTransactions.map((txn) => {
                   const txnReference = txn.reference ?? '';
-                  const metaString: string = txn.metadata
-                    ? JSON.stringify(getTxnMeta(txn.metadata), null, 2) ?? ''
+                  const metaString = txn.metadata
+                    ? String(JSON.stringify(getTxnMeta(txn.metadata), null, 2) ?? '')
                     : '';
+                  const hasMeta = metaString.length > 0;
                   return (
                   <div key={txn.id} className="border border-gray-200 dark:border-gray-800 rounded-xl p-3 text-sm">
                     <div className="flex items-center justify-between">
@@ -471,11 +472,11 @@ export default function AdminDashboard() {
                         {txn.vtpass_status && (
                           <p>VTpass status: {txn.vtpass_status}</p>
                         )}
-                        {txn.metadata != null && (
+                        {hasMeta ? (
                           <pre className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg overflow-x-auto">
                             {metaString}
                           </pre>
-                        )}
+                        ) : null}
                       </div>
                     )}
                   </div>

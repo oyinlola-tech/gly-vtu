@@ -14,7 +14,7 @@ interface Message {
 interface APIMessage {
   id: string;
   body: string;
-  sender_type: string;
+  sender_type: 'user' | 'admin';
   created_at: string;
 }
 
@@ -43,12 +43,15 @@ export default function SupportChat({ onClose }: SupportChatProps) {
       .getMine()
       .then((data) => {
         if (!mounted) return;
-        const incoming = (data?.messages || []).map((msg: APIMessage) => ({
-          id: msg.id,
-          text: msg.body,
-          sender: msg.sender_type === 'admin' ? 'admin' : 'user',
-          timestamp: new Date(msg.created_at),
-        }));
+        const incoming = (data?.messages || []).map((msg: APIMessage) => {
+          const sender: Message['sender'] = msg.sender_type === 'admin' ? 'admin' : 'user';
+          return {
+            id: msg.id,
+            text: msg.body,
+            sender,
+            timestamp: new Date(msg.created_at),
+          };
+        });
         setMessages(incoming);
       })
       .catch(() => null);
