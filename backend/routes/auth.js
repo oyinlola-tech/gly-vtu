@@ -1,5 +1,5 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 import crypto from 'crypto';
 import { pool } from '../config/db.js';
 import {
@@ -152,7 +152,12 @@ router.post('/register', validateRequest(registrationSchema), async (req, res) =
     return res.status(409).json({ error: 'User already exists' });
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await argon2.hash(password, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16, // 64 MB
+    timeCost: 3,
+    parallelism: 1,
+  });
   const userId = crypto.randomUUID();
   
   try {
@@ -302,7 +307,7 @@ router.post('/login', otpLimiter, validateRequest(loginSchema), async (req, res)
     user.login_failed_attempts = 0;
     user.login_locked_until = null;
   }
-  const ok = await bcrypt.compare(password, user.password_hash);
+  const ok = await argon2.verify(user.password_hash, password);
   if (!ok) {
     const nextAttempts = Number(user.login_failed_attempts || 0) + 1;
     const lockedUntil =
@@ -625,7 +630,12 @@ router.post('/reset-password', async (req, res) => {
   }
   const otp = await verifyOtp({ email, purpose: 'password_reset', code });
   if (!otp) return res.status(400).json({ error: 'Invalid or expired OTP' });
-  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const passwordHash = await argon2.hash(newPassword, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
   await pool.query('UPDATE users SET password_hash = ?, password_updated_at = NOW() WHERE id = ?', [
     passwordHash,
     otp.user_id,
@@ -764,7 +774,7 @@ router.post('/logout-all', requireUser, async (req, res) => {
   }
 
   // Verify password
-  const passwordValid = await bcrypt.compare(confirmPassword, userRow.password_hash);
+  const passwordValid = await argon2.verify(userRow.password_hash, confirmPassword);
   if (!passwordValid) {
     logSecurityEvent({
       type: 'logout_all.failed',

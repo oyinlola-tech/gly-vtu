@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 import { pool } from '../config/db.js';
 import { normalizeAnswer } from './securityQuestions.js';
 
@@ -36,7 +36,7 @@ async function enforceSecurityQuestion({ userId, answer, flow }) {
       code: 'SECURITY_ANSWER_REQUIRED',
     };
   }
-  const ok = await bcrypt.compare(normalizeAnswer(answer), row.security_answer_hash);
+  const ok = await argon2.verify(row.security_answer_hash, normalizeAnswer(answer));
   if (!ok) {
     return {
       ok: false,

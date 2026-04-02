@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 
 const ISSUER = process.env.TOTP_ISSUER || 'GLY-VTU';
 const WINDOW = Number(process.env.TOTP_WINDOW || 2);
@@ -46,14 +46,23 @@ function isBcryptHash(value) {
 }
 
 export async function hashBackupCodes(codes) {
-  return Promise.all(codes.map((code) => bcrypt.hash(String(code), 12)));
+  return Promise.all(codes.map((code) => argon2.hash(String(code), {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  })));
 }
 
 export async function verifyBackupCode(plainCode, hashedCodes) {
   if (!plainCode || !Array.isArray(hashedCodes)) return null;
   for (const hashed of hashedCodes) {
     if (isBcryptHash(hashed)) {
-      if (await bcrypt.compare(String(plainCode), hashed)) return hashed;
+      try {
+        if (await argon2.verify(hashed, String(plainCode))) return hashed;
+      } catch {
+        // ignore
+      }
     } else if (hashBackupCode(plainCode) === hashed) {
       return hashed;
     }

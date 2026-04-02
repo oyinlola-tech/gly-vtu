@@ -9,7 +9,7 @@ import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
-import { checkWithdrawalAnomaly } from '../utils/anomalies.js';
+import { checkWithdrawalAnomaly, checkNewRecipientAnomaly } from '../utils/anomalies.js';
 import { applyUserPII, hashEmail, hashPhone } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 import { validateRequest, walletSendSchema, walletReceiveSchema } from '../middleware/requestValidation.js';
@@ -452,6 +452,16 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
       checkWithdrawalAnomaly({
         userId: req.user.sub,
         amount: numericAmount,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      }).catch(() => null);
+    }
+
+    // Check for new recipient anomaly
+    if (!isBank && to) {
+      checkNewRecipientAnomaly({
+        userId: req.user.sub,
+        recipient: to,
         ip: req.ip,
         userAgent: req.headers['user-agent'],
       }).catch(() => null);

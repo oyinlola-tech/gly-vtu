@@ -1,5 +1,5 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission, rolePermissions } from '../middleware/permissions.js';
@@ -50,7 +50,12 @@ router.post('/', requireAdmin, requirePermission('admin:manage'), async (req, re
   const [existing] = await pool.query('SELECT id FROM admin_users WHERE email = ?', [email]);
   if (existing.length) return res.status(409).json({ error: 'Admin already exists' });
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await argon2.hash(password, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
   await pool.query(
     'INSERT INTO admin_users (id, name, email, password_hash, role) VALUES (UUID(), ?, ?, ?, ?)',
     [name, email, passwordHash, role]

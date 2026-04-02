@@ -5,9 +5,73 @@ import { sendAnomalyAlertEmail } from './email.js';
 const WITHDRAWAL_AMOUNT_THRESHOLD = Number(process.env.ANOMALY_WITHDRAWAL_THRESHOLD_NGN || 500000);
 const WITHDRAWAL_WINDOW_MINUTES = Number(process.env.ANOMALY_WITHDRAWAL_WINDOW_MINUTES || 60);
 const WITHDRAWAL_COUNT_THRESHOLD = Number(process.env.ANOMALY_WITHDRAWAL_COUNT || 3);
-const ADMIN_ADJUSTMENT_THRESHOLD = Number(process.env.ANOMALY_ADMIN_ADJUSTMENT_NGN || 500000);
-const DEVICE_COUNT_THRESHOLD = Number(process.env.ANOMALY_DEVICE_COUNT || 5);
-const FAILED_LOGIN_THRESHOLD = Number(process.env.ANOMALY_FAILED_LOGIN_THRESHOLD || 5);
+const NEW_RECIPIENT_THRESHOLD = Number(process.env.ANOMALY_NEW_RECIPIENT_THRESHOLD || 3);
+const NEW_RECIPIENT_WINDOW_HOURS = Number(process.env.ANOMALY_NEW_RECIPIENT_WINDOW_HOURS || 24);
+
+export async function checkNewRecipientAnomaly({ userId, recipient, ip, userAgent }) {
+  if (!userId || !recipient || !NEW_RECIPIENT_THRESHOLD) return;
+  
+  // Check if this recipient is new (no previous transactions in the last window)
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS cnt
+     FROM transactions
+     WHERE user_id = ?
+       AND type = 'send'
+       AND JSON_EXTRACT(metadata, '$.to') = ?
+       AND created_at >= NOW() - INTERVAL ? HOUR`,
+    [userId, recipient, NEW_RECIPIENT_WINDOW_HOURS]
+  );
+  const hasPrevious = Number(rows[0]?.cnt || 0) > 0;
+  if (hasPrevious) return; // Not new
+
+  // Count new recipients in the window
+  const [newRecipients] = await pool.query(
+    `SELECT COUNT(DISTINCT JSON_EXTRACT(metadata, '$.to')) AS cnt
+     FROM transactions
+     WHERE user_id = ?
+       AND type = 'send'
+       AND created_at >= NOW() - INTERVAL ? HOUR`,
+    [userId, NEW_RECIPIENT_WINDOW_HOURS]
+  );
+  const newCount = Number(newRecipients[0]?.cnt || 0);
+  
+  if (newCount >= NEW_RECIPIENT_THRESHOLD) {
+    logSecurityEvent({
+      type: 'anomaly.recipient.new',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: userId,
+      ip,
+      userAgent,
+      metadata: {
+        newRecipients: newCount,
+        threshold: NEW_RECIPIENT_THRESHOLD,
+        windowHours: NEW_RECIPIENT_WINDOW_HOURS,
+        currentRecipient: recipient,
+      },
+    }).catch(() => null);
+    
+    // Send email alert
+    const [[user]] = await pool.query(
+      'SELECT email, email_encrypted FROM users WHERE id = ? LIMIT 1',
+      [userId]
+    ).catch(() => [[null]]);
+    
+    if (user?.email) {
+      sendAnomalyAlertEmail({
+        to: user.email,
+        anomalyType: 'anomaly.recipient.new',
+        details: {
+          'New Recipients': newCount,
+          'Time Window': `${NEW_RECIPIENT_WINDOW_HOURS} hours`,
+          'Threshold': NEW_RECIPIENT_THRESHOLD,
+          'Current Recipient': recipient,
+        },
+        severity: 'medium',
+      }).catch(() => null);
+    }
+  }
+}
 
 export async function checkWithdrawalAnomaly({ userId, amount, ip, userAgent }) {
   if (!userId) return;

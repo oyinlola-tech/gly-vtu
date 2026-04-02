@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
 import http from 'http';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
@@ -185,6 +186,16 @@ const helmetConfig = isProd
         },
       },
       hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+      // SECURITY: Prevent clickjacking attacks
+      xFrameOptions: { action: 'DENY' },
+      // SECURITY: Prevent MIME type sniffing
+      xContentTypeOptions: { nosniff: true },
+      // SECURITY: Enable XSS protection
+      xssFilter: true,
+      // SECURITY: Prevent referrer leakage
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      // SECURITY: Disable DNS prefetching to prevent information leakage
+      dnsPrefetchControl: { allow: false },
     }
   : undefined;
 
@@ -199,6 +210,40 @@ app.use(
   })
 );
 app.use(cookieParser());
+
+// SECURITY: Add security headers to all API responses
+app.use('/api', (req, res, next) => {
+  res.setHeader('X-API-Version', '1.0.0');
+  res.setHeader('X-Request-ID', crypto.randomUUID());
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  next();
+});
+
+// SECURITY: Log all API requests for audit
+app.use('/api', (req, res, next) => {
+  const start = Date.now();
+  const requestId = res.getHeader('X-Request-ID');
+  
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logger.info('API Request', {
+      method: req.method,
+      url: req.url,
+      status: res.statusCode,
+      duration,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      requestId,
+      userId: req.user?.sub || null,
+    });
+  });
+  
+  next();
+});
 app.use(
   csurf({
     cookie: true,

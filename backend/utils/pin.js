@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 import { pool } from '../config/db.js';
 
 const MAX_ATTEMPTS = Number(process.env.PIN_MAX_ATTEMPTS || 5);
@@ -64,7 +64,12 @@ export async function setTransactionPin(userId, pin) {
     err.code = 'PIN_WEAK';
     throw err;
   }
-  const pinHash = await bcrypt.hash(pin, 12);
+  const pinHash = await argon2.hash(pin, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
   await pool.query(
     `UPDATE users
      SET transaction_pin_hash = ?, pin_failed_attempts = 0, pin_locked_until = NULL, pin_updated_at = NOW()
@@ -89,7 +94,7 @@ export async function verifyTransactionPin(userId, pin) {
     err.lockedUntil = row.pin_locked_until;
     throw err;
   }
-  const ok = await bcrypt.compare(pin, row.transaction_pin_hash);
+  const ok = await argon2.verify(row.transaction_pin_hash, pin);
   if (!ok) {
     const attempts = Number(row.pin_failed_attempts || 0) + 1;
     if (attempts >= MAX_ATTEMPTS) {

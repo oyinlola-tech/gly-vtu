@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 import { pool } from '../config/db.js';
 
 export function generateOtp() {
@@ -39,7 +39,12 @@ export async function createOtp({ userId = null, email, purpose, ttlMinutes = 10
   }
 
   const code = generateOtp();
-  const codeHash = await bcrypt.hash(code, 12);
+  const codeHash = await argon2.hash(code, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
   const expires = new Date(Date.now() + ttlMinutes * 60 * 1000);
   await pool.query(
     'INSERT INTO email_otps (id, user_id, email, purpose, code_hash, expires_at) VALUES (UUID(), ?, ?, ?, ?, ?)',
@@ -62,7 +67,7 @@ export async function verifyOtp({ email, purpose, code }) {
   for (const row of rows) {
     if (row.consumed_at) continue;
     if (new Date(row.expires_at) < new Date()) continue;
-    const matches = await bcrypt.compare(code, row.code_hash);
+    const matches = await argon2.verify(row.code_hash, code);
     if (!matches) continue;
 
     await pool.query('UPDATE email_otps SET consumed_at = NOW() WHERE id = ?', [row.id]);

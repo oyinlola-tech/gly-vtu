@@ -16,7 +16,7 @@ import {
   validatePinComplexity,
 } from '../utils/pin.js';
 import { logAudit } from '../utils/audit.js';
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 import { QUESTIONS, normalizeAnswer, isValidSecurityAnswer } from '../utils/securityQuestions.js';
 import {
   generateTotpSecret,
@@ -596,7 +596,12 @@ router.post('/password/change', requireUser, validateRequest(changePasswordSchem
     }).catch(() => null);
     return res.status(400).json({ error: 'Invalid password' });
   }
-  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const passwordHash = await argon2.hash(newPassword, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
   await pool.query('UPDATE users SET password_hash = ?, password_updated_at = NOW() WHERE id = ?', [
     passwordHash,
     req.user.sub,
@@ -964,7 +969,12 @@ router.post('/security-question/set', requireUser, async (req, res) => {
   if (!isValidSecurityAnswer(answer)) {
     return res.status(400).json({ error: 'Security answer is too weak' });
   }
-  const answerHash = await bcrypt.hash(normalizeAnswer(answer), 12);
+  const answerHash = await argon2.hash(normalizeAnswer(answer), {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
   await pool.query(
     'UPDATE users SET security_question = ?, security_answer_hash = ?, security_updated_at = NOW() WHERE id = ?',
     [question, answerHash, req.user.sub]
@@ -1016,7 +1026,7 @@ router.post('/security-question/verify', requireUser, async (req, res) => {
   if (!row?.security_answer_hash) {
     return res.status(400).json({ error: 'Security question not set' });
   }
-  const ok = await bcrypt.compare(normalizeAnswer(answer), row.security_answer_hash);
+  const ok = await argon2.verify(row.security_answer_hash, normalizeAnswer(answer));
   if (!ok) return res.status(400).json({ error: 'Incorrect answer' });
   return res.json({ valid: true });
 });

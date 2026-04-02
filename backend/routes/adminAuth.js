@@ -1,5 +1,5 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 import { pool } from '../config/db.js';
 import {
   signAccessToken,
@@ -135,7 +135,7 @@ router.post('/login', adminLoginPerEmailLimiter, adminLoginLimiter, otpLimiter, 
     admin.login_failed_attempts = 0;
     admin.login_locked_until = null;
   }
-  const ok = await bcrypt.compare(password, admin.password_hash);
+  const ok = await argon2.verify(admin.password_hash, password);
   if (!ok) {
     const nextAttempts = Number(admin.login_failed_attempts || 0) + 1;
     const lockedUntil =
@@ -498,7 +498,12 @@ router.post('/reset-password', async (req, res) => {
   const otp = await verifyOtp({ email, purpose: 'admin_password_reset', code });
   if (!otp) return res.status(400).json({ error: 'Invalid or expired OTP' });
 
-  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const passwordHash = await argon2.hash(newPassword, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
   await pool.query('UPDATE admin_users SET password_hash = ? WHERE email = ?', [
     passwordHash,
     email,

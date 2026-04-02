@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 import { ensureAdminTotpColumns } from '../docs/migrations/2026-03-30_admin_totp.js';
 import { ensureAccountLockoutColumns } from '../docs/migrations/2026-04-01_account_lockout.js';
 import {
@@ -95,7 +95,12 @@ async function seedAdmin(conn) {
 
   let passwordHash = adminPasswordHash;
   if (!passwordHash && adminPassword) {
-    passwordHash = await bcrypt.hash(adminPassword, 12);
+    passwordHash = await argon2.hash(adminPassword, {
+      type: argon2.argon2id,
+      memoryCost: 2 ** 16, // 64 MB
+      timeCost: 3,
+      parallelism: 1,
+    });
   }
 
   await conn.query(
