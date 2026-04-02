@@ -23,11 +23,36 @@ const INTERNAL_TRANSFER_COOLDOWN_SECONDS = Number(
 );
 
 function isEmail(value) {
-  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 254) return false;
+  if (trimmed.includes(' ')) return false;
+  const at = trimmed.indexOf('@');
+  if (at <= 0 || at !== trimmed.lastIndexOf('@')) return false;
+  const local = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  if (!local || !domain || domain.length < 3) return false;
+  if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) return false;
+  return true;
 }
 
 function isPhone(value) {
-  return typeof value === 'string' && /^(\+234|0)[789][0-9]{9}$/.test(value.trim());
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+
+  const isAllDigits = (str) => {
+    for (let i = 0; i < str.length; i += 1) {
+      const code = str.charCodeAt(i);
+      if (code < 48 || code > 57) return false;
+    }
+    return true;
+  };
+
+  const normalized = trimmed.startsWith('+') ? trimmed.slice(1) : trimmed;
+  if (!isAllDigits(normalized)) return false;
+  if (normalized.length < 7 || normalized.length > 15) return false;
+  return true;
 }
 
 function maskEmail(email) {
