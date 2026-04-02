@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
 import { nanoid } from 'nanoid';
+import crypto from 'crypto';
 import { sendReceiptEmail } from '../utils/email.js';
 import { logAudit } from '../utils/audit.js';
 import { verifyTransactionPin, isValidPin } from '../utils/pin.js';
@@ -13,8 +14,13 @@ import { applyUserPII, hashEmail, hashPhone } from '../utils/encryption.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 import { validateRequest, walletSendSchema, walletReceiveSchema } from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
+import { createTransfer } from '../utils/flutterwave.js';
 
 const router = express.Router();
+
+const INTERNAL_TRANSFER_COOLDOWN_SECONDS = Number(
+  process.env.INTERNAL_TRANSFER_COOLDOWN_SECONDS || 10
+);
 
 function isEmail(value) {
   return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -22,6 +28,52 @@ function isEmail(value) {
 
 function isPhone(value) {
   return typeof value === 'string' && /^(\+234|0)[789][0-9]{9}$/.test(value.trim());
+}
+
+function maskEmail(email) {
+  if (!email) return '';
+  const [name, domain] = String(email).split('@');
+  if (!domain) return '***';
+  const safeName = name.length <= 2 ? `${name[0] || ''}*` : `${name.slice(0, 2)}***`;
+  return `${safeName}@${domain}`;
+}
+
+function maskPhone(phone) {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length < 4) return '****';
+  return `${digits.slice(0, 2)}****${digits.slice(-2)}`;
+}
+
+async function checkInternalTransferCooldown({ userId, recipient, amount }) {
+  if (!INTERNAL_TRANSFER_COOLDOWN_SECONDS) return { ok: true };
+  const fingerprint = crypto
+    .createHash('sha256')
+    .update(`${userId}:${recipient}:${amount}:internal`)
+    .digest('hex');
+
+  const [rows] = await pool.query(
+    `SELECT id FROM idempotency_keys
+     WHERE user_id = ? AND route = 'wallet.send.cooldown' AND idem_key = ?
+       AND created_at > DATE_SUB(NOW(), INTERVAL ? SECOND)
+     LIMIT 1`,
+    [userId, fingerprint, INTERNAL_TRANSFER_COOLDOWN_SECONDS]
+  );
+  if (rows.length) {
+    return { ok: false, status: 429, error: 'Duplicate transfer detected. Please wait before retrying.' };
+  }
+
+  await pool.query(
+    'INSERT INTO idempotency_keys (id, user_id, idem_key, route, request_hash, status) VALUES (UUID(), ?, ?, ?, ?, ?)',
+    [userId, fingerprint, 'wallet.send.cooldown', fingerprint, 'complete']
+  );
+  await pool.query(
+    `DELETE FROM idempotency_keys
+     WHERE route = 'wallet.send.cooldown'
+       AND created_at < DATE_SUB(NOW(), INTERVAL ? SECOND)`,
+    [INTERNAL_TRANSFER_COOLDOWN_SECONDS * 6]
+  );
+  return { ok: true };
 }
 
 
@@ -39,6 +91,39 @@ router.get('/balance', requireUser, async (req, res) => {
   );
   if (!rows.length) return res.status(404).json({ error: 'Wallet not found' });
   return res.json(rows[0]);
+});
+
+router.post('/recipient-lookup', requireUser, async (req, res) => {
+  const recipient = String(req.body?.recipient || '').trim();
+  if (!recipient) return res.status(400).json({ error: 'Recipient required' });
+  if (!isEmail(recipient) && !isPhone(recipient)) {
+    return res.status(400).json({ error: 'Recipient must be an email or phone number' });
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted
+     FROM users WHERE email_hash = ? OR phone_hash = ? LIMIT 1`,
+    [hashEmail(recipient), hashPhone(recipient)]
+  );
+  if (!rows.length) return res.json({ found: false });
+  const user = applyUserPII(rows[0]);
+  const [[reserved]] = await pool.query(
+    `SELECT account_number, bank_code, bank_name, account_name
+     FROM reserved_accounts WHERE user_id = ? AND provider = 'flutterwave' LIMIT 1`,
+    [user.id]
+  );
+
+  return res.json({
+    found: true,
+    recipient: {
+      id: user.id,
+      fullName: user.full_name || null,
+      emailMasked: maskEmail(user.email),
+      phoneMasked: maskPhone(user.phone),
+      hasFlutterwaveAccount: Boolean(reserved?.account_number && reserved?.bank_code),
+      bankName: reserved?.bank_name || null,
+    },
+  });
 });
 
 router.post('/send', requireUser, validateRequest(walletSendSchema), async (req, res) => {
@@ -85,7 +170,8 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
   } catch (err) {
     return respond(400, { error: err.message });
   }
-  const isBank = channel === 'bank' || accountNumber || bankCode;
+  const isInternal = channel === 'internal';
+  const isBank = channel === 'bank' || accountNumber || bankCode || isInternal;
   if (isBank) {
     if (Number(user.kyc_level || 1) < 2) {
       logSecurityEvent({
@@ -131,16 +217,51 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
     return respond(403, { error: limitCheck.message });
   }
   let recipientId = null;
+  let internalAccount = null;
+  let internalRecipient = null;
   let bankName = null;
   if (isBank) {
-    if (!accountNumber || !bankCode || !accountName) {
-      return respond(400, { error: 'Account number, bank, and name are required' });
+    if (isInternal) {
+      if (!to) return respond(400, { error: 'Recipient required' });
+      const validRecipient = isEmail(to) || isPhone(to);
+      if (!validRecipient) {
+        return respond(400, { error: 'Recipient must be an email or phone number' });
+      }
+      const cooldown = await checkInternalTransferCooldown({
+        userId: req.user.sub,
+        recipient: String(to).trim().toLowerCase(),
+        amount: numericAmount,
+      });
+      if (!cooldown.ok) {
+        return respond(cooldown.status, { error: cooldown.error });
+      }
+      const [targets] = await pool.query(
+        `SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted
+         FROM users WHERE email_hash = ? OR phone_hash = ? LIMIT 1`,
+        [hashEmail(to), hashPhone(to)]
+      );
+      if (!targets.length) return respond(404, { error: 'Recipient not found' });
+      internalRecipient = applyUserPII(targets[0]);
+      const [[reserved]] = await pool.query(
+        `SELECT account_number, bank_code, bank_name, account_name
+         FROM reserved_accounts WHERE user_id = ? AND provider = 'flutterwave' LIMIT 1`,
+        [internalRecipient.id]
+      );
+      if (!reserved?.account_number || !reserved?.bank_code) {
+        return respond(400, { error: 'Recipient has no Flutterwave account' });
+      }
+      internalAccount = reserved;
+      bankName = reserved.bank_name || 'Flutterwave';
+    } else {
+      if (!accountNumber || !bankCode || !accountName) {
+        return respond(400, { error: 'Account number, bank, and name are required' });
+      }
+      const [[bank]] = await pool.query('SELECT name FROM banks WHERE code = ? AND active = 1', [
+        bankCode,
+      ]);
+      if (!bank) return respond(400, { error: 'Invalid bank selected' });
+      bankName = bank.name;
     }
-    const [[bank]] = await pool.query('SELECT name FROM banks WHERE code = ? AND active = 1', [
-      bankCode,
-    ]);
-    if (!bank) return respond(400, { error: 'Invalid bank selected' });
-    bankName = bank.name;
   } else {
     if (!to) return respond(400, { error: 'Recipient required' });
     const validRecipient = isEmail(to) || isPhone(to);
@@ -175,16 +296,24 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
 
     const reference = `TX-${nanoid(10)}`;
     if (isBank) {
-      const { safe, encrypted } = buildTransactionMetadata(
-        {
-          channel: 'bank',
-          bankCode,
-          bankName,
-          accountNumber,
-          accountName,
-        },
-        req.user.sub
-      );
+      const transferMeta = isInternal
+        ? {
+            channel: 'internal',
+            recipientId: internalRecipient?.id,
+            recipient: to,
+            bankCode: internalAccount?.bank_code,
+            bankName,
+            accountNumber: internalAccount?.account_number,
+            accountName: internalAccount?.account_name || internalRecipient?.full_name || '',
+          }
+        : {
+            channel: 'bank',
+            bankCode,
+            bankName,
+            accountNumber,
+            accountName,
+          };
+      const { safe, encrypted } = buildTransactionMetadata(transferMeta, req.user.sub);
       await conn.query(
         'INSERT INTO transactions (id, user_id, type, amount, fee, total, status, reference, metadata, metadata_encrypted) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
@@ -253,7 +382,15 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
       title: isBank ? 'Transfer Initiated' : 'Transfer Successful',
       details: [
         `Amount: NGN ${numericAmount.toFixed(2)}`,
-        isBank ? `Recipient: ${accountName} (${accountNumber})` : `Recipient: ${to}`,
+        isBank
+          ? `Recipient: ${
+              isInternal
+                ? internalAccount?.account_name || internalRecipient?.full_name || 'GLY VTU'
+                : accountName
+            } (${
+              isInternal ? internalAccount?.account_number : accountNumber
+            })`
+          : `Recipient: ${to}`,
         `Reference: ${reference}`,
       ],
     }).catch((err) => logger.error('Receipt email send error (wallet)', { error: logger.format(err) }));
@@ -293,6 +430,47 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
         ip: req.ip,
         userAgent: req.headers['user-agent'],
       }).catch(() => null);
+    }
+
+    if (isBank) {
+      const transferPayload = isInternal
+        ? {
+            amount: numericAmount,
+            account_number: internalAccount?.account_number,
+            bank_code: internalAccount?.bank_code,
+            narration: `GLY VTU internal transfer to ${internalRecipient?.full_name || to}`,
+            reference,
+          }
+        : {
+            amount: numericAmount,
+            account_number: accountNumber,
+            bank_code: bankCode,
+            narration: `GLY VTU transfer to ${accountName}`,
+            reference,
+          };
+      try {
+        await createTransfer(transferPayload);
+      } catch {
+        // Refund on provider failure
+        const refundConn = await pool.getConnection();
+        try {
+          await refundConn.beginTransaction();
+          await refundConn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
+            numericAmount,
+            req.user.sub,
+          ]);
+          await refundConn.query('UPDATE transactions SET status = ? WHERE reference = ?', [
+            'failed',
+            reference,
+          ]);
+          await refundConn.commit();
+        } catch {
+          await refundConn.rollback();
+        } finally {
+          refundConn.release();
+        }
+        return respond(502, { error: 'Transfer failed with provider' });
+      }
     }
     return respond(200, {
       message: isBank ? 'Transfer initiated' : 'Transfer completed',

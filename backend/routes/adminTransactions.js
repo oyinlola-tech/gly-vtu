@@ -28,7 +28,8 @@ router.get('/', requireAdmin, requirePermission('transactions:read'), async (req
   );
   const mapped = rows.map((row) => {
     const meta = hydrateTransactionMetadata(row, row.user_id);
-    const { metadata_encrypted, ...rest } = row;
+    const rest = { ...row };
+    delete rest.metadata_encrypted;
     return applyUserPII({ ...rest, metadata: meta });
   });
   return res.json(mapped);
@@ -53,7 +54,7 @@ router.get('/metrics', requireAdmin, requirePermission('transactions:read'), asy
   */
   const [[users]] = await pool.query('SELECT COUNT(*) as total FROM users');
   const [[tx]] = await pool.query('SELECT COUNT(*) as total FROM transactions');
-  const [[volume]] = await pool.query('SELECT SUM(total) as total FROM transactions WHERE status = \"success\"');
+  const [[volume]] = await pool.query("SELECT SUM(total) as total FROM transactions WHERE status = 'success'");
   return res.json({
     users: users.total,
     transactions: tx.total,
@@ -73,7 +74,8 @@ router.get('/held-topups', requireAdmin, requirePermission('transactions:read'),
   );
   const mapped = rows.map((row) => {
     const meta = hydrateTransactionMetadata(row, row.user_id);
-    const { metadata_encrypted, ...rest } = row;
+    const rest = { ...row };
+    delete rest.metadata_encrypted;
     return applyUserPII({ ...rest, metadata: meta });
   });
   return res.json(mapped);
@@ -123,7 +125,7 @@ router.post(
         reference,
       ]);
       await conn.commit();
-    } catch (err) {
+    } catch {
       await conn.rollback();
       return respond(500, { error: 'Approval failed' });
     } finally {

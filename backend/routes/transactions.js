@@ -75,7 +75,8 @@ router.get('/', requireUser, async (req, res) => {
     [req.user.sub]
   );
   const mapped = rows.map((row) => {
-    const { metadata_encrypted, ...rest } = row;
+    const rest = { ...row };
+    delete rest.metadata_encrypted;
     return {
       ...rest,
       metadata: hydrateTransactionMetadata(row, req.user.sub),
@@ -93,7 +94,8 @@ router.get('/:id', requireUser, async (req, res) => {
 
   const row = rows[0];
   const meta = hydrateTransactionMetadata(row, req.user.sub) || {};
-  const { metadata_encrypted, ...tx } = row;
+  const tx = { ...row };
+  delete tx.metadata_encrypted;
 
   const recipient = {
     name:
@@ -125,7 +127,8 @@ router.get('/:id/receipt', requireUser, async (req, res) => {
 
   const row = rows[0];
   const meta = hydrateTransactionMetadata(row, req.user.sub) || {};
-  const { metadata_encrypted, ...tx } = row;
+  const tx = { ...row };
+  delete tx.metadata_encrypted;
 
   const [[userRaw]] = await pool.query(
     'SELECT id, full_name, full_name_encrypted FROM users WHERE id = ?',

@@ -57,7 +57,7 @@ router.post('/resolve', requireUser, async (req, res) => {
         });
       }
       return res.json({ found: false, bankCode, bankName: bank.name });
-    } catch (err) {
+    } catch {
       return res.status(400).json({ error: 'Account verification failed' });
     }
   }

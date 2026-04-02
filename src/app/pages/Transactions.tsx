@@ -1,26 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ChevronLeft, Search, Download, Send, Plus } from 'lucide-react';
 import { walletAPI } from '../../services/api';
 import BottomNav from '../components/BottomNav';
 import Breadcrumbs from '../components/Breadcrumbs';
+import type { Transaction } from '../../types/api';
 
 export default function Transactions() {
   const navigate = useNavigate();
-  const [transactions, setTransactions] = useState<any[]>([]);
+  type Direction = 'credit' | 'debit';
+  type NormalizedTransaction = Transaction & {
+    direction: Direction;
+    recipient?: string;
+    description?: string;
+    timestamp: string;
+  };
+  const [transactions, setTransactions] = useState<NormalizedTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'credit' | 'debit'>('all');
+  const [filter, setFilter] = useState<'all' | Direction>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    loadTransactions();
-  }, []);
-
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     try {
       const response = await walletAPI.getTransactions();
-      const normalized = (response || []).map((txn: any) => {
-        let metadata: any = txn.metadata;
+      const normalized = ((response || []) as Transaction[]).map((txn) => {
+        let metadata: unknown = txn.metadata;
         if (typeof metadata === 'string') {
           try {
             metadata = JSON.parse(metadata);
@@ -28,30 +32,35 @@ export default function Transactions() {
             metadata = {};
           }
         }
+        const meta = (metadata && typeof metadata === 'object') ? (metadata as Record<string, unknown>) : {};
         const direction =
           txn.type === 'receive' || txn.type === 'topup' ? 'credit' : 'debit';
         const recipient =
-          metadata?.provider ||
-          metadata?.accountName ||
-          metadata?.accountNumber ||
-          metadata?.to ||
-          metadata?.from ||
+          (meta.provider as string) ||
+          (meta.accountName as string) ||
+          (meta.accountNumber as string) ||
+          (meta.to as string) ||
+          (meta.from as string) ||
           txn.type;
         return {
           ...txn,
           direction,
           recipient,
-          description: metadata?.provider || metadata?.to || metadata?.accountNumber || txn.type,
+          description: (meta.provider as string) || (meta.to as string) || (meta.accountNumber as string) || txn.type,
           timestamp: txn.created_at,
         };
       });
       setTransactions(normalized);
-    } catch (err) {
+    } catch {
       console.error('Failed to load transactions');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadTransactions();
+  }, [loadTransactions]);
 
   const filteredTransactions = transactions.filter((txn) => {
     const matchesFilter = filter === 'all' || txn.direction === filter;
@@ -90,7 +99,7 @@ export default function Transactions() {
     }
   };
 
-  const groupedTransactions = filteredTransactions.reduce((groups: any, txn) => {
+  const groupedTransactions = filteredTransactions.reduce<Record<string, NormalizedTransaction[]>>((groups, txn) => {
     const date = formatDate(txn.timestamp);
     if (!groups[date]) {
       groups[date] = [];
@@ -157,7 +166,7 @@ export default function Transactions() {
           ].map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setFilter(tab.key as any)}
+              onClick={() => setFilter(tab.key as 'all' | Direction)}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                 filter === tab.key
                   ? 'bg-white text-[#235697]'
@@ -190,13 +199,13 @@ export default function Transactions() {
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(groupedTransactions).map(([date, txns]: [string, any]) => (
+            {Object.entries(groupedTransactions).map(([date, txns]) => (
               <div key={date}>
                 <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-3">
                   {date}
                 </h3>
                 <div className="space-y-2">
-                  {txns.map((txn: any) => (
+                  {txns.map((txn) => (
                     <button
                       key={txn.id}
                       onClick={() => navigate(`/transaction/${txn.id}`)}

@@ -12,10 +12,16 @@ interface AdminAuthContextType {
   admin: Admin | null;
   isAdmin: boolean;
   checking: boolean;
-  login: (email: string, password: string, totp?: string) => Promise<any>;
+  login: (email: string, password: string, totp?: string) => Promise<AdminLoginResponse>;
   logout: () => void;
   refresh: () => Promise<void>;
 }
+
+type AdminLoginResponse = {
+  admin?: Admin;
+  message?: string;
+  totpRequired?: boolean;
+};
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
 

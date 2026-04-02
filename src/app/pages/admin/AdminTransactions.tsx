@@ -3,7 +3,21 @@ import { Link } from 'react-router';
 import { Download, Filter, ArrowLeft } from 'lucide-react';
 import { adminAPI } from '../../../services/api';
 
-function toCsv(rows: any[]) {
+type AdminTransaction = {
+  id: string;
+  reference?: string;
+  full_name?: string;
+  type?: string;
+  status?: string;
+  amount?: number;
+  fee?: number;
+  total?: number;
+  created_at?: string;
+  vtpass_status?: string;
+  metadata?: unknown;
+};
+
+function toCsv(rows: AdminTransaction[]) {
   const headers = [
     'Reference',
     'Customer',
@@ -26,12 +40,12 @@ function toCsv(rows: any[]) {
     row.created_at,
     row.vtpass_status || '',
   ]);
-  const escape = (value: any) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
   return [headers, ...lines].map((line) => line.map(escape).join(',')).join('\n');
 }
 
 export default function AdminTransactions() {
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('all');
@@ -43,7 +57,7 @@ export default function AdminTransactions() {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await adminAPI.getTransactions();
+      const data = (await adminAPI.getTransactions()) as AdminTransaction[] | undefined;
       setTransactions(data || []);
     } catch {
       setTransactions([]);
@@ -79,7 +93,7 @@ export default function AdminTransactions() {
     URL.revokeObjectURL(url);
   };
 
-  const getMeta = (meta: any) => {
+  const getMeta = (meta: unknown) => {
     if (!meta) return null;
     if (typeof meta === 'string') {
       try {

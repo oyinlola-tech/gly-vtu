@@ -7,7 +7,18 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function SessionManagement() {
-  const [sessions, setSessions] = useState<any[]>([]);
+  type SessionRow = {
+    id: string;
+    device_id?: string;
+    label?: string;
+    trusted?: number | boolean;
+    last_seen?: string;
+    ip_address?: string;
+    user_agent?: string;
+    location?: string;
+  };
+
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState<string | null>(null);
   const deviceId = useMemo(() => tokenStore.getDeviceId(), []);

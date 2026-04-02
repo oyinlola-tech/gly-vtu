@@ -115,6 +115,25 @@ export async function unblockVirtualCard(cardId) {
   return flwRequest('PUT', `/v3/virtual-cards/${cardId}/status/unblock`);
 }
 
+export async function createTransfer({
+  amount,
+  account_number,
+  bank_code,
+  narration,
+  reference,
+  currency = 'NGN',
+}) {
+  const payload = {
+    amount,
+    account_number,
+    bank_code,
+    currency,
+    narration,
+    reference,
+  };
+  return flwRequest('POST', '/v3/transfers', payload);
+}
+
 export function verifyFlutterwaveWebhook(req) {
   const secret = process.env.FLW_WEBHOOK_HASH || '';
   if (!secret) {

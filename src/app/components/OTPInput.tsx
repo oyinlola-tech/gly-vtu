@@ -5,6 +5,8 @@ interface OTPInputProps {
   length?: number;
   onChange: (value: string) => void;
   autoFocus?: boolean;
+  containerClassName?: string;
+  inputClassName?: string;
 }
 
 export default function OTPInput({
@@ -12,6 +14,8 @@ export default function OTPInput({
   length = 6,
   onChange,
   autoFocus = false,
+  containerClassName,
+  inputClassName,
 }: OTPInputProps) {
   const digits = useMemo(() => {
     const normalized = value.replace(/\D/g, '').slice(0, length);
@@ -32,7 +36,7 @@ export default function OTPInput({
 
   return (
     <div
-      className="flex items-center justify-center gap-2"
+      className={`flex items-center justify-center gap-2 ${containerClassName || ''}`}
       ref={(node) => {
         if (autoFocus && node) {
           const first = node.querySelector<HTMLInputElement>('input[data-otp="0"]');
@@ -57,7 +61,7 @@ export default function OTPInput({
               prev?.focus();
             }
           }}
-          className="w-12 h-12 text-center text-lg font-semibold rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#235697] focus:outline-none"
+          className={`w-12 h-12 text-center text-lg font-semibold rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#235697] focus:outline-none ${inputClassName || ''}`}
         />
       ))}
     </div>

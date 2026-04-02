@@ -1,4 +1,5 @@
 import { useState, Suspense, lazy } from 'react';
+import type { ReactNode } from 'react';
 import { HelpCircle } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { ThemeProvider } from '../contexts/ThemeContext';
@@ -77,12 +78,12 @@ const SecurityEventsDashboard = lazy(() => import('./pages/admin/SecurityEventsD
 const AnomalyDetection = lazy(() => import('./pages/admin/AnomalyDetection'));
 const ComplianceManagement = lazy(() => import('./pages/admin/ComplianceManagement'));
 
-function PrivateRoute({ children }: { children: React.ReactNode }) {
+function PrivateRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 }
 
-function AdminRoute({ children }: { children: React.ReactNode }) {
+function AdminRoute({ children }: { children: ReactNode }) {
   const { isAdmin, checking } = useAdminAuth();
   if (checking) return null;
   return isAdmin ? <>{children}</> : <Navigate to="/admin/login" />;

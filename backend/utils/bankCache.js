@@ -50,7 +50,7 @@ export async function getCachedBanks() {
   if (stale) {
     try {
       await refreshBankCache();
-    } catch (err) {
+    } catch {
       // Keep stale cache if refresh fails
     }
   }

@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router';
 import { authAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import OTPInput from '../components/OTPInput';
-import PasswordStrengthIndicator from '../components/PasswordStrengthIndicator';
+import PasswordStrengthIndicator from '../../components/PasswordStrengthIndicator';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -16,14 +17,14 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
       await authAPI.resetPassword(formData);
       navigate('/login');
-    } catch (err) {
+    } catch {
       setError('Password reset failed');
     } finally {
       setLoading(false);

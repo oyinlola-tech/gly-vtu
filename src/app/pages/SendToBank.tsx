@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { ChevronLeft, ChevronDown } from 'lucide-react';
 import { banksAPI, walletAPI } from '../../services/api';
@@ -7,11 +7,12 @@ import PINInput from '../components/PINInput';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyInput from '../components/CurrencyInput';
 import Breadcrumbs from '../components/Breadcrumbs';
+import type { Bank } from '../../types/api';
 
 export default function SendToBank() {
   const navigate = useNavigate();
   const { verifyPin } = useAuth();
-  const [banks, setBanks] = useState<any[]>([]);
+  const [banks, setBanks] = useState<Bank[]>([]);
   const [formData, setFormData] = useState({
     accountNumber: '',
     bankCode: '',
@@ -50,7 +51,7 @@ export default function SendToBank() {
     }
   };
 
-  const handleResolveAccount = async () => {
+  const handleResolveAccount = useCallback(async () => {
     if (formData.accountNumber.length !== 10 || !formData.bankCode) return;
 
     setVerifying(true);
@@ -61,7 +62,7 @@ export default function SendToBank() {
         accountNumber: formData.accountNumber,
         bankCode: formData.bankCode,
       });
-      if (!response.found) {
+      if (!response?.accountName) {
         setError('Account not found');
         setAccountName('');
         return;
@@ -73,13 +74,13 @@ export default function SendToBank() {
     } finally {
       setVerifying(false);
     }
-  };
+  }, [formData.accountNumber, formData.bankCode]);
 
   useEffect(() => {
     if (formData.accountNumber.length === 10 && formData.bankCode) {
       handleResolveAccount();
     }
-  }, [formData.accountNumber, formData.bankCode]);
+  }, [formData.accountNumber, formData.bankCode, handleResolveAccount]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

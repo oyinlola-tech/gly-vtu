@@ -144,7 +144,7 @@ export default function AccountClosure() {
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 mb-8">
               <p className="text-yellow-900 font-semibold mb-2">You have 30 days to change your mind</p>
               <p className="text-yellow-800 text-sm">
-                After submitting this request, you'll have 30 days to cancel it. After 30 days, your account and all data will be permanently deleted.
+                After submitting this request, you&apos;ll have 30 days to cancel it. After 30 days, your account and all data will be permanently deleted.
               </p>
             </div>
 

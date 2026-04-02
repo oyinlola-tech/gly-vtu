@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   Users,
@@ -14,6 +14,55 @@ import { useAdminAuth } from '../../../contexts/AdminAuthContext';
 import type { AdminBillPricing, AdminBillProvider } from '../../../types/bills';
 
 export default function AdminDashboard() {
+  type AdminUser = {
+    id: string;
+    full_name?: string;
+    email?: string;
+    created_at?: string;
+  };
+
+  type AdminTransaction = {
+    id: string;
+    reference?: string;
+    type?: string;
+    total?: number;
+    amount?: number;
+    status?: string;
+    full_name?: string;
+    vtpass_status?: string;
+    metadata?: unknown;
+    created_at?: string;
+  };
+
+  type AdminConversation = {
+    id: string | number;
+    full_name?: string;
+    email?: string;
+    user_id?: string | number;
+  };
+
+  type AdminMessage = {
+    id: string | number;
+    body: string;
+    sender_type?: 'user' | 'admin';
+    senderType?: 'user' | 'admin';
+    conversationId?: string | number;
+  };
+
+  type VtpassEvent = {
+    request_id: string;
+    transaction_id?: string;
+    status?: string;
+    updated_at?: string;
+  };
+
+  type FinanceOverview = {
+    walletBalance?: number;
+    users?: number;
+    volume?: number;
+    revenue?: number;
+  };
+
   const navigate = useNavigate();
   const { logout } = useAdminAuth();
   const [stats, setStats] = useState({
@@ -22,42 +71,53 @@ export default function AdminDashboard() {
     volume: 0,
     revenue: 0,
   });
-  const [users, setUsers] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [conversations, setConversations] = useState<any[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
+  const [conversations, setConversations] = useState<AdminConversation[]>([]);
   const [pricing, setPricing] = useState<AdminBillPricing[]>([]);
   const [providers, setProviders] = useState<AdminBillProvider[]>([]);
   const [providerSaving, setProviderSaving] = useState<string | number | null>(null);
   const [pricingSaving, setPricingSaving] = useState<string | number | null>(null);
-  const [selectedConversation, setSelectedConversation] = useState<any | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<AdminConversation | null>(null);
+  const [messages, setMessages] = useState<AdminMessage[]>([]);
   const [reply, setReply] = useState('');
   const [notification, setNotification] = useState({
     title: '',
     body: '',
     force: true,
   });
-  const [vtpassEvents, setVtpassEvents] = useState<any[]>([]);
+  const [vtpassEvents, setVtpassEvents] = useState<VtpassEvent[]>([]);
   const [vtpassStatus, setVtpassStatus] = useState('all');
   const [vtpassLoading, setVtpassLoading] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const selectedConversationIdRef = useRef<string | number | null>(null);
 
   useEffect(() => {
-    loadDashboard();
-    connectWs();
-    return () => wsRef.current?.close();
+    selectedConversationIdRef.current = selectedConversation?.id ?? null;
+  }, [selectedConversation]);
+
+  const loadConversations = useCallback(async () => {
+    try {
+      const convoRes = await adminAPI.getConversations();
+      const rows = (convoRes || []) as AdminConversation[];
+      setConversations(rows);
+      setSelectedConversation((prev) => prev ?? (rows[0] ?? null));
+    } catch {
+      // ignore
+    }
   }, []);
 
-  const connectWs = () => {
+  const connectWs = useCallback(() => {
     const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
     const ws = new WebSocket(`${wsUrl}?role=admin`);
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data);
+        const payload = JSON.parse(event.data) as { type?: string; message?: AdminMessage };
         if (payload?.type === 'chat.message') {
           const msg = payload.message;
-          if (selectedConversation?.id === msg.conversationId) {
+          if (!msg) return;
+          if (selectedConversationIdRef.current === msg.conversationId) {
             setMessages((prev) => [...prev, msg]);
           }
           loadConversations();
@@ -66,11 +126,11 @@ export default function AdminDashboard() {
         // ignore
       }
     };
-  };
+  }, [loadConversations]);
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
-      const [overview, usersRes, txRes, convoRes, pricingRes, providerRes] = await Promise.all([
+      const [overviewRes, usersRes, txRes, convoRes, pricingRes, providerRes] = await Promise.all([
         adminAPI.getFinanceOverview(),
         adminAPI.getUsers(),
         adminAPI.getTransactions(),
@@ -78,42 +138,38 @@ export default function AdminDashboard() {
         adminAPI.getBillPricing(),
         adminAPI.getBillProviders(),
       ]);
+      const overview = (overviewRes || {}) as FinanceOverview;
+      const usersRows = (usersRes || []) as AdminUser[];
+      const txRows = (txRes || []) as AdminTransaction[];
+      const convoRows = (convoRes || []) as AdminConversation[];
       setStats({
         walletBalance: Number(overview.walletBalance || 0),
         users: Number(overview.users || 0),
         volume: Number(overview.volume || 0),
         revenue: Number(overview.revenue || 0),
       });
-      setUsers(usersRes || []);
-      setTransactions(txRes || []);
-      setConversations(convoRes || []);
+      setUsers(usersRows);
+      setTransactions(txRows);
+      setConversations(convoRows);
       setPricing(pricingRes || []);
       setProviders(providerRes || []);
-      if (convoRes?.length && !selectedConversation) {
-        setSelectedConversation(convoRes[0]);
-      }
-    } catch (err) {
+      setSelectedConversation((prev) => prev ?? (convoRows[0] ?? null));
+    } catch {
       console.error('Failed to load admin dashboard');
     }
-  };
+  }, []);
 
-  const loadConversations = async () => {
-    try {
-      const convoRes = await adminAPI.getConversations();
-      setConversations(convoRes || []);
-      if (!selectedConversation && convoRes?.length) {
-        setSelectedConversation(convoRes[0]);
-      }
-    } catch {
-      // ignore
-    }
-  };
+  useEffect(() => {
+    loadDashboard();
+    connectWs();
+    return () => wsRef.current?.close();
+  }, [connectWs, loadDashboard]);
 
   useEffect(() => {
     if (!selectedConversation?.id) return;
     adminAPI
       .getConversationMessages(selectedConversation.id)
-      .then((data) => setMessages(data || []))
+      .then((data) => setMessages((data || []) as AdminMessage[]))
       .catch(() => setMessages([]));
   }, [selectedConversation?.id]);
 
@@ -265,22 +321,22 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadVtpassEvents = async () => {
+  const loadVtpassEvents = useCallback(async () => {
     setVtpassLoading(true);
     try {
       const status = vtpassStatus === 'all' ? undefined : vtpassStatus;
       const rows = await adminAPI.getVtpassEvents({ limit: 50, status });
-      setVtpassEvents(rows || []);
+      setVtpassEvents((rows || []) as VtpassEvent[]);
     } catch {
       setVtpassEvents([]);
     } finally {
       setVtpassLoading(false);
     }
-  };
+  }, [vtpassStatus]);
 
   useEffect(() => {
     loadVtpassEvents();
-  }, [vtpassStatus]);
+  }, [loadVtpassEvents]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">

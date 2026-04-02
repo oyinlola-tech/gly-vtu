@@ -6,7 +6,17 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function DeviceManagement() {
-  const [devices, setDevices] = useState<any[]>([]);
+  type SessionRow = {
+    id: string;
+    device_id?: string;
+    label?: string;
+    trusted?: number | boolean;
+    user_agent?: string;
+    last_seen?: string;
+    ip_address?: string;
+  };
+
+  const [devices, setDevices] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
@@ -41,12 +51,12 @@ export default function DeviceManagement() {
     await loadDevices();
   };
 
-  const startEdit = (device: any) => {
+  const startEdit = (device: SessionRow) => {
     setEditingId(device.id);
     setLabelDraft(device.label || '');
   };
 
-  const saveLabel = async (device: any) => {
+  const saveLabel = async (device: SessionRow) => {
     await userAPI.renameSession(device.id, labelDraft.trim());
     setEditingId(null);
     setLabelDraft('');

@@ -1,30 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { CheckCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import Breadcrumbs from '../components/Breadcrumbs';
 
-function useQuery() {
-  const { search } = useLocation();
-  return new URLSearchParams(search);
-}
-
 export default function AccountClosureCancel() {
   const navigate = useNavigate();
-  const query = useQuery();
+  const { search } = useLocation();
+  const query = useMemo(() => new URLSearchParams(search), [search]);
   const [token, setToken] = useState(query.get('token') || '');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    const incoming = query.get('token');
-    if (incoming) {
-      setToken(incoming);
-      handleCancel(incoming);
-    }
-  }, []);
-
-  const handleCancel = async (override?: string) => {
+  const handleCancel = useCallback(async (override?: string) => {
     const cancelToken = (override ?? token).trim();
     if (!cancelToken) {
       setMessage('A cancellation token is required.');
@@ -42,13 +30,14 @@ export default function AccountClosureCancel() {
       setStatus('success');
       setMessage('Your account closure request has been cancelled.');
       toast.success('Account closure cancelled');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const messageText = err instanceof Error ? err.message : 'Unable to cancel request';
       setStatus('error');
-      setMessage(err?.message || 'Unable to cancel request');
+      setMessage(messageText);
     }
-  };
+  }, [token]);
 
-  const handleCancelAuthenticated = async () => {
+  const handleCancelAuthenticated = useCallback(async () => {
     setStatus('loading');
     try {
       const res = await fetch('/app/api/user/account/closure-cancel', {
@@ -63,11 +52,20 @@ export default function AccountClosureCancel() {
       setStatus('success');
       setMessage('Your account closure request has been cancelled.');
       toast.success('Account closure cancelled');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const messageText = err instanceof Error ? err.message : 'Unable to cancel request';
       setStatus('error');
-      setMessage(err?.message || 'Unable to cancel request');
+      setMessage(messageText);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const incoming = query.get('token');
+    if (incoming) {
+      setToken(incoming);
+      void handleCancel(incoming);
+    }
+  }, [query, handleCancel]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-gray-950 dark:to-gray-900 p-6">

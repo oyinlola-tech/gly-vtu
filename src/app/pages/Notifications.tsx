@@ -1,24 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft, Bell } from 'lucide-react';
 import { notificationsAPI } from '../../services/api';
 import BottomNav from '../components/BottomNav';
 
 export default function Notifications() {
-  const [notifications, setNotifications] = useState<any[]>([]);
+  type NotificationItem = {
+    id: string;
+    title: string;
+    body: string;
+    created_at: string;
+    read_at?: string | null;
+    force?: boolean;
+  };
 
-  const loadNotifications = async () => {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  const loadNotifications = useCallback(async () => {
     try {
-      const data = await notificationsAPI.list();
+      const data = (await notificationsAPI.list()) as NotificationItem[] | undefined;
       setNotifications(data || []);
     } catch {
       setNotifications([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadNotifications();
-  }, []);
+  }, [loadNotifications]);
 
   const markAll = async () => {
     await notificationsAPI.markAll();

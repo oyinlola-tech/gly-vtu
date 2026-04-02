@@ -1,33 +1,47 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ArrowLeft, Check, X } from 'lucide-react';
 import { adminAPI } from '../../../services/api';
 
 export default function AdminReview() {
-  const [heldTopups, setHeldTopups] = useState<any[]>([]);
-  const [adjustments, setAdjustments] = useState<any[]>([]);
+  type HeldTopup = {
+    reference: string;
+    full_name?: string;
+    amount?: number;
+    created_at?: string;
+  };
+  type AdminAdjustment = {
+    id: string;
+    full_name?: string;
+    type?: string;
+    amount?: number;
+    created_at?: string;
+  };
+
+  const [heldTopups, setHeldTopups] = useState<HeldTopup[]>([]);
+  const [adjustments, setAdjustments] = useState<AdminAdjustment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [topups, adjs] = await Promise.all([
         adminAPI.getHeldTopups(),
         adminAPI.getAdminAdjustments('pending'),
       ]);
-      setHeldTopups(topups || []);
-      setAdjustments(adjs || []);
+      setHeldTopups((topups as HeldTopup[]) || []);
+      setAdjustments((adjs as AdminAdjustment[]) || []);
     } catch {
       setHeldTopups([]);
       setAdjustments([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -159,4 +173,3 @@ export default function AdminReview() {
     </div>
   );
 }
-

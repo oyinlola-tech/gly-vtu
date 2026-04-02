@@ -1,10 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ArrowLeft, Filter } from 'lucide-react';
 import { adminAPI } from '../../../services/api';
 
 export default function AdminAuditLogs() {
-  const [logs, setLogs] = useState<any[]>([]);
+  type AuditLog = {
+    id: string;
+    action?: string;
+    actor_type?: string;
+    actor_id?: string;
+    created_at?: string;
+    entity_type?: string;
+    entity_id?: string;
+    ip_address?: string;
+  };
+
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     actorType: '',
@@ -14,28 +25,28 @@ export default function AdminAuditLogs() {
     to: '',
   });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await adminAPI.getAuditLogs({
+      const data = (await adminAPI.getAuditLogs({
         limit: 200,
         actorType: filters.actorType || undefined,
         action: filters.action || undefined,
         entityType: filters.entityType || undefined,
         from: filters.from || undefined,
         to: filters.to || undefined,
-      });
+      })) as AuditLog[] | undefined;
       setLogs(data || []);
     } catch {
       setLogs([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.action, filters.actorType, filters.entityType, filters.from, filters.to]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const filtered = useMemo(() => logs, [logs]);
 
@@ -136,4 +147,3 @@ export default function AdminAuditLogs() {
     </div>
   );
 }
-

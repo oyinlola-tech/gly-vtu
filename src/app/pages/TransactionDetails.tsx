@@ -144,10 +144,10 @@ export default function TransactionDetails() {
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Reference</p>
                 <button
-                  onClick={() => copyText(transaction.reference)}
+                  onClick={() => copyText(transaction.reference || transaction.id)}
                   className="font-mono text-xs text-[#235697] inline-flex items-center gap-1"
                 >
-                  {transaction.reference}
+                  {transaction.reference || transaction.id}
                   <Copy size={12} />
                 </button>
               </div>
@@ -158,7 +158,9 @@ export default function TransactionDetails() {
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Date</p>
                 <p className="text-gray-900 dark:text-white">
-                  {transaction.createdAt ? new Date(transaction.createdAt).toLocaleString() : 'N/A'}
+                  {(transaction.createdAt || transaction.created_at)
+                    ? new Date(transaction.createdAt || transaction.created_at || '').toLocaleString()
+                    : 'N/A'}
                 </p>
               </div>
             </div>
@@ -173,7 +175,7 @@ export default function TransactionDetails() {
               </button>
               <button
                 className="flex-1 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-200 py-2 rounded-xl text-sm font-semibold"
-                onClick={() => copyText(transaction.reference)}
+                onClick={() => copyText(transaction.reference || transaction.id)}
               >
                 Share
               </button>

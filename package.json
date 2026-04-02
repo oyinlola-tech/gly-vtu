@@ -8,7 +8,8 @@
     "build": "vite build",
     "dev": "vite",
     "kyc:health": "node scripts/kyc-health-check.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

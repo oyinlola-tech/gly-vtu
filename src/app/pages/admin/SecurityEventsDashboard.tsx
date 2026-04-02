@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Download, Filter, ShieldAlert } from 'lucide-react';
 import { adminAPI } from '../../../services/api';
 
@@ -18,7 +18,7 @@ export default function SecurityEventsDashboard() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ severity: '', type: '' });
 
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     setLoading(true);
     try {
       const data = await adminAPI.getSecurityEvents?.({ severity: filters.severity, type: filters.type });
@@ -28,11 +28,11 @@ export default function SecurityEventsDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.severity, filters.type]);
 
   useEffect(() => {
     loadEvents();
-  }, [filters.severity, filters.type]);
+  }, [loadEvents]);
 
   const handleExport = async () => {
     try {

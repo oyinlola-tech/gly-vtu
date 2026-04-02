@@ -1,27 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { ArrowDown, ArrowUp, Copy, Share2, Download, AlertCircle } from 'lucide-react';
 import { transactionsAPI } from '../../services/api';
+import type { Transaction } from '../../types/api';
 import { toast } from 'sonner';
-
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  fee: number;
-  total: number;
-  status: 'pending' | 'success' | 'failed';
-  reference: string;
-  description?: string;
-  recipient?: {
-    name: string;
-    account: string;
-    bank?: string;
-  };
-  createdAt: string;
-  completedAt?: string;
-  failureReason?: string;
-}
 
 export default function TransactionDetailsPage() {
   const { id } = useParams();
@@ -30,12 +12,8 @@ export default function TransactionDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
+  const loadTransaction = useCallback(async () => {
     if (!id) return;
-    loadTransaction();
-  }, [id]);
-
-  async function loadTransaction() {
     try {
       setLoading(true);
       const data = await transactionsAPI.getById(id as string);
@@ -46,7 +24,11 @@ export default function TransactionDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
+
+  useEffect(() => {
+    loadTransaction();
+  }, [loadTransaction]);
 
   function copyToClipboard(text: string) {
     navigator.clipboard.writeText(text);
@@ -126,9 +108,11 @@ export default function TransactionDetailsPage() {
         <div className="flex justify-between items-center pb-4 border-b">
           <span className="text-gray-600 dark:text-gray-400">Transaction Reference</span>
           <div className="flex items-center gap-2">
-            <code className="bg-white dark:bg-gray-800 px-3 py-1 rounded font-mono text-sm">{transaction.reference}</code>
+            <code className="bg-white dark:bg-gray-800 px-3 py-1 rounded font-mono text-sm">
+              {transaction.reference || transaction.id}
+            </code>
             <button
-              onClick={() => copyToClipboard(transaction.reference)}
+              onClick={() => copyToClipboard(transaction.reference || transaction.id)}
               className="p-1 hover:bg-white rounded transition"
               title="Copy"
             >
@@ -158,7 +142,9 @@ export default function TransactionDetailsPage() {
 
         <div className="flex justify-between items-center">
           <span className="text-gray-600 dark:text-gray-400">Date & Time</span>
-          <span className="text-gray-900 dark:text-white">{new Date(transaction.createdAt).toLocaleString()}</span>
+          <span className="text-gray-900 dark:text-white">
+            {new Date(transaction.createdAt || transaction.created_at).toLocaleString()}
+          </span>
         </div>
       </div>
 

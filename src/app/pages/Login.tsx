@@ -60,11 +60,12 @@ export default function Login() {
     const lastLoginAt = new Date().toISOString();
     localStorage.setItem(`last_login_${deviceId}`, lastLoginAt);
     const stored = localStorage.getItem('login_hints');
-    const list = stored ? JSON.parse(stored) : [];
+    type LoginHint = { label: string; lastLoginAt: string };
+    const list: unknown = stored ? JSON.parse(stored) : [];
     const filtered = Array.isArray(list)
-      ? list.filter((item: any) => item.label !== label)
+      ? (list as LoginHint[]).filter((item) => item.label !== label)
       : [];
-    const next = [{ label, lastLoginAt }, ...filtered].slice(0, 3);
+    const next: LoginHint[] = [{ label, lastLoginAt }, ...filtered].slice(0, 3);
     localStorage.setItem('login_hints', JSON.stringify(next));
     setRecentDevices(next);
     setLastLoginHint(lastLoginAt);

@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import {
   Eye, EyeOff, Plus, Send, CreditCard, Phone, Wifi, Tv, Zap,
-  Sun, Moon, Bell, Wallet, Receipt, ShieldCheck
+  Sun, Moon, Bell, Wallet, ShieldCheck
 } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { walletAPI, userAPI } from '../../services/api';
+import type { KYCLimits, SecurityAlert, SecurityStatus, Transaction } from '../../types/api';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -16,17 +17,20 @@ export default function Dashboard() {
   const [showBalance, setShowBalance] = useState(true);
   const [balance, setBalance] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
-  const [kycInfo, setKycInfo] = useState<any>(null);
-  const [securityStatus, setSecurityStatus] = useState<any>(null);
+  type RecentTransaction = {
+    id: string;
+    name: string;
+    amount: string;
+    time: string;
+    type: 'credit' | 'debit';
+  };
+  const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]);
+  const [kycInfo, setKycInfo] = useState<KYCLimits | null>(null);
+  const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
   const [deviceCount, setDeviceCount] = useState(0);
-  const [securityEvents, setSecurityEvents] = useState<any[]>([]);
+  const [securityEvents, setSecurityEvents] = useState<SecurityAlert[]>([]);
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
-
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       const [balanceRes, txns, kyc, security, sessions, events] = await Promise.all([
         walletAPI.getBalance(),
@@ -39,8 +43,8 @@ export default function Dashboard() {
       setBalance(Number(balanceRes?.balance || 0));
       setLastUpdated(new Date().toISOString());
       setRecentTransactions(
-        (txns || []).slice(0, 5).map((txn: any) => {
-          let metadata: any = txn.metadata;
+        (txns as Transaction[] | undefined || []).slice(0, 5).map((txn) => {
+          let metadata: unknown = txn.metadata;
           if (typeof metadata === 'string') {
             try {
               metadata = JSON.parse(metadata);
@@ -48,13 +52,14 @@ export default function Dashboard() {
               metadata = {};
             }
           }
+          const meta = (metadata && typeof metadata === 'object') ? (metadata as Record<string, unknown>) : {};
           const type =
             txn.type === 'receive' || txn.type === 'topup' ? 'credit' : 'debit';
           const label =
-            metadata?.provider ||
-            metadata?.accountName ||
-            metadata?.to ||
-            metadata?.accountNumber ||
+            (meta.provider as string) ||
+            (meta.accountName as string) ||
+            (meta.to as string) ||
+            (meta.accountNumber as string) ||
             'Transaction';
           return {
             id: txn.id,
@@ -76,10 +81,15 @@ export default function Dashboard() {
       setSecurityStatus(security);
       setDeviceCount((sessions || []).length);
       setSecurityEvents(events || []);
-    } catch (err) {
+    } catch {
       console.error('Failed to load dashboard data');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadDashboard();
+  }, [loadDashboard]);
 
   const quickActions = [
     { icon: Phone, label: 'Airtime', color: 'bg-orange-500', path: '/bills/airtime' },
@@ -95,7 +105,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <p className="text-white/80 text-sm">Hi, {user?.fullName?.split(' ')[0]}</p>
-            <p className="text-white text-lg font-semibold">Welcome, let's start making payments</p>
+            <p className="text-white text-lg font-semibold">Welcome, let&apos;s start making payments</p>
           </div>
           <div className="flex gap-3">
             <button
@@ -312,7 +322,7 @@ export default function Dashboard() {
 
           {recentTransactions.length === 0 ? (
             <div className="bg-white dark:bg-gray-900 rounded-xl p-8 text-center">
-              <p className="text-[#7d7c93] dark:text-gray-400">You haven't made any transactions yet.</p>
+              <p className="text-[#7d7c93] dark:text-gray-400">You haven&apos;t made any transactions yet.</p>
             </div>
           ) : (
             <div className="space-y-2">

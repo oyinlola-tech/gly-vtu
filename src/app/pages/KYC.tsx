@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import { userAPI } from '../../services/api';
@@ -6,7 +7,12 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
 
 export default function KYC() {
-  const [profile, setProfile] = useState<any>(null);
+  type UserProfile = {
+    kyc_level?: number;
+    kyc_status?: string;
+  };
+
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [level, setLevel] = useState<1 | 2>(1);
   const [formData, setFormData] = useState({
     bvn: '',
@@ -24,7 +30,7 @@ export default function KYC() {
       .catch(() => null);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
@@ -35,7 +41,7 @@ export default function KYC() {
           : { dob: formData.dob, address: formData.address };
       await userAPI.submitKYC({ level, payload });
       setMessage('KYC submitted successfully');
-    } catch (err) {
+    } catch {
       setMessage('KYC submission failed');
     } finally {
       setLoading(false);

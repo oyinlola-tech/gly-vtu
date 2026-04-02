@@ -35,9 +35,10 @@ export default function BiometricSetup() {
       setIsEnabled(true);
       setStatus('success');
       toast.success('Biometric login enabled');
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus('error');
-      toast.error(err?.message || 'Biometric setup failed');
+      const message = err instanceof Error ? err.message : 'Biometric setup failed';
+      toast.error(message);
     }
   };
 
@@ -48,9 +49,10 @@ export default function BiometricSetup() {
       setIsEnabled(false);
       setStatus('ready');
       toast.success('Biometric login disabled');
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus('error');
-      toast.error(err?.message || 'Failed to update biometric settings');
+      const message = err instanceof Error ? err.message : 'Failed to update biometric settings';
+      toast.error(message);
     }
   };
 

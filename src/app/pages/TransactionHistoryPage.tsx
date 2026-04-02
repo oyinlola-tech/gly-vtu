@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ArrowDown, ArrowUp, Filter, Download, Search } from 'lucide-react';
 import { userAPI } from '../../services/api';
+import type { Transaction as ApiTransaction } from '../../types/api';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import { toast } from 'sonner';
 
@@ -30,15 +31,27 @@ export function TransactionHistoryPage() {
   });
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    loadTransactions();
-  }, []);
+  const normalizeTransaction = (row: ApiTransaction): Transaction => {
+    const total = row.total ?? (row.amount || 0) + (row.fee || 0);
+    return {
+      id: row.id,
+      type: (row.type as Transaction['type']) || 'transfer',
+      amount: row.amount || 0,
+      fee: row.fee || 0,
+      total,
+      status: (row.status as Transaction['status']) || 'pending',
+      description: row.description || '',
+      reference: row.reference || row.id,
+      createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+      completedAt: row.completed_at || row.completedAt,
+    };
+  };
 
-  async function loadTransactions() {
+  const loadTransactions = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await userAPI.getTransactions?.();
-      setTransactions(data || []);
+      const data = (await userAPI.getTransactions?.()) || [];
+      setTransactions((data as ApiTransaction[]).map(normalizeTransaction));
       setError(null);
     } catch {
       setError('Failed to load transactions');
@@ -46,7 +59,11 @@ export function TransactionHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadTransactions();
+  }, [loadTransactions]);
 
   const filteredTransactions = transactions.filter(tx => {
     if (filters.type && tx.type !== filters.type) return false;

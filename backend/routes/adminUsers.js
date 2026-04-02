@@ -3,10 +3,9 @@ import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { logAudit } from '../utils/audit.js';
-import { sendKycStatusEmail } from '../utils/email.js';
+import { sendKycStatusEmail, sendReservedAccountEmail } from '../utils/email.js';
 import { createVirtualAccountForCustomer } from '../utils/flutterwave.js';
 import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
-import { sendReservedAccountEmail } from '../utils/email.js';
 import { applyUserPII, decryptJson } from '../utils/encryption.js';
 import { logger } from '../utils/logger.js';
 

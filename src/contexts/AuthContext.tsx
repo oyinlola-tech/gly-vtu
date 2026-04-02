@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { authAPI, userAPI, tokenStore } from '../services/api';
 
 interface User {
@@ -22,12 +22,22 @@ interface AuthContextType {
     totp?: string,
     backupCode?: string
   ) => Promise<{ otpRequired?: boolean; totpRequired?: boolean; email?: string; needsPin?: boolean }>;
-  register: (data: any) => Promise<void>;
+  register: (data: RegisterPayload) => Promise<void>;
   logout: () => void;
   verifyPin: (pin: string) => Promise<boolean>;
   setUser: (user: User) => void;
   refreshProfile: () => Promise<void>;
 }
+
+type RegisterPayload = {
+  email: string;
+  phone: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  bvn?: string;
+  nin?: string;
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -35,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const isAuthenticated = !!user;
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     try {
       const profile = await userAPI.getProfile();
       const security = await userAPI.getSecurityStatus();
@@ -54,13 +64,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tokenStore.clear();
       setUser(null);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       refreshProfile();
     }
-  }, []);
+  }, [user, refreshProfile]);
 
   const login = async (email: string, password: string, totp?: string, backupCode?: string) => {
     const response = await authAPI.login({ email, password, totp, backupCode });
@@ -87,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { needsPin: !security?.pinSet };
   };
 
-  const register = async (data: any) => {
+  const register = async (data: RegisterPayload) => {
     await authAPI.register(data);
   };
 

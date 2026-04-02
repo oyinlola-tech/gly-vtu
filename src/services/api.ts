@@ -25,7 +25,35 @@ import type {
   Conversation,
   SecurityQuestion,
   SendMoneyResponse,
+  RecipientLookupResponse,
 } from '../types/api';
+
+type AuthLoginResponse = {
+  otpRequired?: boolean;
+  totpRequired?: boolean;
+  needsPin?: boolean;
+  email?: string;
+  message?: string;
+  admin?: AdminProfile;
+};
+
+type VerifyDeviceResponse = {
+  totpRequired?: boolean;
+  message?: string;
+};
+
+type WalletReceiveResponse = {
+  id?: string;
+  reference?: string;
+  message?: string;
+};
+
+type AdminProfile = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/app/api';
 const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || '/app/admin/api';
@@ -235,7 +263,7 @@ export const authAPI = {
 
   login: async (data: { email: string; password: string; deviceId?: string; totp?: string; backupCode?: string }) => {
     const resolvedDeviceId = data.deviceId || (await getDeviceId());
-    return request<any>(
+    return request<AuthLoginResponse>(
       API_BASE_URL,
       '/auth/login',
       {
@@ -263,7 +291,7 @@ export const authAPI = {
     backupCode?: string;
   }) => {
     const resolvedDeviceId = data.deviceId || (await getDeviceId());
-    return request<any>(
+    return request<VerifyDeviceResponse>(
       API_BASE_URL,
       '/auth/verify-device',
       {
@@ -312,7 +340,7 @@ export const authAPI = {
   },
 
   me: async () => {
-    return request<any>(API_BASE_URL, '/auth/me');
+    return request<User>(API_BASE_URL, '/auth/me');
   },
 
   getSecurityQuestion: async (email: string) => {
@@ -376,7 +404,7 @@ export const userAPI = {
     return request<User>(API_BASE_URL, '/user/profile');
   },
 
-  submitKYC: async (data: { level: 2 | 3; payload: Record<string, any> }) => {
+  submitKYC: async (data: { level: 2 | 3; payload: Record<string, unknown> }) => {
     return request<{ message: string }>(
       API_BASE_URL,
       '/user/kyc',
@@ -516,10 +544,10 @@ export const userAPI = {
     );
   },
   setupTotp: async () => {
-    return request<any>(API_BASE_URL, '/user/totp/setup', { method: 'POST' });
+    return request<TOTPSetup>(API_BASE_URL, '/user/totp/setup', { method: 'POST' });
   },
   enableTotp: async (token: string) => {
-    return request<{ message: string }>(API_BASE_URL, '/user/totp/enable', {
+    return request<{ message?: string; backupCodes?: string[] }>(API_BASE_URL, '/user/totp/enable', {
       method: 'POST',
       body: JSON.stringify({ token }),
     });
@@ -558,6 +586,13 @@ export const walletAPI = {
     return request<{ balance: number }>(API_BASE_URL, '/wallet/balance');
   },
 
+  lookupRecipient: async (recipient: string) => {
+    return request<RecipientLookupResponse>(API_BASE_URL, '/wallet/recipient-lookup', {
+      method: 'POST',
+      body: JSON.stringify({ recipient }),
+    });
+  },
+
   sendMoney: async (data: {
     amount: number;
     pin: string;
@@ -575,14 +610,14 @@ export const walletAPI = {
   },
 
   requestMoney: async (data: { amount: number; note?: string }) => {
-    return request<any>(API_BASE_URL, '/wallet/receive', {
+    return request<WalletReceiveResponse>(API_BASE_URL, '/wallet/receive', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
   getTransactions: async () => {
-    return request<any[]>(API_BASE_URL, '/transactions');
+    return request<Transaction[]>(API_BASE_URL, '/transactions');
   },
 
   sendStatement: async (data: { startDate: string; endDate: string }) => {
@@ -613,7 +648,7 @@ export const walletAPI = {
 
 export const transactionsAPI = {
   getById: async (id: string) => {
-    return request<any>(API_BASE_URL, `/transactions/${id}`);
+    return request<Transaction>(API_BASE_URL, `/transactions/${id}`);
   },
   downloadReceipt: async (id: string) => {
     const res = await fetch(`${API_BASE_URL}/transactions/${id}/receipt`, {
@@ -692,7 +727,7 @@ export const banksAPI = {
 // ============= NOTIFICATIONS APIs =============
 export const notificationsAPI = {
   list: async () => {
-    return request<any[]>(API_BASE_URL, '/notifications');
+    return request<unknown[]>(API_BASE_URL, '/notifications');
   },
   unreadCount: async () => {
     return request<{ unread: number }>(API_BASE_URL, '/notifications/unread-count');
@@ -726,10 +761,10 @@ export const conversationsAPI = {
 // ============= VIRTUAL CARDS APIs =============
 export const cardsAPI = {
   list: async () => {
-    return request<any[]>(API_BASE_URL, '/cards');
+    return request<unknown[]>(API_BASE_URL, '/cards');
   },
   create: async (amount: number, currency = 'NGN', pin?: string) => {
-    return request<any>(API_BASE_URL, '/cards', {
+    return request<unknown>(API_BASE_URL, '/cards', {
       method: 'POST',
       headers: { 'X-Idempotency-Key': createIdempotencyKey() },
       body: JSON.stringify({ amount, currency, pin }),
@@ -760,7 +795,7 @@ export const cardsAPI = {
 export const adminAPI = {
   login: async (data: { email: string; password: string; totp?: string }) => {
     const deviceId = await getDeviceId();
-    const response = await request<any>(
+    const response = await request<AuthLoginResponse>(
       ADMIN_API_BASE_URL,
       '/auth/login',
       {
@@ -773,13 +808,13 @@ export const adminAPI = {
     return response;
   },
   me: async () => {
-    return request<any>(ADMIN_API_BASE_URL, '/auth/me', {}, { admin: true });
+    return request<AdminProfile>(ADMIN_API_BASE_URL, '/auth/me', {}, { admin: true });
   },
 
   refresh: async () => {
     const csrfToken = await ensureAdminCsrfToken();
     const deviceId = await getDeviceId();
-    const response = await request<any>(
+    const response = await request<unknown>(
       ADMIN_API_BASE_URL,
       '/auth/refresh',
       {
@@ -794,7 +829,7 @@ export const adminAPI = {
   },
 
   logout: async () => {
-    await request<any>(
+    await request<unknown>(
       ADMIN_API_BASE_URL,
       '/auth/logout',
       { method: 'POST' },
@@ -804,19 +839,19 @@ export const adminAPI = {
   },
 
   getFinanceOverview: async () => {
-    return request<any>(ADMIN_API_BASE_URL, '/finance/overview', {}, { admin: true });
+    return request<unknown>(ADMIN_API_BASE_URL, '/finance/overview', {}, { admin: true });
   },
 
   getUsers: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/users', {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/users', {}, { admin: true });
   },
 
   getTransactions: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/transactions', {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/transactions', {}, { admin: true });
   },
 
   getAudit: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/audit', {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/audit', {}, { admin: true });
   },
   getSecurityEvents: async (params?: { limit?: number; offset?: number; severity?: string; type?: string }) => {
     const search = new URLSearchParams();
@@ -825,7 +860,7 @@ export const adminAPI = {
     if (params?.severity) search.set('severity', params.severity);
     if (params?.type) search.set('type', params.type);
     const query = search.toString();
-    return request<any[]>(
+    return request<unknown[]>(
       ADMIN_API_BASE_URL,
       `/security-events${query ? `?${query}` : ''}`,
       {},
@@ -843,10 +878,10 @@ export const adminAPI = {
     return res.blob();
   },
   getAnomalies: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/anomalies', {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/anomalies', {}, { admin: true });
   },
   getComplianceQueue: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/compliance', {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/compliance', {}, { admin: true });
   },
 
   getAuditLogs: async (params?: {
@@ -869,7 +904,7 @@ export const adminAPI = {
     if (params?.from) search.set('from', params.from);
     if (params?.to) search.set('to', params.to);
     const query = search.toString();
-    return request<any[]>(
+    return request<unknown[]>(
       ADMIN_API_BASE_URL,
       `/audit${query ? `?${query}` : ''}`,
       {},
@@ -878,7 +913,7 @@ export const adminAPI = {
   },
 
   getHeldTopups: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/transactions/held-topups', {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/transactions/held-topups', {}, { admin: true });
   },
 
   approveHeldTopup: async (reference: string) => {
@@ -901,7 +936,7 @@ export const adminAPI = {
 
   getAdminAdjustments: async (status?: string) => {
     const query = status ? `?status=${encodeURIComponent(status)}` : '';
-    return request<any[]>(ADMIN_API_BASE_URL, `/finance/adjustments${query}`, {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, `/finance/adjustments${query}`, {}, { admin: true });
   },
 
   requestAdminAdjustment: async (payload: {
@@ -937,11 +972,11 @@ export const adminAPI = {
   },
 
   getConversations: async () => {
-    return request<any[]>(ADMIN_API_BASE_URL, '/conversations', {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/conversations', {}, { admin: true });
   },
 
   getConversationMessages: async (id: string) => {
-    return request<any[]>(
+    return request<unknown[]>(
       ADMIN_API_BASE_URL,
       `/conversations/${id}/messages`,
       {},
@@ -950,7 +985,7 @@ export const adminAPI = {
   },
 
   sendConversationMessage: async (id: string, text: string) => {
-    return request<any>(
+    return request<unknown>(
       ADMIN_API_BASE_URL,
       `/conversations/${id}/send`,
       { method: 'POST', body: JSON.stringify({ text }) },
@@ -964,7 +999,7 @@ export const adminAPI = {
     type?: string;
     userId?: string;
     force?: boolean;
-    data?: Record<string, any>;
+    data?: Record<string, unknown>;
   }) => {
     return request<{ message: string }>(
       ADMIN_API_BASE_URL,
@@ -1018,7 +1053,7 @@ export const adminAPI = {
     if (params?.offset) search.set('offset', String(params.offset));
     if (params?.status) search.set('status', params.status);
     const query = search.toString();
-    return request<any[]>(ADMIN_API_BASE_URL, `/vtpass/events${query ? `?${query}` : ''}`, {}, { admin: true });
+    return request<unknown[]>(ADMIN_API_BASE_URL, `/vtpass/events${query ? `?${query}` : ''}`, {}, { admin: true });
   },
 
   requeryVtpass: async (requestId: string) => {
@@ -1031,7 +1066,7 @@ export const adminAPI = {
   },
 
   requeryFlutterwaveVirtualAccount: async (payload: { userId?: string; accountReference?: string }) => {
-    return request<any>(
+    return request<unknown>(
       ADMIN_API_BASE_URL,
       '/flutterwave/virtual-accounts/requery',
       { method: 'POST', body: JSON.stringify(payload) },

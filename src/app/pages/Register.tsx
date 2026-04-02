@@ -1,49 +1,151 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { Eye, EyeOff, Check } from 'lucide-react';
+import { Check, ShieldCheck } from 'lucide-react';
 import PhoneInput from '../components/PhoneInput';
-import PasswordStrengthIndicator from '../components/PasswordStrengthIndicator';
+import PasswordStrengthIndicator from '../../components/PasswordStrengthIndicator';
+import OTPInput from '../components/OTPInput';
+
+const SAMPLE_PROFILES = {
+  nin: {
+    fullName: 'Amina Okafor',
+    dob: '1995-04-12',
+    gender: 'Female',
+    phone: '+2348020001000',
+    address: '12 Admiralty Way, Lekki',
+  },
+  bvn: {
+    fullName: 'Tunde Adebayo',
+    dob: '1990-09-03',
+    gender: 'Male',
+    phone: '+2348135552190',
+    address: '18 Awolowo Road, Ikoyi',
+  },
+};
+
+type IdentityType = 'nin' | 'bvn';
 
 export default function Register() {
   const navigate = useNavigate();
   const { register } = useAuth();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
     email: '',
     phone: '',
     password: '',
     confirmPassword: '',
   });
   const [phoneCountry, setPhoneCountry] = useState('NG');
-  const [showPassword, setShowPassword] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [identityType, setIdentityType] = useState<IdentityType>('nin');
+  const [identityValue, setIdentityValue] = useState('');
+  const [identityVerified, setIdentityVerified] = useState(false);
+  const [profile, setProfile] = useState<(typeof SAMPLE_PROFILES)['nin'] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const progress = useMemo(() => {
+    if (step === 1) return 25;
+    if (step === 2) return 50;
+    if (step === 3) return 75;
+    return 100;
+  }, [step]);
+
+  const maskedEmail = useMemo(() => {
+    const [name, domain] = formData.email.split('@');
+    if (!name || !domain) return formData.email;
+    const safeName =
+      name.length <= 2
+        ? name[0] + '*'
+        : `${name[0]}${'*'.repeat(Math.max(2, name.length - 2))}${name[name.length - 1]}`;
+    return `${safeName}@${domain}`;
+  }, [formData.email]);
+
+  const maskedId = useMemo(() => {
+    const digits = identityValue.replace(/\D/g, '');
+    if (digits.length < 4) return digits;
+    const last = digits.slice(-4);
+    return `•••••••${last}`;
+  }, [identityValue]);
+
+  const buildNames = (fullName: string) => {
+    const parts = fullName.trim().split(' ').filter(Boolean);
+    const firstName = parts.shift() || '';
+    const lastName = parts.join(' ');
+    return { firstName, lastName };
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (step < 2) {
+    setError('');
+
+    if (step === 1) {
+      if (!formData.email.trim()) {
+        setError('Enter a valid email address.');
+        return;
+      }
       setStep(2);
       return;
     }
 
-    setError('');
-    setLoading(true);
-
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      setLoading(false);
+    if (step === 2) {
+      if (otpCode.replace(/\D/g, '').length !== 6) {
+        setError('Enter the 6-digit code sent to your email.');
+        return;
+      }
+      setStep(3);
       return;
     }
 
+    if (step === 3 && !identityVerified) {
+      const digits = identityValue.replace(/\D/g, '');
+      if (digits.length !== 11) {
+        setError(`Enter your 11-digit ${identityType.toUpperCase()}.`);
+        return;
+      }
+      setLoading(true);
+      try {
+        const resolved = SAMPLE_PROFILES[identityType];
+        setProfile(resolved);
+        setIdentityVerified(true);
+        if (resolved.phone) {
+          setFormData((prev) => ({ ...prev, phone: resolved.phone }));
+        }
+        setStep(4);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (step === 3) {
+      setStep(4);
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
     try {
-      await register(formData);
+      const resolvedProfile = profile || SAMPLE_PROFILES[identityType];
+      const { firstName, lastName } = buildNames(resolvedProfile.fullName);
+      await register({
+        firstName,
+        lastName,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        bvn: identityType === 'bvn' ? identityValue.replace(/\D/g, '') : undefined,
+        nin: identityType === 'nin' ? identityValue.replace(/\D/g, '') : undefined,
+      });
       navigate('/login', { state: { registered: true } });
-    } catch (err) {
+    } catch {
       setError('Registration failed. Please try again.');
     } finally {
       setLoading(false);
@@ -51,179 +153,281 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
-      {/* Progress Bar */}
-      <div className="bg-white dark:bg-gray-900 p-4">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Step {step}/2</span>
-            <span className="text-sm text-[#235697] font-medium">{step * 50}%</span>
-          </div>
-          <div className="h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-[#235697] to-[#114280]"
-              initial={{ width: '0%' }}
-              animate={{ width: `${step * 50}%` }}
-              transition={{ duration: 0.3 }}
-            />
+    <div className="min-h-screen relative overflow-hidden bg-[#f6f7fb] dark:bg-[#0b1121] text-gray-900 dark:text-white">
+      <div className="pointer-events-none absolute -top-32 -right-32 h-72 w-72 rounded-full bg-gradient-to-br from-[#235697]/30 to-[#7aa0d6]/20 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-0 h-64 w-64 rounded-full bg-gradient-to-tr from-[#114280]/20 to-[#5b8bd3]/30 blur-3xl" />
+
+      <div className="relative max-w-2xl mx-auto px-6 py-10">
+        <div className="flex items-center justify-between mb-8">
+          <Link
+            to="/login"
+            className="text-sm font-semibold text-[#235697] bg-white/80 dark:bg-white/10 border border-white/60 dark:border-white/10 px-4 py-2 rounded-full"
+          >
+            Back to sign in
+          </Link>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#235697]">
+            <span className="h-2 w-2 rounded-full bg-[#235697]" />
+            Tier 1 setup
           </div>
         </div>
-      </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6">
-        <motion.div
-          key={step}
-          initial={{ x: 20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          className="w-full max-w-md"
-        >
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              {step === 1 ? 'Create Account' : 'Set Password'}
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400">
-              {step === 1 ? 'Enter your details to get started' : 'Choose a strong password'}
-            </p>
+        <div className="bg-white/90 dark:bg-gray-900/80 backdrop-blur border border-white/60 dark:border-white/10 rounded-[28px] shadow-[0_24px_60px_rgba(15,23,42,0.15)] p-8 md:p-10">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="text-xs uppercase tracking-[0.35em] text-gray-500 dark:text-gray-400 font-semibold">
+                Registration
+              </p>
+              <h1 className="mt-3 text-3xl md:text-4xl font-['Fraunces'] font-semibold">
+                {step === 1 && 'Start with your email'}
+                {step === 2 && 'Confirm your OTP'}
+                {step === 3 && 'Verify your identity'}
+                {step === 4 && 'Set your password'}
+              </h1>
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-300 font-['Manrope']">
+                {step === 1 && 'We only need your email to begin. We will send a verification code right away.'}
+                {step === 2 && `Enter the 6-digit code sent to ${maskedEmail}.`}
+                {step === 3 && 'Provide your NIN or BVN to auto-fill your profile and activate Tier 1.'}
+                {step === 4 && 'Create a secure password to finish setting up your account.'}
+              </p>
+            </div>
+            <div className="hidden md:flex flex-col items-end gap-2">
+              <span className="text-xs text-gray-400">Step {step} of 4</span>
+              <div className="w-32 h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-[#235697] to-[#114280]"
+                  initial={{ width: '0%' }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.4 }}
+                />
+              </div>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm">
+              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 p-4 rounded-2xl text-sm">
                 {error}
               </div>
             )}
 
-            {step === 1 ? (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      First Name
-                    </label>
-                    <input
-                      id="firstName"
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                      placeholder="John"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Last Name
-                    </label>
-                    <input
-                      id="lastName"
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                      placeholder="Doe"
-                      required
-                    />
-                  </div>
-                </div>
-
+            {step === 1 && (
+              <div className="space-y-5">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="registerEmail" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Email Address
                   </label>
                   <input
-                    id="email"
+                    id="registerEmail"
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                    placeholder="john@example.com"
+                    className="w-full px-4 py-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                    placeholder="you@example.com"
                     required
                   />
                 </div>
-
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Phone Number
-                  </label>
-                  <PhoneInput
-                    placeholder="8000000000"
-                    value={formData.phone}
-                    onChange={(value) => setFormData({ ...formData, phone: value })}
-                    countryCode={phoneCountry}
-                    onCountryChange={setPhoneCountry}
-                    inputId="phone"
-                  />
+                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                  <ShieldCheck size={16} className="text-[#235697]" />
+                  Your email is protected and used only for verification.
                 </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                      placeholder="Enter password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                    </button>
-                  </div>
-                  <div className="mt-3">
-                    <PasswordStrengthIndicator password={formData.password} />
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Confirm Password
-                  </label>
-                  <input
-                    id="confirmPassword"
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
-                    placeholder="Confirm password"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2 text-sm">
-                  <p className="font-medium text-gray-700 dark:text-gray-300">Password must contain:</p>
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <Check size={16} className={formData.password.length >= 8 ? 'text-green-500' : ''} />
-                    <span>At least 8 characters</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <Check size={16} className={/[A-Z]/.test(formData.password) ? 'text-green-500' : ''} />
-                    <span>One uppercase letter</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <Check size={16} className={/[0-9]/.test(formData.password) ? 'text-green-500' : ''} />
-                    <span>One number</span>
-                  </div>
-                </div>
-              </>
+              </div>
             )}
 
-            <div className="flex gap-3">
+            {step === 2 && (
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
+                    One-time password
+                  </label>
+                  <OTPInput
+                    value={otpCode}
+                    onChange={setOtpCode}
+                    autoFocus
+                    containerClassName="flex-wrap justify-center gap-3"
+                    inputClassName="w-12 h-12 text-lg"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
+                  <span>Didn&apos;t get a code?</span>
+                  <button type="button" className="text-[#235697] font-semibold">
+                    Resend OTP
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-[1fr_240px]">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      Choose verification method
+                    </label>
+                    <div className="flex gap-2 p-1 rounded-2xl bg-gray-100 dark:bg-gray-800">
+                      {(['nin', 'bvn'] as IdentityType[]).map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => {
+                            setIdentityType(option);
+                            setIdentityValue('');
+                            setIdentityVerified(false);
+                            setProfile(null);
+                          }}
+                          className={`flex-1 py-3 rounded-2xl text-sm font-semibold transition-all ${
+                            identityType === option
+                              ? 'bg-white dark:bg-gray-900 text-[#235697] shadow'
+                              : 'text-gray-600 dark:text-gray-300'
+                          }`}
+                        >
+                          {option.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-4 text-xs text-gray-500 dark:text-gray-400">
+                    <p className="font-semibold text-gray-700 dark:text-gray-200">Why this?</p>
+                    <p className="mt-2">
+                      We fetch your full name and DOB directly from {identityType.toUpperCase()} records to create your Tier 1 profile.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
+                    Enter your {identityType.toUpperCase()}
+                  </label>
+                  <OTPInput
+                    value={identityValue}
+                    onChange={setIdentityValue}
+                    length={11}
+                    containerClassName="flex-wrap justify-center gap-2"
+                    inputClassName="w-10 h-12 text-base sm:w-12 sm:h-12"
+                  />
+                </div>
+
+                {identityVerified && profile && (
+                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/70 dark:bg-emerald-900/20 p-5 space-y-4">
+                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 text-sm font-semibold">
+                      <Check size={18} /> Identity verified
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2 text-sm">
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Full name</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">{profile.fullName}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Date of birth</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">{profile.dob}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Gender</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">{profile.gender}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{identityType.toUpperCase()}</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">{maskedId}</p>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Address on file: <span className="font-medium text-gray-700 dark:text-gray-200">{profile.address}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="space-y-6">
+                {identityVerified && profile && (
+                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/70 dark:bg-emerald-900/20 p-5 space-y-4">
+                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 text-sm font-semibold">
+                      <Check size={18} /> Identity verified
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2 text-sm">
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Full name</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">{profile.fullName}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Date of birth</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">{profile.dob}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Gender</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">{profile.gender}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{identityType.toUpperCase()}</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">{maskedId}</p>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Address on file: <span className="font-medium text-gray-700 dark:text-gray-200">{profile.address}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="registerPhone" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      Phone Number
+                    </label>
+                    <PhoneInput
+                      placeholder="8000000000"
+                      value={formData.phone}
+                      onChange={(value) => setFormData({ ...formData, phone: value })}
+                      countryCode={phoneCountry}
+                      onCountryChange={setPhoneCountry}
+                      inputId="registerPhone"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="registerPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      Create password
+                    </label>
+                    <input
+                      id="registerPassword"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                      placeholder="Choose a strong password"
+                      required
+                    />
+                    <div className="mt-3">
+                      <PasswordStrengthIndicator password={formData.password} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="registerConfirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      Confirm password
+                    </label>
+                    <input
+                      id="registerConfirmPassword"
+                      type="password"
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#235697]"
+                      placeholder="Re-enter your password"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3">
               {step > 1 && (
                 <button
                   type="button"
-                  onClick={() => setStep(step - 1)}
-                  className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-4 rounded-xl font-semibold"
+                  onClick={() => {
+                    setStep((prev) => (prev === 1 ? 1 : ((prev - 1) as 1 | 2 | 3)));
+                    setError('');
+                  }}
+                  className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-4 rounded-2xl font-semibold"
                 >
                   Back
                 </button>
@@ -231,9 +435,21 @@ export default function Register() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-gradient-to-r from-[#235697] to-[#114280] text-white py-4 rounded-xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="flex-1 bg-gradient-to-r from-[#235697] to-[#114280] text-white py-4 rounded-2xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                {loading ? <LoadingSpinner size="sm" /> : step === 1 ? 'Continue' : 'Create Account'}
+                {loading ? (
+                  <LoadingSpinner size="sm" />
+                ) : step === 1 ? (
+                  'Continue'
+                ) : step === 2 ? (
+                  'Verify OTP'
+                ) : step === 3 ? (
+                  `Verify ${identityType.toUpperCase()}`
+                ) : identityVerified ? (
+                  'Create Account'
+                ) : (
+                  'Create Account'
+                )}
               </button>
             </div>
           </form>
@@ -244,7 +460,7 @@ export default function Register() {
               Sign In
             </Link>
           </p>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

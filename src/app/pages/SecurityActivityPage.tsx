@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, AlertCircle, CheckCircle, Shield, LogOut, Eye, MapPin, HelpCircle } from 'lucide-react';
 import { userAPI } from '../../services/api';
 
@@ -14,6 +14,58 @@ interface SecurityEvent {
   timestamp: string;
 }
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+const getString = (value: unknown) => (typeof value === 'string' ? value : undefined);
+
+const normalizeEvent = (row: unknown): SecurityEvent => {
+  const raw = asRecord(row);
+  const title = getString(raw.title);
+  if (title) {
+    return {
+      id: getString(raw.id) || crypto.randomUUID(),
+      type: (getString(raw.type) as SecurityEvent['type']) || 'login',
+      severity: (getString(raw.severity) as SecurityEvent['severity']) || 'low',
+      title,
+      description: getString(raw.description) || '',
+      ipAddress: getString(raw.ipAddress) || getString(raw.ip_address) || '',
+      location: getString(raw.location),
+      device: getString(raw.device) || getString(raw.userAgent),
+      timestamp: getString(raw.createdAt) || getString(raw.created_at) || getString(raw.timestamp) || new Date().toISOString(),
+    };
+  }
+  const meta = asRecord(raw.metadata ?? raw.details ?? {});
+  const rawType = getString(raw.event_type) || getString(raw.type) || 'security';
+  const mappedType =
+    rawType.includes('login') && rawType.includes('failed')
+      ? 'failed_login'
+      : rawType.includes('login')
+        ? 'login'
+        : rawType.includes('logout')
+          ? 'logout'
+          : rawType.includes('password')
+            ? 'password_change'
+            : rawType.includes('totp.enabled')
+              ? 'totp_enabled'
+              : rawType.includes('totp.disabled')
+                ? 'totp_disabled'
+                : rawType.includes('device')
+                  ? 'device_added'
+                  : 'unusual_activity';
+  return {
+    id: getString(raw.id) || crypto.randomUUID(),
+    type: mappedType,
+    severity: (getString(raw.severity) as SecurityEvent['severity']) || 'low',
+    title: rawType || 'Security event',
+    description: getString(meta.message) || getString(raw.description) || 'Security activity recorded',
+    ipAddress: getString(raw.ip_address) || getString(meta.ip) || '',
+    location: getString(meta.location),
+    device: getString(raw.user_agent) || getString(meta.device),
+    timestamp: getString(raw.created_at) || getString(raw.timestamp) || new Date().toISOString(),
+  };
+};
+
 export function SecurityActivityPage() {
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,56 +73,7 @@ export function SecurityActivityPage() {
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
   const [filter, setFilter] = useState<'all' | 'security' | 'login' | 'account'>('all');
 
-  useEffect(() => {
-    loadSecurityEvents();
-  }, []);
-
-  const normalizeEvent = (row: any): SecurityEvent => {
-    if (row?.title) {
-      return {
-        id: row.id,
-        type: row.type,
-        severity: row.severity,
-        title: row.title,
-        description: row.description,
-        ipAddress: row.ipAddress || row.ip_address || '',
-        location: row.location,
-        device: row.device || row.userAgent,
-        timestamp: row.createdAt || row.created_at || row.timestamp,
-      };
-    }
-    const meta = row?.metadata || row?.details || {};
-    const rawType = row.event_type || row.type || 'security';
-    const mappedType =
-      rawType.includes('login') && rawType.includes('failed')
-        ? 'failed_login'
-        : rawType.includes('login')
-          ? 'login'
-          : rawType.includes('logout')
-            ? 'logout'
-            : rawType.includes('password')
-              ? 'password_change'
-              : rawType.includes('totp.enabled')
-                ? 'totp_enabled'
-                : rawType.includes('totp.disabled')
-                  ? 'totp_disabled'
-                  : rawType.includes('device')
-                    ? 'device_added'
-                    : 'unusual_activity';
-    return {
-      id: row.id,
-      type: mappedType,
-      severity: row.severity || 'low',
-      title: rawType || 'Security event',
-      description: meta?.message || row.description || 'Security activity recorded',
-      ipAddress: row.ip_address || meta?.ip || '',
-      location: meta?.location,
-      device: row.user_agent || meta?.device,
-      timestamp: row.created_at || row.timestamp || new Date().toISOString(),
-    };
-  };
-
-  async function loadSecurityEvents() {
+  const loadSecurityEvents = useCallback(async () => {
     try {
       setLoading(true);
       const data = await userAPI.getSecurityEvents?.();
@@ -82,7 +85,11 @@ export function SecurityActivityPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadSecurityEvents();
+  }, [loadSecurityEvents]);
 
   const getEventIcon = (type: string) => {
     switch (type) {

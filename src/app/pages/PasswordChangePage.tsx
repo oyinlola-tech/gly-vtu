@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Eye, EyeOff, AlertCircle, CheckCircle, Lock } from 'lucide-react';
 import { authAPI } from '../../services/api';
 
@@ -12,20 +12,20 @@ export function PasswordChangeForm() {
   const [success, setSuccess] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
 
-  const passwordRequirements = [
+  const passwordRequirements = useMemo(() => [
     { min: 8, check: newPassword.length >= 8, label: 'At least 8 characters' },
     { min: 1, check: /[A-Z]/.test(newPassword), label: 'One uppercase letter' },
     { min: 1, check: /[a-z]/.test(newPassword), label: 'One lowercase letter' },
     { min: 1, check: /[0-9]/.test(newPassword), label: 'One number' },
-    { min: 1, check: /[!@#$%^&*()_+\-=[\]{};"':\\|,.<>\/?]/.test(newPassword), label: 'One special character' },
-  ];
+    { min: 1, check: /[!@#$%^&*()_+\-=[\]{};"':\\|,.<>/?]/.test(newPassword), label: 'One special character' },
+  ], [newPassword]);
 
   const meetsAllRequirements = passwordRequirements.every(req => req.check);
 
   useEffect(() => {
     const strengthCount = passwordRequirements.filter(req => req.check).length;
     setPasswordStrength((strengthCount / passwordRequirements.length) * 100);
-  }, [newPassword]);
+  }, [passwordRequirements]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

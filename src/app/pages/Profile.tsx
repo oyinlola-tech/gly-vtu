@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import { userAPI } from '../../services/api';
@@ -40,7 +41,7 @@ export default function Profile() {
       .catch(() => null);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');

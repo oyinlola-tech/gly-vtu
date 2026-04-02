@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger.js';
 
-export function globalErrorHandler(err, req, res, next) {
+export function globalErrorHandler(err, req, res, _next) {
+  void _next;
   logger.error('Unhandled error', {
     message: err?.message,
     stack: err?.stack,
@@ -13,4 +14,3 @@ export function globalErrorHandler(err, req, res, next) {
     code: 'INTERNAL_SERVER_ERROR',
   });
 }
-

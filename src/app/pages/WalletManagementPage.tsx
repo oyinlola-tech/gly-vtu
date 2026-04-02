@@ -5,18 +5,21 @@ import { userAPI } from '../../services/api';
 interface WalletInfo {
   balance: number;
   currency: string;
-  lastUpdated: string;
+  lastUpdated?: string;
   accountNumber?: string;
   bankCode?: string;
 }
 
 interface TopupOption {
   id: string;
-  provider: string;
-  minAmount: number;
-  maxAmount: number;
-  fee: number;
-  processingTime: string;
+  provider?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  fee?: number;
+  processingTime?: string;
+  name?: string;
+  amount?: number;
+  currency?: string;
 }
 
 export function WalletManagementPage() {
@@ -67,8 +70,10 @@ export function WalletManagementPage() {
         return;
       }
 
-      if (amount < option.minAmount || amount > option.maxAmount) {
-        setError(`Amount must be between ${option.minAmount} and ${option.maxAmount}`);
+      const minAmount = option.minAmount ?? option.amount ?? 0;
+      const maxAmount = option.maxAmount ?? option.amount ?? Number.MAX_SAFE_INTEGER;
+      if (amount < minAmount || amount > maxAmount) {
+        setError(`Amount must be between ${minAmount} and ${maxAmount}`);
         return;
       }
 
@@ -151,7 +156,9 @@ export function WalletManagementPage() {
             </div>
             <div>
               <p className="text-blue-200 text-xs">Last Updated</p>
-              <p className="text-sm">{new Date(wallet.lastUpdated).toLocaleTimeString()}</p>
+              <p className="text-sm">
+                {new Date(wallet.lastUpdated || new Date().toISOString()).toLocaleTimeString()}
+              </p>
             </div>
           </div>
         </div>
@@ -197,31 +204,38 @@ export function WalletManagementPage() {
         <div className="space-y-4 mb-6">
           <label className="block text-sm font-medium text-gray-700">Select Topup Method</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {topupOptions.map(option => (
-              <button
-                key={option.id}
-                onClick={() => setSelectedOption(option.id)}
-                className={`p-4 rounded-lg border-2 transition text-left ${
-                  selectedOption === option.id
-                    ? 'border-blue-600 bg-blue-50'
-                    : 'border-gray-300 bg-white hover:border-gray-400'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-semibold text-gray-900">{option.provider}</h4>
-                    <p className="text-sm text-gray-600 mt-1">
-                      NGN {option.minAmount.toLocaleString()} - {option.maxAmount.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-2">Fee: {((option.fee / 100) * 100).toFixed(1)}%</p>
-                    <p className="text-xs text-gray-500">Processing: {option.processingTime}</p>
+            {topupOptions.map((option) => {
+              const minAmount = option.minAmount ?? option.amount ?? 0;
+              const maxAmount = option.maxAmount ?? option.amount ?? 0;
+              const providerLabel = option.provider || option.name || 'Topup';
+              const feeRate = option.fee ?? 0;
+              const processingTime = option.processingTime || 'Instant';
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => setSelectedOption(option.id)}
+                  className={`p-4 rounded-lg border-2 transition text-left ${
+                    selectedOption === option.id
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-gray-300 bg-white hover:border-gray-400'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{providerLabel}</h4>
+                      <p className="text-sm text-gray-600 mt-1">
+                        NGN {minAmount.toLocaleString()} - {maxAmount.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">Fee: {feeRate.toFixed(1)}%</p>
+                      <p className="text-xs text-gray-500">Processing: {processingTime}</p>
+                    </div>
+                    {selectedOption === option.id && (
+                      <CheckCircle className="text-blue-600" size={20} />
+                    )}
                   </div>
-                  {selectedOption === option.id && (
-                    <CheckCircle className="text-blue-600" size={20} />
-                  )}
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </div>
 

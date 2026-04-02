@@ -19,11 +19,9 @@ export default function SecurityAlertBanner() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      setAlerts([]);
-      return;
-    }
+    if (!user) return;
     let mounted = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     userAPI
       .getSecurityAlerts?.()
@@ -36,7 +34,7 @@ export default function SecurityAlertBanner() {
     return () => {
       mounted = false;
     };
-  }, [user?.id]);
+  }, [user]);
 
   const activeAlerts = useMemo(
     () => alerts.filter((a) => !dismissed.has(a.id)),

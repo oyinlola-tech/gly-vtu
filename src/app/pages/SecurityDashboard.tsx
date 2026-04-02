@@ -6,11 +6,11 @@ import ActivityTimeline from '../components/ActivityTimeline';
 import Breadcrumbs from '../components/Breadcrumbs';
 
 interface SecurityStatus {
-  pinSet: boolean;
-  totpEnabled: boolean;
-  backupCodesGenerated: boolean;
-  devicesCount: number;
-  lastActivityAt: string;
+  pinSet?: boolean;
+  totpEnabled?: boolean;
+  backupCodesGenerated?: boolean;
+  devicesCount?: number;
+  lastActivityAt?: string;
   biometricEnabled?: boolean;
   securityQuestionEnabled?: boolean;
   loginFailedAttempts?: number;
@@ -30,7 +30,7 @@ interface SecurityStatus {
     ipAddress?: string;
     userAgent?: string;
   }>;
-  suspiciousActivities: Array<{
+  suspiciousActivities?: Array<{
     id: string;
     type: string;
     message: string;
@@ -76,7 +76,7 @@ export function SecurityDashboard() {
         security.pinSet ? 20 : 0,
         security.totpEnabled ? 25 : 0,
         security.backupCodesGenerated ? 15 : 0,
-        security.devicesCount <= 3 ? 20 : 10,
+        (security.devicesCount ?? 0) <= 3 ? 20 : 10,
         security.securityQuestionEnabled ? 10 : 0,
         security.biometricEnabled ? 10 : 0,
       ].reduce((a, b) => a + b, 0)

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { authAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -10,7 +11,7 @@ export default function ForgotPassword() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -18,7 +19,7 @@ export default function ForgotPassword() {
       const res = await authAPI.forgotPassword({ email });
       setMessage(res.message || 'OTP sent if account exists');
       navigate('/reset-password', { state: { email } });
-    } catch (err) {
+    } catch {
       setError('Unable to send reset OTP');
     } finally {
       setLoading(false);
@@ -30,7 +31,7 @@ export default function ForgotPassword() {
       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Forgot Password</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          We'll email an OTP so you can reset your password.
+          We&apos;ll email an OTP so you can reset your password.
         </p>
 
         {error && (

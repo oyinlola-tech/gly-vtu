@@ -26,8 +26,7 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { verifyTotp, verifyBackupCode } from '../utils/totp.js';
 import { 
   registrationSchema, 
-  loginSchema, 
-  changePasswordSchema,
+  loginSchema,
   validateRequest 
 } from '../middleware/requestValidation.js';
 import { encryptPII, encryptJson, hashEmail, hashPhone, applyUserPII } from '../utils/encryption.js';
@@ -45,7 +44,6 @@ const MIN_PASSWORD_LENGTH = 10;
 const MIN_ZXCVBN_SCORE = 3;
 const LOGIN_LOCK_MAX = Number(process.env.LOGIN_LOCK_MAX || 5);
 const LOGIN_LOCK_MINUTES = Number(process.env.LOGIN_LOCK_MINUTES || 15);
-const LOGIN_LOCK_WINDOW_MINUTES = Number(process.env.LOGIN_LOCK_WINDOW_MINUTES || 15);
 const DEVICE_ID_COOKIE = 'device_id';
 
 function validatePasswordStrength(password) {
@@ -264,7 +262,7 @@ router.post('/register', validateRequest(registrationSchema), async (req, res) =
       userAgent: req.headers['user-agent'],
     }).catch((err) => logAsyncError('Audit log failed (user.register)', err));
     return res.status(201).json({ message: 'Registered successfully' });
-  } catch (err) {
+  } catch {
     await pool.query('DELETE FROM wallets WHERE user_id = ?', [userId]);
     await pool.query('DELETE FROM users WHERE id = ?', [userId]);
     return res.status(500).json({ error: 'Account creation failed' });

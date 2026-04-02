@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import type { KeyboardEvent } from 'react';
 import { motion } from 'motion/react';
 
 interface PINInputProps {
@@ -45,7 +46,7 @@ export default function PINInput({
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+  const handleKeyDown = (index: number, e: KeyboardEvent) => {
     if (e.key === 'Backspace') {
       if (pin[index]) {
         const newPin = [...pin];

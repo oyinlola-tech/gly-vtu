@@ -149,7 +149,7 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), async (re
         .map((c) => {
           let value = String(c);
           if (/^[=+\-@]/.test(value)) value = `'${value}`;
-          return `"${value.replace(/\"/g, '""')}"`;
+          return `"${value.replace(/"/g, '""')}"`;
         })
         .join(',')
     )
@@ -307,7 +307,7 @@ router.post(
         ['approved', req.admin.sub, id]
       );
       await conn.commit();
-    } catch (err) {
+    } catch {
       await conn.rollback();
       return respond(500, { error: 'Approval failed' });
     } finally {

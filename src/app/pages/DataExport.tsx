@@ -51,7 +51,7 @@ export default function DataExport() {
               <div>
                 <h3 className="font-semibold text-green-900">Export Requested</h3>
                 <p className="text-green-800 dark:text-green-200 text-sm">
-                  You'll receive your data via email within 24 hours.
+                  You&apos;ll receive your data via email within 24 hours.
                 </p>
               </div>
             </div>

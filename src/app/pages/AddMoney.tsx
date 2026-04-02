@@ -5,7 +5,13 @@ import { userAPI } from '../../services/api';
 import BottomNav from '../components/BottomNav';
 
 export default function AddMoney() {
-  const [account, setAccount] = useState<any>(null);
+  type AccountInfo = {
+    accountNumber?: string;
+    bankName?: string;
+    accountName?: string;
+  };
+
+  const [account, setAccount] = useState<AccountInfo | null>(null);
 
   useEffect(() => {
     userAPI

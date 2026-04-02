@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft, Phone, Wifi, Tv, Zap, Droplet, Wifi as Internet, ChevronRight } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
@@ -15,7 +16,8 @@ export default function Bills() {
       .catch(() => null);
   }, []);
 
-  const iconMap: Record<string, any> = {
+  type IconType = ComponentType<{ size?: number; className?: string }>;
+  const iconMap: Record<string, IconType> = {
     airtime: Phone,
     data: Wifi,
     tv: Tv,

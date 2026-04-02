@@ -8,13 +8,28 @@ export default function Cards() {
   const virtualCardProvider = (import.meta.env.VITE_VIRTUAL_CARD_PROVIDER || '').trim();
   const virtualCardStatus = (import.meta.env.VITE_VIRTUAL_CARD_STATUS || 'coming_soon').toLowerCase();
   const virtualCardReady = virtualCardStatus === 'live';
-  const [cards, setCards] = useState<any[]>([]);
+  type Card = {
+    card_id: string;
+    status?: string;
+    brand?: string;
+    last4?: string;
+    currency?: string;
+    balance?: number;
+  };
+  type CardSettings = {
+    daily_limit?: number | null;
+    monthly_limit?: number | null;
+    merchant_locks?: string | null;
+    auto_freeze?: boolean;
+  };
+
+  const [cards, setCards] = useState<Card[]>([]);
   const [amount, setAmount] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<any | null>(null);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [settings, setSettings] = useState({
     dailyLimit: '',
     monthlyLimit: '',
@@ -47,14 +62,14 @@ export default function Cards() {
       setAmount('');
       setPin('');
       await loadCards();
-    } catch (err) {
+    } catch {
       setError('Unable to create card. Complete KYC and ensure enough balance.');
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleFreeze = async (card: any) => {
+  const toggleFreeze = async (card: Card) => {
     try {
       if (card.status === 'frozen') {
         await cardsAPI.unfreeze(card.card_id);
@@ -67,9 +82,9 @@ export default function Cards() {
     }
   };
 
-  const openSettings = async (card: any) => {
+  const openSettings = async (card: Card) => {
     try {
-      const data = await cardsAPI.getSettings(card.card_id);
+      const data = (await cardsAPI.getSettings(card.card_id)) as CardSettings;
       setSettings({
         dailyLimit: data?.daily_limit ?? '',
         monthlyLimit: data?.monthly_limit ?? '',

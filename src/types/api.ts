@@ -27,6 +27,10 @@ export type Transaction = {
   createdAt?: string;
   completed_at?: string;
   completedAt?: string;
+  failureReason?: string;
+  metadata?: unknown;
+  full_name?: string;
+  vtpass_status?: string;
   provider?: string;
   account?: string;
   recipient_name?: string;
@@ -44,6 +48,9 @@ export type WalletInfo = {
   lastUpdated?: string;
   accountNumber?: string;
   bankCode?: string;
+  updated_at?: string;
+  account_number?: string;
+  bank_code?: string;
 };
 
 export type TopupOption = {
@@ -59,7 +66,7 @@ export type TopupOption = {
 };
 
 export type SecurityStatus = {
-  pinSet: boolean;
+  pinSet?: boolean;
   totpEnabled?: boolean;
   twoFactorEnabled?: boolean;
   backupCodesGenerated?: boolean;
@@ -154,4 +161,16 @@ export type SendMoneyResponse = {
   id: string;
   status: string;
   message?: string;
+};
+
+export type RecipientLookupResponse = {
+  found: boolean;
+  recipient?: {
+    id: string;
+    fullName?: string;
+    emailMasked?: string;
+    phoneMasked?: string;
+    hasFlutterwaveAccount?: boolean;
+    bankName?: string;
+  };
 };

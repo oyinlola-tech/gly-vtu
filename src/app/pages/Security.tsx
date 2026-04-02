@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import { userAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import type { SecurityStatus } from '../../types/api';
 
 export default function Security() {
-  const [security, setSecurity] = useState<any>(null);
+  const [security, setSecurity] = useState<SecurityStatus | null>(null);
   const [questions, setQuestions] = useState<string[]>([]);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
@@ -33,7 +35,7 @@ export default function Security() {
     }
   };
 
-  const handlePinSubmit = async (e: React.FormEvent) => {
+  const handlePinSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
@@ -46,14 +48,14 @@ export default function Security() {
       setMessage('PIN updated');
       setPinForm({ currentPin: '', newPin: '' });
       await loadSecurity();
-    } catch (err) {
+    } catch {
       setMessage('Unable to update PIN');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuestionSubmit = async (e: React.FormEvent) => {
+  const handleQuestionSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');

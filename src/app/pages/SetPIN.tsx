@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { userAPI } from '../../services/api';
@@ -51,13 +52,13 @@ export default function SetPIN() {
           setUser({ ...user, hasPin: true });
         }
         navigate('/dashboard');
-      } catch (err) {
+      } catch {
         setError('Failed to set PIN');
       }
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+  const handleKeyDown = (index: number, e: KeyboardEvent) => {
     if (e.key === 'Backspace') {
       if (currentPin[index]) {
         const newPin = [...currentPin];
@@ -121,7 +122,7 @@ export default function SetPIN() {
 
         <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6">
           <p className="text-white/80 text-sm text-center">
-            💡 This PIN will be used to authorize all your transactions. Keep it secure and don't share it with anyone.
+            💡 This PIN will be used to authorize all your transactions. Keep it secure and don&apos;t share it with anyone.
           </p>
         </div>
 

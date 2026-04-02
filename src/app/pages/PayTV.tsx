@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import { billsAPI } from '../../services/api';
@@ -48,7 +49,7 @@ export default function PayTV() {
       .catch(() => setVariations([]));
   }, [selectedProvider]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (paymentMethod === 'card') {
       handleCardPayment();
@@ -70,7 +71,7 @@ export default function PayTV() {
       if (response?.checkoutUrl) {
         window.location.href = response.checkoutUrl;
       }
-    } catch (err) {
+    } catch {
       setError('Card payment failed');
     } finally {
       setLoading(false);
@@ -273,7 +274,7 @@ export default function PayTV() {
                   recipientBank: 'TV Subscription',
                 },
               });
-            } catch (err) {
+            } catch {
               setError('Transaction failed');
             } finally {
               setLoading(false);

@@ -1,31 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft, Download, ReceiptText } from 'lucide-react';
 import { transactionsAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { toast } from 'sonner';
 import Breadcrumbs from '../components/Breadcrumbs';
+import type { Transaction } from '../../types/api';
 
 export default function TransactionReceipt() {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
-  const [transaction, setTransaction] = useState<any>(null);
+  const [transaction, setTransaction] = useState<Transaction | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadTransaction = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    transactionsAPI
-      .getById(id)
-      .then((data) => {
-        setTransaction(data);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err?.message || 'Failed to load transaction');
-      })
-      .finally(() => setLoading(false));
+    try {
+      const data = await transactionsAPI.getById(id);
+      setTransaction(data);
+      setError(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load transaction';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    loadTransaction();
+  }, [loadTransaction]);
 
   const handleDownload = async () => {
     if (!id) return;
@@ -37,8 +42,9 @@ export default function TransactionReceipt() {
       a.download = `transaction-receipt-${id}.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to download receipt');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to download receipt';
+      toast.error(message);
     }
   };
 

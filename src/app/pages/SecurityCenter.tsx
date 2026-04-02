@@ -19,14 +19,37 @@ import DeviceFingerprint from '../components/DeviceFingerprint';
 import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function SecurityCenter() {
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
+  type SessionRow = {
+    id: string;
+    device_id?: string;
+    label?: string;
+    trusted?: boolean;
+    last_seen?: string;
+    ip_address?: string;
+    user_agent?: string;
+  };
+
+  type SecurityEventRow = {
+    id: string;
+    event_type?: string;
+    severity?: string;
+    created_at?: string;
+    ip_address?: string;
+  };
+
+  type SecurityStatusState = {
+    totpEnabled?: boolean;
+    pinSet?: boolean;
+  };
+
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [events, setEvents] = useState<SecurityEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '' });
   const [message, setMessage] = useState('');
   const [tab, setTab] = useState<'devices' | 'security' | 'activity'>('devices');
-  const [securityStatus, setSecurityStatus] = useState<any>(null);
+  const [securityStatus, setSecurityStatus] = useState<SecurityStatusState | null>(null);
   const [disableToken, setDisableToken] = useState('');
   const [disableBackupCode, setDisableBackupCode] = useState('');
 
@@ -111,7 +134,7 @@ export default function SecurityCenter() {
       a.download = `security-events-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err) {
+    } catch {
       setMessage('Unable to export security log.');
     }
   };
@@ -393,7 +416,7 @@ export default function SecurityCenter() {
                           token: disableToken || undefined,
                           backupCode: disableBackupCode || undefined,
                         });
-                        setSecurityStatus((prev: any) => ({ ...prev, totpEnabled: false }));
+                        setSecurityStatus((prev) => (prev ? { ...prev, totpEnabled: false } : { totpEnabled: false }));
                         setDisableToken('');
                         setDisableBackupCode('');
                         setMessage('2FA disabled.');

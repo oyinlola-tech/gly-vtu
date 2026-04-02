@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import { billsAPI } from '../../services/api';
@@ -81,7 +82,7 @@ export default function BuyData() {
     if (formData.network !== detected) {
       setFormData((prev) => ({ ...prev, network: detected }));
     }
-  }, [formData.phone, manualNetwork]);
+  }, [formData.phone, formData.network, manualNetwork]);
 
   const providerName =
     providers.find((p) => p.code === formData.network)?.name || formData.network.toUpperCase();
@@ -90,12 +91,12 @@ export default function BuyData() {
     try {
       const response = await billsAPI.getProviders('data');
       setProviders(response || []);
-    } catch (err) {
+    } catch {
       console.error('Failed to load providers');
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (formData.paymentMethod === 'card') {
       handleCardPayment();
@@ -116,7 +117,7 @@ export default function BuyData() {
       if (response?.checkoutUrl) {
         window.location.href = response.checkoutUrl;
       }
-    } catch (err) {
+    } catch {
       setError('Card payment failed');
     } finally {
       setLoading(false);
@@ -152,7 +153,7 @@ export default function BuyData() {
           recipientBank: `${formData.network} Data`,
         },
       });
-    } catch (err) {
+    } catch {
       setError('Transaction failed');
     } finally {
       setLoading(false);

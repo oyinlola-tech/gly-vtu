@@ -37,7 +37,14 @@ function sanitizeString(value, maxLength = 255) {
   const str = String(value).trim();
   if (!str) return null;
   // Remove control characters and limit length
-  const sanitized = str.replace(/[\x00-\x1F\x7F]/g, '').slice(0, maxLength);
+  const sanitized = str
+    .split('')
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    })
+    .join('')
+    .slice(0, maxLength);
   return sanitized || null;
 }
 
@@ -127,17 +134,6 @@ function validateGender(value) {
   }
   logger.warn('KYC: Invalid gender value', { value: normalized });
   return null;
-}
-
-function validateConfidenceScore(value) {
-  if (value === null || value === undefined) return 0;
-  const num = Number(value);
-  if (isNaN(num)) return 0;
-  if (num < 0 || num > 100) {
-    logger.warn('KYC: Invalid confidence score', { value: num });
-    return 0;
-  }
-  return Math.round(num);
 }
 
 function normalizeName(name) {
