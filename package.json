@@ -118,5 +118,8 @@
     "overrides": {
       "vite": "8.0.3"
     }
+  },
+  "overrides": {
+    "cookie": "^0.7.0"
   }
 }
