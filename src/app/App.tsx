@@ -71,6 +71,11 @@ const Offline = lazy(() => import('./pages/Offline'));
 // Admin Pages (code-split)
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
+const AdminForgotPassword = lazy(() => import('./pages/admin/AdminForgotPassword'));
+const AdminResetPassword = lazy(() => import('./pages/admin/AdminResetPassword'));
+const AdminManagement = lazy(() => import('./pages/admin/AdminManagement'));
+const AdminNotifications = lazy(() => import('./pages/admin/AdminNotifications'));
+const AdminNotificationHistory = lazy(() => import('./pages/admin/AdminNotificationHistory'));
 const AdminTransactions = lazy(() => import('./pages/admin/AdminTransactions'));
 const AdminReview = lazy(() => import('./pages/admin/AdminReview'));
 const AdminAuditLogs = lazy(() => import('./pages/admin/AdminAuditLogs'));
@@ -460,10 +465,34 @@ function AppContent() {
             }
           />
           <Route
+            path="/admin/admins"
+            element={
+              <AdminRoute>
+                <AdminManagement />
+              </AdminRoute>
+            }
+          />
+          <Route
             path="/admin/transactions"
             element={
               <AdminRoute>
                 <AdminTransactions />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/notifications"
+            element={
+              <AdminRoute>
+                <AdminNotifications />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/notifications/history"
+            element={
+              <AdminRoute>
+                <AdminNotificationHistory />
               </AdminRoute>
             }
           />
@@ -508,6 +537,8 @@ function AppContent() {
             }
           />
           <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/forgot-password" element={<AdminForgotPassword />} />
+          <Route path="/admin/reset-password" element={<AdminResetPassword />} />
 
           {/* Catch all */}
             <Route path="*" element={<Error404 />} />

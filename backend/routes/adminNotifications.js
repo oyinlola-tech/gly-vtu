@@ -5,7 +5,7 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { emitToUser, emitToAllUsers } from '../utils/realtime.js';
 import { logAudit } from '../utils/audit.js';
-import { validateRequest, adminNotificationSchema } from '../middleware/requestValidation.js';
+import { validateRequest, validateQuery, adminNotificationSchema, adminNotificationHistoryQuerySchema } from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -20,6 +20,10 @@ router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest
     await pool.query(
       'INSERT INTO notifications (id, user_id, title, body, type, data, force) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [id, userId, title, body, type, data ? JSON.stringify(data) : null, force ? 1 : 0]
+    );
+    await pool.query(
+      'INSERT INTO admin_notifications (id, title, body, type, target_user_id, target_scope, force, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [crypto.randomUUID(), title, body, type, userId, 'single', force ? 1 : 0, req.admin.sub]
     );
     emitToUser(userId, {
       type: 'notification.new',
@@ -54,6 +58,10 @@ router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest
         createdAt: new Date().toISOString(),
       },
     });
+    await pool.query(
+      'INSERT INTO admin_notifications (id, title, body, type, target_user_id, target_scope, force, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [crypto.randomUUID(), title, body, type, null, 'broadcast', force ? 1 : 0, req.admin.sub]
+    );
   }
 
   logAudit({
@@ -67,6 +75,21 @@ router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest
   }).catch(() => null);
 
   return res.status(201).json({ message: 'Notification sent' });
+});
+
+router.get('/history', requireAdmin, requirePermission('notify:send'), validateQuery(adminNotificationHistoryQuerySchema), async (req, res) => {
+  const limit = Number(req.validatedQuery?.limit || 50);
+  const offset = Number(req.validatedQuery?.offset || 0);
+  const [rows] = await pool.query(
+    `SELECT n.id, n.title, n.body, n.type, n.target_user_id, n.target_scope, n.force, n.created_by, n.created_at,
+            a.name AS created_by_name, a.email AS created_by_email
+     FROM admin_notifications n
+     LEFT JOIN admin_users a ON a.id = n.created_by
+     ORDER BY n.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [limit, offset]
+  );
+  return res.json(rows);
 });
 
 export default router;

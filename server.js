@@ -375,6 +375,8 @@ const adminPages = [
   'forgot-password',
   'reset-password',
   'dashboard',
+  'notifications',
+  'notifications/history',
   'finance',
   'users',
   'admins',

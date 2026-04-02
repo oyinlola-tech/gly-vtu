@@ -6,7 +6,6 @@ import {
   TrendingUp,
   Activity,
   LogOut,
-  BellRing,
   MessageCircle,
 } from 'lucide-react';
 import { adminAPI } from '../../../services/api';
@@ -35,18 +34,18 @@ export default function AdminDashboard() {
   };
 
   type AdminConversation = {
-    id: string | number;
+    id: string;
     full_name?: string;
     email?: string;
-    user_id?: string | number;
+    user_id?: string;
   };
 
   type AdminMessage = {
-    id: string | number;
+    id: string;
     body: string;
     sender_type?: 'user' | 'admin';
     senderType?: 'user' | 'admin';
-    conversationId?: string | number;
+    conversationId?: string;
   };
 
   type VtpassEvent = {
@@ -64,7 +63,8 @@ export default function AdminDashboard() {
   };
 
   const navigate = useNavigate();
-  const { logout } = useAdminAuth();
+  const { admin, logout } = useAdminAuth();
+  const isSuperAdmin = admin?.role === 'superadmin';
   const [stats, setStats] = useState({
     walletBalance: 0,
     users: 0,
@@ -81,16 +81,11 @@ export default function AdminDashboard() {
   const [selectedConversation, setSelectedConversation] = useState<AdminConversation | null>(null);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
   const [reply, setReply] = useState('');
-  const [notification, setNotification] = useState({
-    title: '',
-    body: '',
-    force: true,
-  });
   const [vtpassEvents, setVtpassEvents] = useState<VtpassEvent[]>([]);
   const [vtpassStatus, setVtpassStatus] = useState('all');
   const [vtpassLoading, setVtpassLoading] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const selectedConversationIdRef = useRef<string | number | null>(null);
+  const selectedConversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversation?.id ?? null;
@@ -108,7 +103,8 @@ export default function AdminDashboard() {
   }, []);
 
   const connectWs = useCallback(() => {
-    const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
+    const env = (import.meta as unknown as { env?: { VITE_WS_URL?: string } }).env;
+    const wsUrl = env?.VITE_WS_URL || `${window.location.origin.replace('http', 'ws')}/ws`;
     const ws = new WebSocket(`${wsUrl}?role=admin`);
     wsRef.current = ws;
     ws.onmessage = (event) => {
@@ -233,19 +229,6 @@ export default function AdminDashboard() {
     [pricing]
   );
 
-  const sendNotification = async () => {
-    if (!notification.title || !notification.body) return;
-    try {
-      await adminAPI.sendNotification({
-        title: notification.title,
-        body: notification.body,
-        force: notification.force,
-      });
-      setNotification({ title: '', body: '', force: true });
-    } catch {
-      // ignore
-    }
-  };
 
   const sendReply = async () => {
     if (!reply.trim() || !selectedConversation?.id) return;
@@ -264,7 +247,7 @@ export default function AdminDashboard() {
     } else {
       await adminAPI.sendConversationMessage(selectedConversation.id, text);
       const data = await adminAPI.getConversationMessages(selectedConversation.id);
-      setMessages(data || []);
+      setMessages((data || []) as AdminMessage[]);
     }
   };
 
@@ -365,6 +348,15 @@ export default function AdminDashboard() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {isSuperAdmin && (
+            <Link
+              to="/admin/admins"
+              className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
+            >
+              Admin Management
+              <p className="text-white/70 text-xs mt-1">Create and manage admins</p>
+            </Link>
+          )}
           <Link
             to="/admin/review"
             className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
@@ -373,33 +365,48 @@ export default function AdminDashboard() {
             <p className="text-white/70 text-xs mt-1">Held topups and adjustments</p>
           </Link>
           <Link
+            to="/admin/notifications"
+            className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
+          >
+            Notifications
+            <p className="text-white/70 text-xs mt-1">Send push messages</p>
+          </Link>
+          {isSuperAdmin && (
+            <Link
             to="/admin/audit"
             className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
           >
             Audit Logs
             <p className="text-white/70 text-xs mt-1">Monitor admin activity</p>
-          </Link>
-          <Link
+            </Link>
+          )}
+          {isSuperAdmin && (
+            <Link
             to="/admin/security-events"
             className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
           >
             Security Events
             <p className="text-white/70 text-xs mt-1">Threat monitoring</p>
-          </Link>
-          <Link
+            </Link>
+          )}
+          {isSuperAdmin && (
+            <Link
             to="/admin/anomalies"
             className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
           >
             Anomaly Detection
             <p className="text-white/70 text-xs mt-1">Risky activity</p>
-          </Link>
-          <Link
+            </Link>
+          )}
+          {isSuperAdmin && (
+            <Link
             to="/admin/compliance"
             className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 text-white text-sm font-semibold"
           >
             Compliance & KYC
             <p className="text-white/70 text-xs mt-1">Verification queue</p>
-          </Link>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -416,11 +423,16 @@ export default function AdminDashboard() {
               <p className="text-sm text-gray-500 dark:text-gray-400">No transactions yet.</p>
             ) : (
               <div className="space-y-3">
-                {recentTransactions.map((txn) => (
+                {recentTransactions.map((txn) => {
+                  const txnReference = txn.reference ?? '';
+                  const metaString: string = txn.metadata
+                    ? JSON.stringify(getTxnMeta(txn.metadata), null, 2) ?? ''
+                    : '';
+                  return (
                   <div key={txn.id} className="border border-gray-200 dark:border-gray-800 rounded-xl p-3 text-sm">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">{txn.reference}</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">{txnReference || '—'}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{txn.type}</p>
                       </div>
                       <div className="text-right">
@@ -440,11 +452,11 @@ export default function AdminDashboard() {
                       >
                         {expandedTx === txn.id ? 'Hide details' : 'View details'}
                       </button>
-                      {txn.reference?.startsWith('BILL-') && (
+                      {txnReference.startsWith('BILL-') && (
                         <button
                           onClick={() =>
                             adminAPI
-                              .requeryVtpass(txn.reference.replace('BILL-', ''))
+                              .requeryVtpass(txnReference.replace('BILL-', ''))
                               .then(loadDashboard)
                           }
                           className="text-xs text-white bg-[#235697] px-2 py-1 rounded-lg"
@@ -461,13 +473,14 @@ export default function AdminDashboard() {
                         )}
                         {txn.metadata && (
                           <pre className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg overflow-x-auto">
-                            {JSON.stringify(getTxnMeta(txn.metadata), null, 2)}
+                            {metaString}
                           </pre>
                         )}
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -485,7 +498,7 @@ export default function AdminDashboard() {
                       <p className="text-xs text-gray-500 dark:text-gray-400">{usr.email}</p>
                     </div>
                     <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(usr.created_at).toLocaleDateString()}
+                      {usr.created_at ? new Date(usr.created_at).toLocaleDateString() : '—'}
                     </span>
                   </div>
                 ))}
@@ -494,54 +507,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <BellRing size={18} className="text-[#235697]" />
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Force Notification</h2>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="forceNotificationTitle" className="text-xs text-gray-500 dark:text-gray-400">
-                  Title
-                </label>
-                <input
-                  id="forceNotificationTitle"
-                  value={notification.title}
-                  onChange={(e) => setNotification((prev) => ({ ...prev, title: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
-                  placeholder="Title"
-                />
-              </div>
-              <div>
-                <label htmlFor="forceNotificationBody" className="text-xs text-gray-500 dark:text-gray-400">
-                  Message
-                </label>
-                <textarea
-                  id="forceNotificationBody"
-                  value={notification.body}
-                  onChange={(e) => setNotification((prev) => ({ ...prev, body: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm h-24"
-                  placeholder="Message"
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={notification.force}
-                  onChange={(e) => setNotification((prev) => ({ ...prev, force: e.target.checked }))}
-                />
-                Force push notification
-              </label>
-              <button
-                onClick={sendNotification}
-                className="w-full bg-[#235697] text-white py-2 rounded-lg text-sm font-semibold hover:opacity-90"
-              >
-                Send Notification
-              </button>
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6 lg:col-span-2">
             <div className="flex items-center gap-2 mb-4">
               <MessageCircle size={18} className="text-[#235697]" />
@@ -634,12 +600,14 @@ export default function AdminDashboard() {
                     <input
                       value={row.name}
                       onChange={(e) => handleProviderChange(row.id, 'name', e.target.value)}
+                      disabled={!isSuperAdmin}
                       className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-semibold"
                       placeholder="Provider name"
                     />
                     <input
                       value={row.code}
                       onChange={(e) => handleProviderChange(row.id, 'code', e.target.value)}
+                      disabled={!isSuperAdmin}
                       className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
                       placeholder="Provider code"
                     />
@@ -651,6 +619,7 @@ export default function AdminDashboard() {
                       id={`provider-logo-${row.id}`}
                       value={row.logo_url || ''}
                       onChange={(e) => handleProviderChange(row.id, 'logo_url', e.target.value)}
+                      disabled={!isSuperAdmin}
                       className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
                       placeholder="https://..."
                     />
@@ -661,13 +630,14 @@ export default function AdminDashboard() {
                         type="checkbox"
                         checked={!!row.active}
                         onChange={(e) => handleProviderChange(row.id, 'active', e.target.checked)}
+                        disabled={!isSuperAdmin}
                       />
                       Active
                     </label>
                     <button
                       onClick={() => saveProvider(row)}
                       className="ml-auto bg-[#235697] text-white px-4 py-2 rounded-lg text-xs font-semibold"
-                      disabled={providerSaving === row.id}
+                      disabled={!isSuperAdmin || providerSaving === row.id}
                     >
                       {providerSaving === row.id ? 'Saving...' : 'Save'}
                     </button>
@@ -707,6 +677,7 @@ export default function AdminDashboard() {
                       onChange={(e) =>
                         handlePricingChange(row.id, 'base_fee', e.target.value)
                       }
+                      disabled={!isSuperAdmin}
                       className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
                     />
                   </div>
@@ -718,6 +689,7 @@ export default function AdminDashboard() {
                       onChange={(e) =>
                         handlePricingChange(row.id, 'markup_type', e.target.value)
                       }
+                      disabled={!isSuperAdmin}
                       className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
                     >
                       <option value="flat">Flat</option>
@@ -733,6 +705,7 @@ export default function AdminDashboard() {
                       onChange={(e) =>
                         handlePricingChange(row.id, 'markup_value', e.target.value)
                       }
+                      disabled={!isSuperAdmin}
                       className="w-full px-3 py-2 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
                     />
                   </div>
@@ -744,13 +717,14 @@ export default function AdminDashboard() {
                         onChange={(e) =>
                           handlePricingChange(row.id, 'active', e.target.checked)
                         }
+                        disabled={!isSuperAdmin}
                       />
                       Active
                     </label>
                     <button
                       onClick={() => savePricing(row)}
                       className="ml-auto bg-[#235697] text-white px-4 py-2 rounded-lg text-xs font-semibold"
-                      disabled={pricingSaving === row.id}
+                      disabled={!isSuperAdmin || pricingSaving === row.id}
                     >
                       {pricingSaving === row.id ? 'Saving...' : 'Save'}
                     </button>

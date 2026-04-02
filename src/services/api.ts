@@ -55,8 +55,9 @@ type AdminProfile = {
   role: string;
 };
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/app/api';
-const ADMIN_API_BASE_URL = (import.meta as any).env?.VITE_ADMIN_API_URL || '/app/admin/api';
+const env = (import.meta as unknown as { env?: { VITE_API_URL?: string; VITE_ADMIN_API_URL?: string } }).env;
+const API_BASE_URL = env?.VITE_API_URL || '/app/api';
+const ADMIN_API_BASE_URL = env?.VITE_ADMIN_API_URL || '/app/admin/api';
 
 let csrfToken: string | null = null;
 let deviceIdCache: string | null = null;
@@ -862,6 +863,24 @@ export const adminAPI = {
     // CSRF token cleared server-side
   },
 
+  forgotPassword: async (data: { email: string }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/auth/forgot-password',
+      { method: 'POST', body: JSON.stringify(data) },
+      { auth: false, admin: true }
+    );
+  },
+
+  resetPassword: async (data: { email: string; code: string; newPassword: string }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/auth/reset-password',
+      { method: 'POST', body: JSON.stringify(data) },
+      { auth: false, admin: true }
+    );
+  },
+
   getFinanceOverview: async () => {
     return request<unknown>(ADMIN_API_BASE_URL, '/finance/overview', {}, { admin: true });
   },
@@ -1094,6 +1113,76 @@ export const adminAPI = {
       ADMIN_API_BASE_URL,
       '/flutterwave/virtual-accounts/requery',
       { method: 'POST', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  getAdmins: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/manage', {}, { admin: true });
+  },
+
+  getAdminRoles: async () => {
+    return request<string[]>(ADMIN_API_BASE_URL, '/manage/roles', {}, { admin: true });
+  },
+
+  getRoleMatrix: async () => {
+    return request<Record<string, string[]>>(ADMIN_API_BASE_URL, '/manage/role-matrix', {}, { admin: true });
+  },
+
+  createAdmin: async (payload: { name: string; email: string; password: string; role: string }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/manage',
+      { method: 'POST', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  updateAdminRole: async (id: string, role: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/manage/${id}/role`,
+      { method: 'PUT', body: JSON.stringify({ role }) },
+      { admin: true }
+    );
+  },
+
+  deleteAdmin: async (id: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/manage/${id}`,
+      { method: 'DELETE' },
+      { admin: true }
+    );
+  },
+
+  disableAdmin: async (id: string, reason?: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/manage/${id}/disable`,
+      { method: 'PATCH', body: JSON.stringify({ reason }) },
+      { admin: true }
+    );
+  },
+
+  enableAdmin: async (id: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/manage/${id}/enable`,
+      { method: 'PATCH' },
+      { admin: true }
+    );
+  },
+
+  getNotificationHistory: async (params?: { limit?: number; offset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    const query = search.toString();
+    return request<unknown[]>(
+      ADMIN_API_BASE_URL,
+      `/notifications/history${query ? `?${query}` : ''}`,
+      {},
       { admin: true }
     );
   },

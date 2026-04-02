@@ -23,7 +23,7 @@ router.get('/', requireAdmin, requirePermission('admin:manage'), async (req, res
     #swagger.responses[200] = { description: 'Admins', schema: { type: 'array', items: { $ref: '#/definitions/AdminUser' } } }
   */
   const [rows] = await pool.query(
-    'SELECT id, name, email, role, created_at FROM admin_users ORDER BY created_at DESC'
+    'SELECT id, name, email, role, created_at, disabled_at, disabled_by, disabled_reason FROM admin_users ORDER BY created_at DESC'
   );
   return res.json(rows);
 });
@@ -36,6 +36,15 @@ router.get('/roles', requireAdmin, requirePermission('admin:manage'), async (req
     #swagger.responses[200] = { description: 'Roles', schema: { type: 'array', items: { type: 'string' } } }
   */
   return res.json(Object.keys(rolePermissions));
+});
+
+router.get('/role-matrix', requireAdmin, requirePermission('admin:manage'), async (req, res) => {
+  /*
+    #swagger.tags = ['Admin Management']
+    #swagger.summary = 'Role permissions matrix'
+    #swagger.security = [{ "bearerAuth": [] }]
+  */
+  return res.json(rolePermissions);
 });
 
 router.post('/', requireAdmin, requirePermission('admin:manage'), validateRequest(adminManagementCreateSchema), async (req, res) => {
@@ -107,6 +116,122 @@ router.put('/:id/role', requireAdmin, requirePermission('admin:manage'), validat
     metadata: { role },
   }).catch((err) => logger.error('Audit log failed (admin.role.update)', { error: logger.format(err) }));
   return res.json({ message: 'Role updated' });
+});
+
+router.patch('/:id/disable', requireAdmin, requirePermission('admin:manage'), validateParams(adminAdjustmentIdParamSchema), async (req, res) => {
+  /*
+    #swagger.tags = ['Admin Management']
+    #swagger.summary = 'Disable admin user'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.responses[200] = { description: 'Disabled', schema: { $ref: '#/definitions/MessageResponse' } }
+  */
+  const adminId = req.validatedParams.id;
+  if (adminId === req.admin.sub) {
+    return res.status(400).json({ error: 'You cannot disable your own account' });
+  }
+
+  const [rows] = await pool.query('SELECT id, role, disabled_at FROM admin_users WHERE id = ? LIMIT 1', [adminId]);
+  if (!rows.length) return res.status(404).json({ error: 'Admin not found' });
+  if (rows[0].disabled_at) return res.status(409).json({ error: 'Admin already disabled' });
+
+  if (rows[0].role === 'superadmin') {
+    const [[countRow]] = await pool.query(
+      'SELECT COUNT(*) AS count FROM admin_users WHERE role = ? AND disabled_at IS NULL',
+      ['superadmin']
+    );
+    if (Number(countRow?.count || 0) <= 1) {
+      return res.status(409).json({ error: 'At least one active super admin must remain' });
+    }
+  }
+
+  await pool.query(
+    'UPDATE admin_users SET disabled_at = NOW(), disabled_by = ?, disabled_reason = ? WHERE id = ?',
+    [req.admin.sub, req.body?.reason || null, adminId]
+  );
+  await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE admin_id = ?', [adminId]);
+
+  logAudit({
+    actorType: 'admin',
+    actorId: req.admin.sub,
+    action: 'admin.disable',
+    entityType: 'admin',
+    entityId: adminId,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Audit log failed (admin.disable)', { error: logger.format(err) }));
+
+  return res.json({ message: 'Admin disabled' });
+});
+
+router.patch('/:id/enable', requireAdmin, requirePermission('admin:manage'), validateParams(adminAdjustmentIdParamSchema), async (req, res) => {
+  /*
+    #swagger.tags = ['Admin Management']
+    #swagger.summary = 'Enable admin user'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.responses[200] = { description: 'Enabled', schema: { $ref: '#/definitions/MessageResponse' } }
+  */
+  const adminId = req.validatedParams.id;
+  const [rows] = await pool.query('SELECT id, disabled_at FROM admin_users WHERE id = ? LIMIT 1', [adminId]);
+  if (!rows.length) return res.status(404).json({ error: 'Admin not found' });
+  if (!rows[0].disabled_at) return res.status(409).json({ error: 'Admin already active' });
+
+  await pool.query(
+    'UPDATE admin_users SET disabled_at = NULL, disabled_by = NULL, disabled_reason = NULL WHERE id = ?',
+    [adminId]
+  );
+
+  logAudit({
+    actorType: 'admin',
+    actorId: req.admin.sub,
+    action: 'admin.enable',
+    entityType: 'admin',
+    entityId: adminId,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Audit log failed (admin.enable)', { error: logger.format(err) }));
+
+  return res.json({ message: 'Admin enabled' });
+});
+
+router.delete('/:id', requireAdmin, requirePermission('admin:manage'), validateParams(adminAdjustmentIdParamSchema), async (req, res) => {
+  /*
+    #swagger.tags = ['Admin Management']
+    #swagger.summary = 'Delete admin user'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.responses[200] = { description: 'Deleted', schema: { $ref: '#/definitions/MessageResponse' } }
+  */
+  const adminId = req.validatedParams.id;
+  if (adminId === req.admin.sub) {
+    return res.status(400).json({ error: 'You cannot delete your own account' });
+  }
+
+  const [rows] = await pool.query('SELECT id, role FROM admin_users WHERE id = ? LIMIT 1', [adminId]);
+  if (!rows.length) return res.status(404).json({ error: 'Admin not found' });
+
+  if (rows[0].role === 'superadmin') {
+    const [[countRow]] = await pool.query(
+      'SELECT COUNT(*) AS count FROM admin_users WHERE role = ?',
+      ['superadmin']
+    );
+    if (Number(countRow?.count || 0) <= 1) {
+      return res.status(409).json({ error: 'At least one super admin must remain' });
+    }
+  }
+
+  await pool.query('DELETE FROM admin_users WHERE id = ?', [adminId]);
+  await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE admin_id = ?', [adminId]);
+
+  logAudit({
+    actorType: 'admin',
+    actorId: req.admin.sub,
+    action: 'admin.delete',
+    entityType: 'admin',
+    entityId: adminId,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Audit log failed (admin.delete)', { error: logger.format(err) }));
+
+  return res.json({ message: 'Admin deleted' });
 });
 
 export default router;

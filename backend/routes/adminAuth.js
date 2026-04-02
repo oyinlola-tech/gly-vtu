@@ -132,6 +132,9 @@ router.post('/login', adminLoginPerEmailLimiter, adminLoginLimiter, otpLimiter, 
   if (!rows.length) return res.status(401).json({ error: 'Invalid credentials' });
 
   const admin = rows[0];
+  if (admin.disabled_at) {
+    return res.status(403).json({ error: 'Account disabled. Contact super admin.' });
+  }
   if (admin.login_locked_until && new Date(admin.login_locked_until) > new Date()) {
     return res.status(403).json({ error: 'Account temporarily locked. Try later.' });
   }
@@ -448,10 +451,11 @@ router.get('/me', requireAdmin, async (req, res) => {
     }
   */
   const [rows] = await pool.query(
-    'SELECT id, name, email, role FROM admin_users WHERE id = ?',
+    'SELECT id, name, email, role, disabled_at FROM admin_users WHERE id = ?',
     [req.admin.sub]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
+  if (rows[0].disabled_at) return res.status(403).json({ error: 'Account disabled' });
   return res.json(rows[0]);
 });
 

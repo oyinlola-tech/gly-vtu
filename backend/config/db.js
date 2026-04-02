@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import argon2 from 'argon2';
 import { ensureAdminTotpColumns } from '../docs/migrations/2026-03-30_admin_totp.js';
 import { ensureAccountLockoutColumns } from '../docs/migrations/2026-04-01_account_lockout.js';
+import { ensureAdminDisableColumns } from '../docs/migrations/2026-04-02_admin_disable.js';
 import {
   ensurePiiEncryptionColumns,
   ensurePiiEncryptionIndexes,
@@ -167,7 +168,24 @@ export async function initDatabase() {
         email VARCHAR(120) NOT NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
         role VARCHAR(40) NOT NULL,
+        disabled_at TIMESTAMP NULL,
+        disabled_by CHAR(36) NULL,
+        disabled_reason VARCHAR(255) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS admin_notifications (
+        id CHAR(36) PRIMARY KEY,
+        title VARCHAR(200) NOT NULL,
+        body TEXT NOT NULL,
+        type ENUM('info','warning','success','error') NOT NULL DEFAULT 'info',
+        target_user_id CHAR(36) NULL,
+        target_scope ENUM('broadcast','single') NOT NULL DEFAULT 'broadcast',
+        force TINYINT NOT NULL DEFAULT 0,
+        created_by CHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_admin_notify_created (created_at),
+        INDEX idx_admin_notify_target (target_user_id)
       );
 
       CREATE TABLE IF NOT EXISTS audit_logs (
@@ -530,10 +548,12 @@ export async function initDatabase() {
     await ensureAdminAdjustmentsTable(conn);
     await ensureBillProviderLogoColumn(conn);
     await ensureBillOrderProviderNullable(conn);
-    await ensureSecurityEventsTable(conn);
-    await ensureKycVerificationTable(conn);
-    await ensureAdminTotpColumns(conn, DB_NAME);
-    await ensureUserTotpColumns(conn);
+      await ensureSecurityEventsTable(conn);
+      await ensureKycVerificationTable(conn);
+      await ensureAdminTotpColumns(conn, DB_NAME);
+      await ensureAdminDisableColumns(conn, DB_NAME);
+      await ensureAdminNotificationsTable(conn);
+      await ensureUserTotpColumns(conn);
     await ensureTransactionMetadataEncrypted(conn);
     await ensureAccountClosureTable(conn);
     await ensureDataExportTable(conn);
@@ -1082,6 +1102,24 @@ async function ensureSecurityEventsTable(conn) {
       INDEX idx_severity (severity),
       INDEX idx_event_type (event_type),
       INDEX idx_event_actor (actor_type, actor_id)
+    )
+  `);
+}
+
+async function ensureAdminNotificationsTable(conn) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS admin_notifications (
+      id CHAR(36) PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      body TEXT NOT NULL,
+      type ENUM('info','warning','success','error') NOT NULL DEFAULT 'info',
+      target_user_id CHAR(36) NULL,
+      target_scope ENUM('broadcast','single') NOT NULL DEFAULT 'broadcast',
+      force TINYINT NOT NULL DEFAULT 0,
+      created_by CHAR(36) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_admin_notify_created (created_at),
+      INDEX idx_admin_notify_target (target_user_id)
     )
   `);
 }

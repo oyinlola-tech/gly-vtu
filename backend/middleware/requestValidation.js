@@ -698,6 +698,11 @@ export const adminNotificationSchema = Joi.object({
   data: Joi.object().optional(),
 });
 
+export const adminNotificationHistoryQuerySchema = Joi.object({
+  limit: Joi.number().min(1).max(200).optional(),
+  offset: Joi.number().min(0).max(10_000).optional(),
+});
+
 export const adminFlutterwaveRequerySchema = Joi.object({
   userId: Joi.string().guid({ version: 'uuidv4' }).optional(),
   accountReference: Joi.string().max(120).optional(),
@@ -885,6 +890,7 @@ export default {
   adminConversationIdParamSchema,
   adminConversationSendSchema,
   adminNotificationSchema,
+  adminNotificationHistoryQuerySchema,
   adminFlutterwaveRequerySchema,
   adminVtpassEventsQuerySchema,
   adminVtpassRequerySchema,

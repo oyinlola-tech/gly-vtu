@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useAdminAuth } from '../../../contexts/AdminAuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
@@ -41,7 +41,7 @@ export default function AdminLogin() {
       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Admin Login</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          Sign in to manage GLY VTU.
+          Sign in as an admin or super admin to manage GLY VTU.
         </p>
 
         {error && (
@@ -104,6 +104,13 @@ export default function AdminLogin() {
             {loading ? <LoadingSpinner size="sm" /> : 'Sign In'}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+          Forgot your password?{' '}
+          <Link to="/admin/forgot-password" className="text-[#235697] font-semibold">
+            Reset it
+          </Link>
+        </p>
       </div>
     </div>
   );

@@ -155,7 +155,7 @@ const doc = {
       },
       example: {
         csrfToken: 'csrf_admin_123',
-        admin: { id: 'uuid', name: 'Admin User', email: 'admin@example.com', role: 'super_admin' },
+        admin: { id: 'uuid', name: 'Admin User', email: 'admin@example.com', role: 'superadmin' },
       },
     },
     RefreshRequest: {
@@ -372,7 +372,7 @@ const doc = {
         password: { type: 'string', description: 'Admin password' },
         role: { type: 'string', description: 'Admin role' },
       },
-      example: { name: 'Admin User', email: 'admin@example.com', password: 'AdminPass1!', role: 'super_admin' },
+      example: { name: 'Admin User', email: 'admin@example.com', password: 'AdminPass1!', role: 'superadmin' },
     },
     AdminRoleUpdateRequest: {
       type: 'object',
@@ -526,7 +526,7 @@ const doc = {
         role: { type: 'string' },
         created_at: { type: 'string' },
       },
-      example: { id: 'uuid', name: 'Admin User', email: 'admin@example.com', role: 'super_admin' },
+      example: { id: 'uuid', name: 'Admin User', email: 'admin@example.com', role: 'superadmin' },
     },
     AdminUserListItem: {
       type: 'object',
