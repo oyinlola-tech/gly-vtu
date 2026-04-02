@@ -584,7 +584,7 @@ router.post('/password/change', requireUser, validateRequest(changePasswordSchem
   );
   const user = applyUserPII(userRaw);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const ok = await bcrypt.compare(currentPassword, user.password_hash);
+  const ok = await argon2.verify(user.password_hash, currentPassword);
   if (!ok) {
     logSecurityEvent({
       type: 'password.change.failed',

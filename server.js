@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -8,7 +9,6 @@ import fs from 'fs';
 import http from 'http';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 import csurf from 'csurf';
 import { initDatabase } from './backend/config/db.js';

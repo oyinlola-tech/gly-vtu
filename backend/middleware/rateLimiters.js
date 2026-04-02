@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { createClient } from 'redis';
 import { logger } from '../utils/logger.js';
@@ -65,6 +65,7 @@ function limiterOptions(extra) {
   return {
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: ipKeyGenerator,
     skip: (req) => {
       // In production with Redis down, optionally skip rate limiting to allow traffic
       // WARNING: This is a fallback and makes your app vulnerable to DoS
@@ -117,7 +118,7 @@ export const adminLoginLimiter = rateLimit(
     max: Number(process.env.RATE_LIMIT_ADMIN_LOGIN_MAX || 5),
     keyGenerator: (req) => {
       const email = String(req.body?.email || '').toLowerCase().trim();
-      return `${req.ip || 'unknown'}:${email || 'no-email'}`;
+      return `${ipKeyGenerator(req)}:${email || 'no-email'}`;
     },
   })
 );
@@ -128,7 +129,7 @@ export async function adminLoginPerEmailLimiter(req, res, next) {
 
   const max = Number(process.env.RATE_LIMIT_ADMIN_LOGIN_PER_EMAIL_MAX || 3);
   const windowSeconds = Number(process.env.RATE_LIMIT_ADMIN_LOGIN_PER_EMAIL_WINDOW_SEC || 1800);
-  const key = `admin_login:${email}:${req.ip || 'unknown'}`;
+  const key = `admin_login:${email}:${ipKeyGenerator(req)}`;
 
   if (redisClient && redisConnected) {
     try {
