@@ -47,6 +47,8 @@ const doc = {
   basePath: '/',
   consumes: ['application/json'],
   produces: ['application/json'],
+  // Apply a default security requirement so operations are not empty.
+  security: [{ bearerAuth: [] }],
   securityDefinitions: {
     bearerAuth: {
       type: 'apiKey',

@@ -8719,5 +8719,10 @@
         "description": "Use: `Bearer <token>`"
       }
     }
-  }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
 }
