@@ -43,7 +43,7 @@ const doc = {
     { name: 'VTpass Webhook', description: 'VTpass webhook endpoint.' },
   ],
   host: process.env.SWAGGER_HOST || `localhost:${port}`,
-  schemes: [process.env.SWAGGER_SCHEME || 'http'],
+  schemes: [process.env.SWAGGER_SCHEME || 'https'],
   basePath: '/',
   consumes: ['application/json'],
   produces: ['application/json'],
