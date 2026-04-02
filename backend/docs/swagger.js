@@ -10,6 +10,19 @@ const __dirname = path.dirname(__filename);
 const outputFile = path.join(__dirname, 'swagger-output.json');
 const serverFile = path.join(__dirname, '..', '..', 'server.js');
 const routesDir = path.join(__dirname, '..', 'routes');
+const backendVersionPath = path.join(__dirname, '..', 'version.json');
+
+const readBackendVersion = () => {
+  try {
+    const raw = fs.readFileSync(backendVersionPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return parsed.version || '0.0.0';
+  } catch (err) {
+    logger.warn('Failed to read backend version', { error: err?.message });
+    return '0.0.0';
+  }
+};
+const backendVersion = readBackendVersion();
 
 const routeFiles = fs
   .readdirSync(routesDir)
@@ -24,6 +37,7 @@ const doc = {
   info: {
     title: 'GLY VTU API',
     description: 'Auto-generated Swagger specification for GLY VTU backend.',
+    version: backendVersion,
   },
   tags: [
     { name: 'Auth', description: 'User authentication and session management.' },

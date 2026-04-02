@@ -1,14 +1,29 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { 
-  ChevronRight, User, Lock, Bell, Moon, Sun, HelpCircle, 
-  MessageCircle, FileText, Shield, LogOut, ChevronLeft, Eye, Wallet, History
+import {
+  ChevronRight,
+  User,
+  Lock,
+  Bell,
+  Moon,
+  Sun,
+  HelpCircle,
+  MessageCircle,
+  FileText,
+  Shield,
+  LogOut,
+  ChevronLeft,
+  Eye,
+  Wallet,
+  History,
+  type LucideIcon,
 } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 import SupportChat from '../components/SupportChat';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { notificationsAPI } from '../../services/api';
+import { frontendVersion } from '../../version';
 
 export default function More() {
   const navigate = useNavigate();
@@ -31,7 +46,22 @@ export default function More() {
     navigate('/login');
   };
 
-  const sections = [
+  type MenuItem = {
+    icon: LucideIcon;
+    label: string;
+    path?: string;
+    action?: () => void;
+    toggle?: boolean;
+    value?: boolean;
+    badge?: string | null;
+  };
+
+  type MenuSection = {
+    title: string;
+    items: MenuItem[];
+  };
+
+  const sections: MenuSection[] = [
     {
       title: 'Account',
       items: [
@@ -86,7 +116,7 @@ export default function More() {
         { icon: FileText, label: 'Terms & Privacy', path: '/terms' },
         { icon: FileText, label: 'Account Closure', path: '/account/closure', badge: null },
         { icon: FileText, label: 'Cancel Account Closure', path: '/account/closure/cancel', badge: null },
-        { icon: FileText, label: 'App Version', path: '#', badge: 'v1.0.0' },
+        { icon: FileText, label: 'App Version', path: '#', badge: `v${frontendVersion}` },
       ],
     },
   ];

@@ -57,6 +57,17 @@ const __dirname = path.dirname(__filename);
 app.disable('x-powered-by');
 
 const isProd = process.env.NODE_ENV === 'production';
+const backendVersionPath = path.join(__dirname, 'backend', 'version.json');
+const apiVersion = (() => {
+  try {
+    const raw = fs.readFileSync(backendVersionPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return parsed.version || '0.0.0';
+  } catch (err) {
+    logger.warn('Failed to read backend version', { error: err?.message });
+    return '0.0.0';
+  }
+})();
 let dbReady = false;
 let dbCheckedAt = null;
 let dbError = null;
@@ -213,7 +224,7 @@ app.use(cookieParser());
 
 // SECURITY: Add security headers to all API responses
 app.use('/api', (req, res, next) => {
-  res.setHeader('X-API-Version', '1.0.0');
+  res.setHeader('X-API-Version', apiVersion);
   res.setHeader('X-Request-ID', crypto.randomUUID());
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');

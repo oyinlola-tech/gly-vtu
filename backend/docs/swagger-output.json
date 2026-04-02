@@ -3,7 +3,7 @@
   "info": {
     "title": "GLY VTU API",
     "description": "Auto-generated Swagger specification for GLY VTU backend.",
-    "version": "1.0.0"
+    "version": "3.4.2"
   },
   "servers": [
     {
