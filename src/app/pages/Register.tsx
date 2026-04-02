@@ -28,9 +28,16 @@ const SAMPLE_PROFILES = {
 
 type IdentityType = 'nin' | 'bvn';
 
+const buildNames = (fullName: string) => {
+  const parts = fullName.trim().split(' ').filter(Boolean);
+  const firstName = parts.shift() || '';
+  const lastName = parts.join(' ');
+  return { firstName, lastName };
+};
+
 export default function Register() {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, sendRegistrationOtp, verifyRegistrationOtp } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [formData, setFormData] = useState({
     email: '',
@@ -71,11 +78,17 @@ export default function Register() {
     return `•••••••${last}`;
   }, [identityValue]);
 
-  const buildNames = (fullName: string) => {
-    const parts = fullName.trim().split(' ').filter(Boolean);
-    const firstName = parts.shift() || '';
-    const lastName = parts.join(' ');
-    return { firstName, lastName };
+  const handleResendOtp = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await sendRegistrationOtp(formData.email);
+      setError('OTP resent successfully.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to resend OTP.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -87,7 +100,15 @@ export default function Register() {
         setError('Enter a valid email address.');
         return;
       }
-      setStep(2);
+      setLoading(true);
+      try {
+        await sendRegistrationOtp(formData.email);
+        setStep(2);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to send OTP. Please try again.');
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
@@ -96,7 +117,15 @@ export default function Register() {
         setError('Enter the 6-digit code sent to your email.');
         return;
       }
-      setStep(3);
+      setLoading(true);
+      try {
+        await verifyRegistrationOtp(formData.email, otpCode);
+        setStep(3);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Invalid OTP. Please try again.');
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
@@ -145,8 +174,8 @@ export default function Register() {
         nin: identityType === 'nin' ? identityValue.replace(/\D/g, '') : undefined,
       });
       navigate('/login', { state: { registered: true } });
-    } catch {
-      setError('Registration failed. Please try again.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -249,7 +278,7 @@ export default function Register() {
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
                   <span>Didn&apos;t get a code?</span>
-                  <button type="button" className="text-[#235697] font-semibold">
+                  <button type="button" className="text-[#235697] font-semibold" onClick={handleResendOtp} disabled={loading}>
                     Resend OTP
                   </button>
                 </div>

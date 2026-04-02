@@ -267,6 +267,9 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
       );
       if (!targets.length) return respond(404, { error: 'Recipient not found' });
       internalRecipient = applyUserPII(targets[0]);
+      if (internalRecipient.id === req.user.sub) {
+        return respond(400, { error: 'Cannot transfer to your own account' });
+      }
       const [[reserved]] = await pool.query(
         `SELECT account_number, bank_code, bank_name, account_name
          FROM reserved_accounts WHERE user_id = ? AND provider = 'flutterwave' LIMIT 1`,
@@ -280,6 +283,19 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
     } else {
       if (!accountNumber || !bankCode || !accountName) {
         return respond(400, { error: 'Account number, bank, and name are required' });
+      }
+      const [[selfReserved]] = await pool.query(
+        `SELECT account_number, bank_code FROM reserved_accounts
+         WHERE user_id = ? AND provider = 'flutterwave' LIMIT 1`,
+        [req.user.sub]
+      );
+      if (
+        selfReserved?.account_number &&
+        selfReserved?.bank_code &&
+        selfReserved.account_number === accountNumber &&
+        selfReserved.bank_code === bankCode
+      ) {
+        return respond(400, { error: 'Cannot transfer to your own account' });
       }
       const [[bank]] = await pool.query('SELECT name FROM banks WHERE code = ? AND active = 1', [
         bankCode,
@@ -299,17 +315,38 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
     );
     if (!targets.length) return respond(404, { error: 'Recipient not found' });
     recipientId = targets[0].id;
+    if (recipientId === req.user.sub) {
+      return respond(400, { error: 'Cannot transfer to your own account' });
+    }
   }
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [walletRows] = await conn.query(
-      'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
-      [req.user.sub]
-    );
-    if (!walletRows.length) throw new Error('Wallet missing');
-    if (Number(walletRows[0].balance) < numericAmount) {
+    let senderBalance = null;
+    if (!isBank) {
+      const ids = [req.user.sub, recipientId].sort();
+      const [walletRows] = await conn.query(
+        'SELECT user_id, balance FROM wallets WHERE user_id IN (?, ?) FOR UPDATE',
+        ids
+      );
+      const senderWallet = walletRows.find((row) => row.user_id === req.user.sub);
+      const recipientWallet = walletRows.find((row) => row.user_id === recipientId);
+      if (!senderWallet || !recipientWallet) {
+        await conn.rollback();
+        return respond(404, { error: 'Wallet not found' });
+      }
+      senderBalance = Number(senderWallet.balance);
+    } else {
+      const [walletRows] = await conn.query(
+        'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
+        [req.user.sub]
+      );
+      if (!walletRows.length) throw new Error('Wallet missing');
+      senderBalance = Number(walletRows[0].balance);
+    }
+
+    if (senderBalance < numericAmount) {
       await conn.rollback();
       return respond(400, { error: 'Insufficient balance' });
     }
@@ -512,9 +549,10 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
       reference,
       status: isBank ? 'pending' : 'success',
     });
-  } catch {
+  } catch (err) {
     await conn.rollback();
-    return res.status(500).json({ error: 'Transfer failed' });
+    logger.error('Wallet transfer failed', { error: logger.format(err) });
+    return respond(500, { error: 'Transfer failed' });
   } finally {
     conn.release();
   }

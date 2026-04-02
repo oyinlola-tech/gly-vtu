@@ -5,6 +5,7 @@ import { sanitizeFlutterwaveWebhook } from '../utils/sanitize.js';
 import { enforceKycLimits } from '../utils/kycLimits.js';
 import { sendReceiptEmail } from '../utils/email.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { checkTopupAnomaly } from '../utils/anomalies.js';
 import { logger } from '../utils/logger.js';
 import { webhookLimiter } from '../middleware/rateLimiters.js';
 import { applyUserPII } from '../utils/encryption.js';
@@ -276,6 +277,14 @@ router.post('/', webhookLimiter, async (req, res) => {
       ],
     }).catch((err) => logger.error('Receipt email send error (flutterwave)', { error: logger.format(err) }));
   }
+
+  // Check for topup anomalies
+  checkTopupAnomaly({
+    userId: account.user_id,
+    amount,
+    ip: getRequestIp(req),
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Topup anomaly check failed', { error: logger.format(err) }));
 
   return res.json({ message: 'OK' });
 });

@@ -55,8 +55,8 @@ type AdminProfile = {
   role: string;
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/app/api';
-const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || '/app/admin/api';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/app/api';
+const ADMIN_API_BASE_URL = (import.meta as any).env?.VITE_ADMIN_API_URL || '/app/admin/api';
 
 let csrfToken: string | null = null;
 let deviceIdCache: string | null = null;
@@ -234,6 +234,30 @@ async function request<T>(
 
 // ============= AUTHENTICATION APIs =============
 export const authAPI = {
+  sendRegistrationOtp: async (email: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/auth/send-registration-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      },
+      { auth: false }
+    );
+  },
+
+  verifyRegistrationOtp: async (email: string, otp: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/auth/verify-registration-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, otp }),
+      },
+      { auth: false }
+    );
+  },
+
   register: async (data: {
     email: string;
     phone: string;

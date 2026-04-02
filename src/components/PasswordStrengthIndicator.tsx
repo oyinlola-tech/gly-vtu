@@ -1,6 +1,4 @@
 import React, { useMemo } from 'react';
-// @ts-expect-error - zxcvbn does not have TypeScript types available
-import zxcvbn from 'zxcvbn';
 
 /**
  * PasswordStrengthIndicator Component
@@ -13,19 +11,32 @@ interface PasswordStrengthIndicatorProps {
   password?: string;
 }
 
-interface ZxcvbnResult {
-  score: number;
-  feedback: { warning: string; suggestions: string[] };
-}
-
 export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthIndicatorProps) {
   const { strength, feedback } = useMemo(() => {
     if (!password) {
       return { strength: 0, feedback: '' };
     }
 
-    // @ts-expect-error - zxcvbn does not have TypeScript types available
-    const result = zxcvbn(password) as ZxcvbnResult;
+    // Simple strength calculation
+    let score = 0;
+    const hasLength = password.length >= 8;
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+    if (hasLength) score++;
+    if (hasUpper) score++;
+    if (hasLower) score++;
+    if (hasNumber) score++;
+    if (hasSpecial) score++;
+
+    // Adjust score
+    if (score === 1) score = 0; // Very weak
+    else if (score === 2) score = 1; // Weak
+    else if (score === 3) score = 2; // Fair
+    else if (score === 4) score = 3; // Good
+    else if (score === 5) score = 4; // Strong
 
     // Generate feedback message
     const messages = [
@@ -36,7 +47,7 @@ export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthInd
       'Strong. Excellent password strength!',
     ];
 
-    return { strength: result.score, feedback: messages[result.score] };
+    return { strength: score, feedback: messages[score] };
   }, [password]);
 
   const colors = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e'];

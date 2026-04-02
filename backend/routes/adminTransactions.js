@@ -6,7 +6,7 @@ import { logAudit } from '../utils/audit.js';
 import { checkIdempotency, completeIdempotency } from '../utils/idempotency.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII } from '../utils/encryption.js';
-import { hydrateTransactionMetadata } from '../utils/transactionMetadata.js';
+import { runFullReconciliation } from '../utils/reconciliation.js';
 
 const router = express.Router();
 
@@ -186,6 +186,26 @@ router.post(
     }).catch(() => null);
 
     return res.json({ message: 'Topup rejected', reference });
+  }
+);
+
+router.post(
+  '/reconcile',
+  requireAdmin,
+  requirePermission('transactions:write'),
+  async (req, res) => {
+    /*
+      #swagger.tags = ['Admin Transactions']
+      #swagger.summary = 'Run transaction reconciliation'
+      #swagger.security = [{ "bearerAuth": [] }]
+      #swagger.responses[200] = { description: 'Reconciliation results' }
+    */
+    try {
+      const result = await runFullReconciliation();
+      return res.json(result);
+    } catch (error) {
+      return res.status(500).json({ error: 'Reconciliation failed', details: error.message });
+    }
   }
 );
 

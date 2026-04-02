@@ -22,6 +22,8 @@ interface AuthContextType {
     totp?: string,
     backupCode?: string
   ) => Promise<{ otpRequired?: boolean; totpRequired?: boolean; email?: string; needsPin?: boolean }>;
+  sendRegistrationOtp: (email: string) => Promise<void>;
+  verifyRegistrationOtp: (email: string, otp: string) => Promise<void>;
   register: (data: RegisterPayload) => Promise<void>;
   logout: () => void;
   verifyPin: (pin: string) => Promise<boolean>;
@@ -98,6 +100,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { needsPin: !security?.pinSet };
   };
 
+  const sendRegistrationOtp = async (email: string) => {
+    await authAPI.sendRegistrationOtp(email);
+  };
+
+  const verifyRegistrationOtp = async (email: string, otp: string) => {
+    await authAPI.verifyRegistrationOtp(email, otp);
+  };
+
   const register = async (data: RegisterPayload) => {
     await authAPI.register(data);
   };
@@ -119,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, login, register, logout, verifyPin, setUser, refreshProfile }}
+      value={{ user, isAuthenticated, login, sendRegistrationOtp, verifyRegistrationOtp, register, logout, verifyPin, setUser, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>

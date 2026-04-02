@@ -114,6 +114,68 @@ function requireCsrfForCookieRefresh(req) {
   return Boolean(csrfCookie && csrfHeader && csrfCookie === csrfHeader);
 }
 
+router.post('/send-registration-otp', otpLimiter, async (req, res) => {
+  /*
+    #swagger.tags = ['Auth']
+    #swagger.summary = 'Send OTP for registration'
+    #swagger.parameters['body'] = {
+      in: 'body',
+      required: true,
+      schema: { type: 'object', properties: { email: { type: 'string' } } }
+    }
+    #swagger.responses[200] = { description: 'OTP sent', schema: { $ref: '#/definitions/MessageResponse' } }
+  */
+  const { email } = req.body || {};
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid email required' });
+  }
+
+  const emailHash = hashEmail(email);
+  const [existing] = await pool.query('SELECT id FROM users WHERE email_hash = ?', [emailHash]);
+  if (existing.length) {
+    return res.status(409).json({ error: 'User already exists' });
+  }
+
+  const otp = createOtp();
+  await pool.query(
+    'INSERT INTO email_otps (id, email_hash, otp_hash, expires_at) VALUES (UUID(), ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE)) ON DUPLICATE KEY UPDATE otp_hash = VALUES(otp_hash), expires_at = VALUES(expires_at)',
+    [emailHash, otp.hash]
+  );
+
+  sendOtpEmail({
+    to: email,
+    subject: 'Verify your email for GLY-VTU registration',
+    otp: otp.plain,
+  }).catch((err) => logger.error('Send registration OTP email failed', { error: logger.format(err) }));
+
+  return res.json({ message: 'OTP sent' });
+});
+
+router.post('/verify-registration-otp', otpLimiter, async (req, res) => {
+  /*
+    #swagger.tags = ['Auth']
+    #swagger.summary = 'Verify OTP for registration'
+    #swagger.parameters['body'] = {
+      in: 'body',
+      required: true,
+      schema: { type: 'object', properties: { email: { type: 'string' }, otp: { type: 'string' } } }
+    }
+    #swagger.responses[200] = { description: 'OTP verified', schema: { $ref: '#/definitions/MessageResponse' } }
+  */
+  const { email, otp } = req.body || {};
+  if (!email || !otp) {
+    return res.status(400).json({ error: 'Email and OTP required' });
+  }
+
+  const emailHash = hashEmail(email);
+  const verified = await verifyOtp(emailHash, otp);
+  if (!verified) {
+    return res.status(401).json({ error: 'Invalid or expired OTP' });
+  }
+
+  return res.json({ message: 'OTP verified' });
+});
+
 router.post('/register', validateRequest(registrationSchema), async (req, res) => {
   /*
     #swagger.tags = ['Auth']
