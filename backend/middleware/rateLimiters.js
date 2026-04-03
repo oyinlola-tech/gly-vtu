@@ -66,61 +66,72 @@ function limiterOptions(extra) {
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: ipKeyGenerator,
-    skip: (req) => {
-      // In production with Redis down, optionally skip rate limiting to allow traffic
-      // WARNING: This is a fallback and makes your app vulnerable to DoS
-      if (isProd && REDIS_URL && !redisConnected) {
-        logger.warn('Rate limiter skipped due to Redis unavailability', {
-          ip: req.ip,
-          path: req.path,
-          severity: 'high'
-        });
-        return true; // Skip rate limiting (DANGEROUS but allows graceful degradation)
-      }
-      return false;
-    },
     ...(redisStore ? { store: redisStore } : {}),
     ...extra,
   };
 }
 
-export const authLimiter = rateLimit(
-  limiterOptions({
-    windowMs: 10 * 60 * 1000,
-    max: Number(process.env.RATE_LIMIT_AUTH_MAX || 30),
-  })
+function guardRateLimiter(limiter) {
+  return (req, res, next) => {
+    if (isProd && REDIS_URL && !redisConnected) {
+      logger.error('Rate limiting unavailable - blocking request', {
+        ip: req.ip,
+        path: req.path,
+        severity: 'critical',
+      });
+      return res.status(503).json({ error: 'Service temporarily unavailable' });
+    }
+    return limiter(req, res, next);
+  };
+}
+
+export const authLimiter = guardRateLimiter(
+  rateLimit(
+    limiterOptions({
+      windowMs: 10 * 60 * 1000,
+      max: Number(process.env.RATE_LIMIT_AUTH_MAX || 30),
+    })
+  )
 );
 
-export const otpLimiter = rateLimit(
-  limiterOptions({
-    windowMs: 10 * 60 * 1000,
-    max: Number(process.env.RATE_LIMIT_OTP_MAX || 10),
-  })
+export const otpLimiter = guardRateLimiter(
+  rateLimit(
+    limiterOptions({
+      windowMs: 10 * 60 * 1000,
+      max: Number(process.env.RATE_LIMIT_OTP_MAX || 10),
+    })
+  )
 );
 
-export const webhookLimiter = rateLimit(
-  limiterOptions({
-    windowMs: 60 * 1000,
-    max: Number(process.env.RATE_LIMIT_WEBHOOK_MAX || 120),
-  })
+export const webhookLimiter = guardRateLimiter(
+  rateLimit(
+    limiterOptions({
+      windowMs: 60 * 1000,
+      max: Number(process.env.RATE_LIMIT_WEBHOOK_MAX || 120),
+    })
+  )
 );
 
-export const adminAuthLimiter = rateLimit(
-  limiterOptions({
-    windowMs: 10 * 60 * 1000,
-    max: Number(process.env.RATE_LIMIT_ADMIN_AUTH_MAX || 20),
-  })
+export const adminAuthLimiter = guardRateLimiter(
+  rateLimit(
+    limiterOptions({
+      windowMs: 10 * 60 * 1000,
+      max: Number(process.env.RATE_LIMIT_ADMIN_AUTH_MAX || 20),
+    })
+  )
 );
 
-export const adminLoginLimiter = rateLimit(
-  limiterOptions({
-    windowMs: 15 * 60 * 1000,
-    max: Number(process.env.RATE_LIMIT_ADMIN_LOGIN_MAX || 5),
-    keyGenerator: (req) => {
-      const email = String(req.body?.email || '').toLowerCase().trim();
-      return `${ipKeyGenerator(req)}:${email || 'no-email'}`;
-    },
-  })
+export const adminLoginLimiter = guardRateLimiter(
+  rateLimit(
+    limiterOptions({
+      windowMs: 15 * 60 * 1000,
+      max: Number(process.env.RATE_LIMIT_ADMIN_LOGIN_MAX || 5),
+      keyGenerator: (req) => {
+        const email = String(req.body?.email || '').toLowerCase().trim();
+        return `${ipKeyGenerator(req)}:${email || 'no-email'}`;
+      },
+    })
+  )
 );
 
 export async function adminLoginPerEmailLimiter(req, res, next) {
@@ -161,9 +172,11 @@ export async function adminLoginPerEmailLimiter(req, res, next) {
   return next();
 }
 
-export const billsLimiter = rateLimit(
-  limiterOptions({
-    windowMs: 5 * 60 * 1000,
-    max: Number(process.env.RATE_LIMIT_BILLS_MAX || 60),
-  })
+export const billsLimiter = guardRateLimiter(
+  rateLimit(
+    limiterOptions({
+      windowMs: 5 * 60 * 1000,
+      max: Number(process.env.RATE_LIMIT_BILLS_MAX || 60),
+    })
+  )
 );

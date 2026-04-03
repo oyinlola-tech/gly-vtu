@@ -3,7 +3,7 @@
   "info": {
     "title": "GLY VTU API",
     "description": "Auto-generated Swagger specification for GLY VTU backend.",
-    "version": "3.4.4"
+    "version": "3.4.6"
   },
   "servers": [
     {
@@ -3095,24 +3095,7 @@
           {
             "bearerAuth": []
           }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "accountNumber": {
-                    "example": "any"
-                  },
-                  "bankCode": {
-                    "example": "any"
-                  }
-                }
-              }
-            }
-          }
-        }
+        ]
       }
     },
     "/variations": {
@@ -3604,21 +3587,7 @@
           {
             "bearerAuth": []
           }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "text": {
-                    "example": "any"
-                  }
-                }
-              }
-            }
-          }
-        }
+        ]
       }
     },
     "/unread-count": {
@@ -3640,20 +3609,6 @@
           },
           "400": {
             "description": "Bad Request"
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "ids": {
-                    "example": "any"
-                  }
-                }
-              }
-            }
           }
         }
       }

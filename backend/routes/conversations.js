@@ -4,6 +4,7 @@ import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
 import { emitToAdmins, emitToUser } from '../utils/realtime.js';
 import { logAudit } from '../utils/audit.js';
+import { validateRequest, conversationSendSchema } from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -34,8 +35,8 @@ router.get('/me', requireUser, async (req, res) => {
   return res.json({ conversation, messages });
 });
 
-router.post('/send', requireUser, async (req, res) => {
-  const { text } = req.body || {};
+router.post('/send', requireUser, validateRequest(conversationSendSchema), async (req, res) => {
+  const { text } = req.validated || req.body || {};
   const body = String(text || '').trim();
   if (!body) return res.status(400).json({ error: 'Message required' });
 

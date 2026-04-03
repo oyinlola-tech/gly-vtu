@@ -8,6 +8,11 @@ const WITHDRAWAL_COUNT_THRESHOLD = Number(process.env.ANOMALY_WITHDRAWAL_COUNT |
 const TOPUP_AMOUNT_THRESHOLD = Number(process.env.ANOMALY_TOPUP_THRESHOLD_NGN || 1000000);
 const TOPUP_WINDOW_MINUTES = Number(process.env.ANOMALY_TOPUP_WINDOW_MINUTES || 60);
 const TOPUP_COUNT_THRESHOLD = Number(process.env.ANOMALY_TOPUP_COUNT || 5);
+const NEW_RECIPIENT_THRESHOLD = Number(process.env.ANOMALY_NEW_RECIPIENT_THRESHOLD || 3);
+const NEW_RECIPIENT_WINDOW_HOURS = Number(process.env.ANOMALY_NEW_RECIPIENT_WINDOW_HOURS || 24);
+const DEVICE_COUNT_THRESHOLD = Number(process.env.ANOMALY_DEVICE_COUNT_THRESHOLD || 5);
+const FAILED_LOGIN_THRESHOLD = Number(process.env.ANOMALY_FAILED_LOGIN_THRESHOLD || 5);
+const ADMIN_ADJUSTMENT_THRESHOLD = Number(process.env.ANOMALY_ADMIN_ADJUSTMENT_THRESHOLD_NGN || 500000);
 
 export async function checkNewRecipientAnomaly({ userId, recipient, ip, userAgent }) {
   if (!userId || !recipient || !NEW_RECIPIENT_THRESHOLD) return;
@@ -315,4 +320,3 @@ export function checkAdminAdjustmentAnomaly({ adminId, amount, ip, userAgent }) 
     }).catch(() => null);
   }
 }
-

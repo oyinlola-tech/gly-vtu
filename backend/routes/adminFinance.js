@@ -246,6 +246,7 @@ router.post(
   validateParams(adminAdjustmentIdParamSchema),
   async (req, res) => {
     const id = req.validatedParams.id;
+    let adj = null;
     const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
     const idem = await checkIdempotency({
       userId: req.admin.sub,
@@ -268,10 +269,11 @@ router.post(
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      const [[adj]] = await conn.query(
+      const [[adjustmentRow]] = await conn.query(
         'SELECT id, user_id, type, amount, status FROM admin_adjustments WHERE id = ? FOR UPDATE',
         [id]
       );
+      adj = adjustmentRow;
       if (!adj) {
         await conn.rollback();
         return respond(404, { error: 'Adjustment not found' });
@@ -331,23 +333,25 @@ router.post(
       conn.release();
     }
 
-    logSecurityEvent({
-      type: 'admin.adjustment.approved',
-      severity: 'high',
-      actorType: 'admin',
-      actorId: req.admin.sub,
-      entityType: 'adjustment',
-      entityId: id,
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-      metadata: { amount: adj.amount, type: adj.type },
-    }).catch(() => null);
-    checkAdminAdjustmentAnomaly({
-      adminId: req.admin.sub,
-      amount: adj.amount,
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-    });
+    if (adj) {
+      logSecurityEvent({
+        type: 'admin.adjustment.approved',
+        severity: 'high',
+        actorType: 'admin',
+        actorId: req.admin.sub,
+        entityType: 'adjustment',
+        entityId: id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { amount: adj.amount, type: adj.type },
+      }).catch(() => null);
+      checkAdminAdjustmentAnomaly({
+        adminId: req.admin.sub,
+        amount: adj.amount,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+    }
     logAudit({
       actorType: 'admin',
       actorId: req.admin.sub,

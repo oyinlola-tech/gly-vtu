@@ -10,7 +10,6 @@ import http from 'http';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
-import csurf from 'csurf';
 import { initDatabase } from './backend/config/db.js';
 import authRoutes from './backend/routes/auth.js';
 import adminAuthRoutes from './backend/routes/adminAuth.js';
@@ -255,12 +254,6 @@ app.use('/api', (req, res, next) => {
   
   next();
 });
-app.use(
-  csurf({
-    cookie: true,
-    value: (req) => req.headers['x-csrf-token'] || req.body?._csrf || req.query?._csrf,
-  })
-);
 app.use(csrfMiddleware);
 
 // Silence Chrome DevTools probe that can show up as a 404 + CSP warning in console.

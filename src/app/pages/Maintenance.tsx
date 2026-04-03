@@ -36,7 +36,7 @@ export default function Maintenance() {
             Scheduled Maintenance
           </h1>
           <p className="text-lg text-gray-300 max-w-lg mx-auto leading-relaxed">
-            We're performing essential updates to improve your GLY-VTU experience. Our services will be back online shortly.
+            We&apos;re performing essential updates to improve your GLY-VTU experience. Our services will be back online shortly.
           </p>
         </div>
 

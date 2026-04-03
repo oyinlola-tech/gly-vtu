@@ -3,6 +3,7 @@ import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
 import { getCachedBanks } from '../utils/bankCache.js';
 import { resolveBankAccount } from '../utils/flutterwave.js';
+import { validateRequest, bankResolveSchema } from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ router.get('/', requireUser, async (req, res) => {
   return res.json(banks);
 });
 
-router.post('/resolve', requireUser, async (req, res) => {
+router.post('/resolve', requireUser, validateRequest(bankResolveSchema), async (req, res) => {
   /*
     #swagger.tags = ['Banks']
     #swagger.summary = 'Resolve bank account name'
@@ -32,7 +33,7 @@ router.post('/resolve', requireUser, async (req, res) => {
     }
     #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
   */
-  const { accountNumber, bankCode } = req.body || {};
+  const { accountNumber, bankCode } = req.validated || req.body || {};
   if (!accountNumber || String(accountNumber).length < 8) {
     return res.status(400).json({ error: 'Account number required' });
   }

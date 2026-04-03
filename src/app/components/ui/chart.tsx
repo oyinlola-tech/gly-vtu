@@ -271,8 +271,6 @@ function ChartTooltipContent({
 
 const ChartLegend = RechartsPrimitive.Legend;
 
-type LegendItem = RechartsPrimitive.LegendPayload;
-
 type ChartLegendContentProps = React.ComponentProps<"div"> &
   Pick<RechartsPrimitive.DefaultLegendContentProps, "payload" | "verticalAlign"> & {
     hideIcon?: boolean;

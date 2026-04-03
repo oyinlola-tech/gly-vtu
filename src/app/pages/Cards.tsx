@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, CreditCard, Plus, Lock, MoreVertical, Eye } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 import { cardsAPI } from '../../services/api';
@@ -41,18 +41,18 @@ export default function Cards() {
     autoFreeze: true,
   });
 
-  const loadCards = async () => {
+  const loadCards = useCallback(async () => {
     try {
       const data = await cardsAPI.list();
       setCards((data || []) as Card[]);
     } catch {
       setCards([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadCards();
-  }, []);
+  }, [loadCards]);
 
   const handleCreate = async () => {
     if (!amount || pin.length !== 6) {

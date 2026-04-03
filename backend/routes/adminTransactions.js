@@ -90,6 +90,7 @@ router.post(
   validateParams(adminReferenceParamSchema),
   async (req, res) => {
     const reference = req.validatedParams.reference;
+    let tx = null;
     const idemKey = (req.headers['x-idempotency-key'] || '').toString().trim() || null;
     const idem = await checkIdempotency({
       userId: req.admin.sub,
@@ -112,10 +113,11 @@ router.post(
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      const [[tx]] = await conn.query(
+      const [[txRow]] = await conn.query(
         'SELECT id, user_id, amount, status FROM transactions WHERE reference = ? AND type = ? FOR UPDATE',
         [reference, 'topup']
       );
+      tx = txRow;
       if (!tx) {
         await conn.rollback();
         return respond(404, { error: 'Transaction not found' });
@@ -140,26 +142,28 @@ router.post(
       conn.release();
     }
 
-    logSecurityEvent({
-      type: 'admin.topup.approved',
-      severity: 'medium',
-      actorType: 'admin',
-      actorId: req.admin.sub,
-      entityType: 'transaction',
-      entityId: reference,
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-      metadata: { amount: tx.amount },
-    }).catch(() => null);
-    logAudit({
-      actorType: 'admin',
-      actorId: req.admin.sub,
-      action: 'admin.topup.approve',
-      entityType: 'transaction',
-      entityId: reference,
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-    }).catch(() => null);
+    if (tx) {
+      logSecurityEvent({
+        type: 'admin.topup.approved',
+        severity: 'medium',
+        actorType: 'admin',
+        actorId: req.admin.sub,
+        entityType: 'transaction',
+        entityId: reference,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { amount: tx.amount },
+      }).catch(() => null);
+      logAudit({
+        actorType: 'admin',
+        actorId: req.admin.sub,
+        action: 'admin.topup.approve',
+        entityType: 'transaction',
+        entityId: reference,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      }).catch(() => null);
+    }
 
     return respond(200, { message: 'Topup approved', reference });
   }

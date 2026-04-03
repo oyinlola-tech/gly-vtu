@@ -1,6 +1,7 @@
 import express from 'express';
 import { pool } from '../config/db.js';
 import { requireUser } from '../middleware/auth.js';
+import { validateRequest, notificationsReadSchema } from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -25,8 +26,8 @@ router.get('/unread-count', requireUser, async (req, res) => {
   return res.json({ unread: Number(row?.total || 0) });
 });
 
-router.post('/read', requireUser, async (req, res) => {
-  const { ids } = req.body || {};
+router.post('/read', requireUser, validateRequest(notificationsReadSchema), async (req, res) => {
+  const { ids } = req.validated || req.body || {};
   if (!Array.isArray(ids) || !ids.length) {
     return res.status(400).json({ error: 'Notification IDs required' });
   }

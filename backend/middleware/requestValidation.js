@@ -689,6 +689,23 @@ export const adminConversationSendSchema = Joi.object({
   text: Joi.string().min(1).max(2000).required(),
 });
 
+export const conversationSendSchema = Joi.object({
+  text: Joi.string().min(1).max(2000).required(),
+});
+
+export const notificationsReadSchema = Joi.object({
+  ids: Joi.array()
+    .items(Joi.string().guid({ version: 'uuidv4' }))
+    .min(1)
+    .max(200)
+    .required(),
+});
+
+export const bankResolveSchema = Joi.object({
+  accountNumber: Joi.string().pattern(/^\d{8,20}$/).required(),
+  bankCode: Joi.string().pattern(/^\d{3,10}$/).optional(),
+});
+
 export const adminNotificationSchema = Joi.object({
   title: Joi.string().min(2).max(200).required(),
   body: Joi.string().min(2).max(2000).required(),
@@ -889,6 +906,9 @@ export default {
   adminFinanceBalancesQuerySchema,
   adminConversationIdParamSchema,
   adminConversationSendSchema,
+  conversationSendSchema,
+  notificationsReadSchema,
+  bankResolveSchema,
   adminNotificationSchema,
   adminNotificationHistoryQuerySchema,
   adminFlutterwaveRequerySchema,
