@@ -1,0 +1,1196 @@
+import type {
+  AdminBillPricing,
+  AdminBillProvider,
+  BillCategory,
+  BillProvider,
+  BillQuoteRequest,
+  BillQuoteResponse,
+  BillVariationsResponse,
+  BillsPayCardRequest,
+  BillsPayCardResponse,
+  BillsPayRequest,
+  BillsPayResponse,
+} from '../types/bills';
+import type {
+  User,
+  Transaction,
+  WalletInfo,
+  TopupOption,
+  SecurityStatus,
+  SecurityAlert,
+  Session,
+  KYCLimits,
+  TOTPSetup,
+  Bank,
+  Conversation,
+  SecurityQuestion,
+  SendMoneyResponse,
+  RecipientLookupResponse,
+} from '../types/api';
+
+type AuthLoginResponse = {
+  otpRequired?: boolean;
+  totpRequired?: boolean;
+  needsPin?: boolean;
+  email?: string;
+  message?: string;
+  admin?: AdminProfile;
+};
+
+type VerifyDeviceResponse = {
+  totpRequired?: boolean;
+  message?: string;
+};
+
+type WalletReceiveResponse = {
+  id?: string;
+  reference?: string;
+  message?: string;
+};
+
+type AdminProfile = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+const env = (import.meta as unknown as { env?: { VITE_API_URL?: string; VITE_ADMIN_API_URL?: string } }).env;
+const API_BASE_URL = env?.VITE_API_URL || '/app/api';
+const ADMIN_API_BASE_URL = env?.VITE_ADMIN_API_URL || '/app/admin/api';
+
+let csrfToken: string | null = null;
+let deviceIdCache: string | null = null;
+let deviceIdPromise: Promise<string> | null = null;
+
+async function getDeviceId() {
+  if (deviceIdCache) return deviceIdCache;
+  if (deviceIdPromise) return deviceIdPromise;
+
+  deviceIdPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/device-id`, {
+        credentials: 'include',
+      });
+      const data = await parseResponse(res);
+      if (res.ok && data?.deviceId) {
+        deviceIdCache = data.deviceId;
+        return data.deviceId;
+      }
+    } catch {
+      // ignore and fall back to ephemeral ID
+    }
+    deviceIdCache = crypto.randomUUID();
+    return deviceIdCache;
+  })().finally(() => {
+    deviceIdPromise = null;
+  });
+
+  return deviceIdPromise;
+}
+
+function createIdempotencyKey() {
+  return crypto.randomUUID();
+}
+
+// CSRF Token is issued by the server and stored in-memory (double-submit)
+async function ensureCsrfToken() {
+  if (csrfToken) return csrfToken;
+  const res = await fetch(`${API_BASE_URL}/auth/csrf`, {
+    credentials: 'include',
+  });
+  const data = await parseResponse(res);
+  if (res.ok && data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
+  return csrfToken;
+}
+
+async function ensureAdminCsrfToken() {
+  if (csrfToken) return csrfToken;
+  const res = await fetch(`${ADMIN_API_BASE_URL}/auth/csrf`, {
+    credentials: 'include',
+  });
+  const data = await parseResponse(res);
+  if (res.ok && data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
+  return csrfToken;
+}
+
+async function parseResponse(res: Response) {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return res.json();
+  }
+  return res.text();
+}
+
+async function refreshAccessToken() {
+  const token = await ensureCsrfToken();
+  const deviceId = await getDeviceId();
+  const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'X-CSRF-Token': token } : {}),
+    },
+    credentials: 'include',
+    body: JSON.stringify({ deviceId }),
+  });
+  const data = await parseResponse(res);
+  if (!res.ok) throw new Error(data?.error || 'Session expired');
+  if (data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
+  return true;
+}
+
+async function refreshAdminAccessToken() {
+  const token = await ensureAdminCsrfToken();
+  const deviceId = await getDeviceId();
+  const res = await fetch(`${ADMIN_API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'X-CSRF-Token': token } : {}),
+    },
+    credentials: 'include',
+    body: JSON.stringify({ deviceId }),
+  });
+  const data = await parseResponse(res);
+  if (!res.ok) throw new Error(data?.error || 'Session expired');
+  if (data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
+  return true;
+}
+
+async function request<T>(
+  base: string,
+  path: string,
+  options: globalThis.RequestInit = {},
+  config: { auth?: boolean; admin?: boolean } = {}
+): Promise<T> {
+  const { auth = true, admin = false } = config;
+  const headers: Record<string, string> = {
+    ...(options.headers ? (options.headers as Record<string, string>) : {}),
+  };
+  if (options.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const method = (options.method || 'GET').toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const token = csrfToken || (admin ? await ensureAdminCsrfToken() : await ensureCsrfToken());
+    if (token) {
+      headers['X-CSRF-Token'] = token;
+    }
+  }
+
+  const response = await fetch(`${base}${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  });
+  const rotatedToken = response.headers.get('x-csrf-token-new');
+  if (rotatedToken) {
+    csrfToken = rotatedToken;
+  }
+
+  if (response.status === 401 && auth && !admin) {
+    await refreshAccessToken();
+    const retryHeaders = { ...headers };
+    const retry = await fetch(`${base}${path}`, {
+      ...options,
+      headers: retryHeaders,
+      credentials: 'include',
+    });
+    const retryData = await parseResponse(retry);
+    if (!retry.ok) throw new Error(retryData?.error || 'Request failed');
+    return retryData as T;
+  }
+  if (response.status === 401 && auth && admin) {
+    await refreshAdminAccessToken();
+    const retryHeaders = { ...headers };
+    const retry = await fetch(`${base}${path}`, {
+      ...options,
+      headers: retryHeaders,
+      credentials: 'include',
+    });
+    const retryData = await parseResponse(retry);
+    if (!retry.ok) throw new Error(retryData?.error || 'Request failed');
+    return retryData as T;
+  }
+
+  const data = await parseResponse(response);
+  if (data?.csrfToken) {
+    csrfToken = data.csrfToken;
+  }
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || 'Request failed');
+  }
+  return data as T;
+}
+
+// ============= AUTHENTICATION APIs =============
+export const authAPI = {
+  sendRegistrationOtp: async (email: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/auth/send-registration-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      },
+      { auth: false }
+    );
+  },
+
+  verifyRegistrationOtp: async (email: string, otp: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/auth/verify-registration-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, otp }),
+      },
+      { auth: false }
+    );
+  },
+
+  register: async (data: {
+    email: string;
+    phone: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    bvn?: string;
+    nin?: string;
+  }) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/auth/register',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          fullName: `${data.firstName} ${data.lastName}`.trim(),
+          email: data.email,
+          phone: data.phone,
+          password: data.password,
+          bvn: data.bvn,
+          nin: data.nin,
+        }),
+      },
+      { auth: false }
+    );
+  },
+
+  login: async (data: { email: string; password: string; deviceId?: string; totp?: string; backupCode?: string }) => {
+    const resolvedDeviceId = data.deviceId || (await getDeviceId());
+    return request<AuthLoginResponse>(
+      API_BASE_URL,
+      '/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          deviceId: resolvedDeviceId,
+          totp: data.totp,
+          backupCode: data.backupCode,
+        }),
+      },
+      { auth: false }
+    );
+    // CSRF token is managed via double-submit (cookie + header)
+  },
+
+  verifyDevice: async (data: {
+    email: string;
+    code?: string;
+    deviceId?: string;
+    label?: string;
+    securityAnswer?: string;
+    totp?: string;
+    backupCode?: string;
+  }) => {
+    const resolvedDeviceId = data.deviceId || (await getDeviceId());
+    return request<VerifyDeviceResponse>(
+      API_BASE_URL,
+      '/auth/verify-device',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          email: data.email,
+          code: data.code,
+          deviceId: resolvedDeviceId,
+          label: data.label,
+          securityAnswer: data.securityAnswer,
+          totp: data.totp,
+          backupCode: data.backupCode,
+        }),
+      },
+      { auth: false }
+    );
+    // CSRF token is managed via double-submit (cookie + header)
+  },
+
+  forgotPassword: async (data: { email: string }) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/auth/forgot-password',
+      { method: 'POST', body: JSON.stringify(data) },
+      { auth: false }
+    );
+  },
+
+  resetPassword: async (data: { email: string; code: string; newPassword: string }) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/auth/reset-password',
+      { method: 'POST', body: JSON.stringify(data) },
+      { auth: false }
+    );
+  },
+
+  logout: async () => {
+    await request<{ message: string }>(
+      API_BASE_URL,
+      '/auth/logout',
+      { method: 'POST' },
+      { auth: false }
+    );
+    // CSRF token cleared server-side
+  },
+
+  me: async () => {
+    return request<User>(API_BASE_URL, '/auth/me');
+  },
+
+  getSecurityQuestion: async (email: string) => {
+    return request<{ enabled: boolean; question: string | null }>(
+      API_BASE_URL,
+      '/auth/security-question',
+      { method: 'POST', body: JSON.stringify({ email }) },
+      { auth: false }
+    );
+  },
+
+  // Additional auth methods for security pages
+  getProfile: async () => {
+    return request<User>(API_BASE_URL, '/auth/me');
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/password/change',
+      { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }
+    );
+  },
+
+  initiateTwoFactor: async () => {
+    return request<{ secret: string; qrCode: string }>(
+      API_BASE_URL,
+      '/user/totp/setup',
+      { method: 'POST' }
+    );
+  },
+
+  verifyTwoFactor: async (code: string, secret: string) => {
+    return request<{ backupCodes: string[] }>(
+      API_BASE_URL,
+      '/user/totp/verify',
+      { method: 'POST', body: JSON.stringify({ code, secret }) }
+    );
+  },
+
+  enable2FA: async (secret: string, code: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/totp/enable',
+      { method: 'POST', body: JSON.stringify({ token: code }) }
+    );
+  },
+
+  disable2FA: async () => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/totp/disable',
+      { method: 'POST', body: JSON.stringify({}) }
+    );
+  },
+};
+
+// ============= USER APIs =============
+export const userAPI = {
+  getProfile: async () => {
+    return request<User>(API_BASE_URL, '/user/profile');
+  },
+
+  submitKYC: async (data: { level: 2 | 3; payload: Record<string, unknown> }) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/kyc',
+      { method: 'PUT', body: JSON.stringify(data) }
+    );
+  },
+
+  updateProfile: async (data: { fullName: string; phone: string }) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/profile',
+      { method: 'PUT', body: JSON.stringify(data) }
+    );
+  },
+
+  getKycLimits: async () => {
+    return request<KYCLimits>(API_BASE_URL, '/user/kyc/limits');
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/password/change',
+      { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }
+    );
+  },
+
+  getSessions: async () => {
+    return request<Session[]>(API_BASE_URL, '/user/sessions');
+  },
+
+  revokeSession: async (id: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      `/user/sessions/${id}/revoke`,
+      { method: 'POST' }
+    );
+  },
+  renameSession: async (id: string, label: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      `/user/sessions/${id}/label`,
+      { method: 'POST', body: JSON.stringify({ label }) }
+    );
+  },
+
+  getSecurityStatus: async () => {
+    return request<SecurityStatus>(API_BASE_URL, '/user/security');
+  },
+  getSecurityEvents: async (params?: { limit?: number; offset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    const query = search.toString();
+    return request<SecurityAlert[]>(
+      API_BASE_URL,
+      `/user/security-events${query ? `?${query}` : ''}`
+    );
+  },
+  getSecurityAlerts: async () => {
+    return request<{ alerts: SecurityAlert[] }>(API_BASE_URL, '/user/security-alerts');
+  },
+  requestDataExport: async () => {
+    return request<{ success: boolean }>(API_BASE_URL, '/user/data-export', { method: 'POST' });
+  },
+  requestAccountClosure: async (payload: { reason: string; feedbackMessage?: string }) => {
+    return request<{ success: boolean; deletionDate: string }>(
+      API_BASE_URL,
+      '/user/account/closure-request',
+      { method: 'POST', body: JSON.stringify(payload) }
+    );
+  },
+  downloadSecurityEvents: async () => {
+    const res = await fetch(`${API_BASE_URL}/user/security-events?export=csv`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await parseResponse(res);
+      throw new Error(error?.error || 'Download failed');
+    }
+    return res.blob();
+  },
+
+  setPin: async (pin: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/pin/setup',
+      { method: 'POST', body: JSON.stringify({ pin }) }
+    );
+  },
+
+  changePin: async (currentPin: string, newPin: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/pin/change',
+      { method: 'POST', body: JSON.stringify({ currentPin, newPin }) }
+    );
+  },
+
+  verifyPin: async (pin: string) => {
+    return request<{ valid: boolean }>(
+      API_BASE_URL,
+      '/user/pin/verify',
+      { method: 'POST', body: JSON.stringify({ pin }) }
+    );
+  },
+
+  toggleBiometric: async (enabled: boolean) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/biometric',
+      { method: 'POST', body: JSON.stringify({ enabled }) }
+    );
+  },
+
+  getSecurityQuestions: async () => {
+    return request<string[]>(API_BASE_URL, '/user/security-questions');
+  },
+
+  getSecurityQuestion: async () => {
+    return request<SecurityQuestion>(API_BASE_URL, '/user/security-question');
+  },
+
+  setSecurityQuestion: async (question: string, answer: string) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/security-question/set',
+      { method: 'POST', body: JSON.stringify({ question, answer }) }
+    );
+  },
+
+  enableSecurityQuestion: async (enabled: boolean) => {
+    return request<{ message: string }>(
+      API_BASE_URL,
+      '/user/security-question/enable',
+      { method: 'POST', body: JSON.stringify({ enabled }) }
+    );
+  },
+  setupTotp: async () => {
+    return request<TOTPSetup>(API_BASE_URL, '/user/totp/setup', { method: 'POST' });
+  },
+  enableTotp: async (token: string) => {
+    return request<{ message?: string; backupCodes?: string[] }>(API_BASE_URL, '/user/totp/enable', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  },
+  disableTotp: async (payload: { token?: string; backupCode?: string }) => {
+    return request<{ message: string }>(API_BASE_URL, '/user/totp/disable', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Wallet & Transaction methods
+  getTransactions: async () => {
+    return request<Transaction[]>(API_BASE_URL, '/transactions');
+  },
+
+  getWalletInfo: async () => {
+    return request<WalletInfo>(API_BASE_URL, '/wallet/info');
+  },
+
+  getTopupOptions: async () => {
+    return request<TopupOption[]>(API_BASE_URL, '/wallet/topup-options');
+  },
+
+  initiateTopup: async (providerId: string, amount: number) => {
+    return request<{ checkoutUrl?: string }>(API_BASE_URL, '/wallet/topup', {
+      method: 'POST',
+      body: JSON.stringify({ providerId, amount }),
+    });
+  },
+};
+
+// ============= WALLET APIs =============
+export const walletAPI = {
+  getBalance: async () => {
+    return request<{ balance: number }>(API_BASE_URL, '/wallet/balance');
+  },
+
+  lookupRecipient: async (recipient: string) => {
+    return request<RecipientLookupResponse>(API_BASE_URL, '/wallet/recipient-lookup', {
+      method: 'POST',
+      body: JSON.stringify({ recipient }),
+    });
+  },
+
+  sendMoney: async (data: {
+    amount: number;
+    pin: string;
+    accountNumber?: string;
+    bankCode?: string;
+    accountName?: string;
+    to?: string;
+    channel?: string;
+  }) => {
+    return request<SendMoneyResponse>(API_BASE_URL, '/wallet/send', {
+      method: 'POST',
+      headers: { 'X-Idempotency-Key': createIdempotencyKey() },
+      body: JSON.stringify(data),
+    });
+  },
+
+  requestMoney: async (data: { amount: number; note?: string }) => {
+    return request<WalletReceiveResponse>(API_BASE_URL, '/wallet/receive', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getTransactions: async () => {
+    return request<Transaction[]>(API_BASE_URL, '/transactions');
+  },
+
+  sendStatement: async (data: { startDate: string; endDate: string }) => {
+    return request<{ message: string }>(API_BASE_URL, '/transactions/statement', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  downloadStatement: async (data: { startDate: string; endDate: string }) => {
+    const token = await ensureCsrfToken();
+    const res = await fetch(`${API_BASE_URL}/transactions/statement/download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-CSRF-Token': token } : {}),
+      },
+      body: JSON.stringify(data),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await parseResponse(res);
+      throw new Error(error?.error || 'Download failed');
+    }
+    return res.blob();
+  },
+};
+
+export const transactionsAPI = {
+  getById: async (id: string) => {
+    return request<Transaction>(API_BASE_URL, `/transactions/${id}`);
+  },
+  downloadReceipt: async (id: string) => {
+    const res = await fetch(`${API_BASE_URL}/transactions/${id}/receipt`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await parseResponse(res);
+      throw new Error(error?.error || 'Download failed');
+    }
+    return res.blob();
+  },
+};
+
+// ============= BILLS PAYMENT APIs =============
+export const billsAPI = {
+  getCategories: async () => {
+    return request<BillCategory[]>(API_BASE_URL, '/bills/categories', {}, { auth: false });
+  },
+
+  getProviders: async (category: string) => {
+    return request<BillProvider[]>(
+      API_BASE_URL,
+      `/bills/providers?category=${encodeURIComponent(category)}`,
+      {},
+      { auth: false }
+    );
+  },
+
+  getVariations: async (serviceID: string) => {
+    return request<BillVariationsResponse>(
+      API_BASE_URL,
+      `/bills/variations?serviceID=${encodeURIComponent(serviceID)}`,
+      {},
+      { auth: false }
+    );
+  },
+
+  getQuote: async (data: BillQuoteRequest) => {
+    return request<BillQuoteResponse>(API_BASE_URL, '/bills/quote', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  pay: async (data: BillsPayRequest) => {
+    return request<BillsPayResponse>(API_BASE_URL, '/bills/pay', {
+      method: 'POST',
+      headers: { 'X-Idempotency-Key': createIdempotencyKey() },
+      body: JSON.stringify(data),
+    });
+  },
+
+  payWithCard: async (data: BillsPayCardRequest) => {
+    return request<BillsPayCardResponse>(API_BASE_URL, '/bills/pay-card', {
+      method: 'POST',
+      headers: { 'X-Idempotency-Key': createIdempotencyKey() },
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// ============= BANKS APIs =============
+export const banksAPI = {
+  getBanks: async () => {
+    return request<Bank[]>(API_BASE_URL, '/banks');
+  },
+
+  resolveAccount: async (data: { accountNumber: string; bankCode: string }) => {
+    return request<{ accountName: string }>(API_BASE_URL, '/banks/resolve', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// ============= NOTIFICATIONS APIs =============
+export const notificationsAPI = {
+  list: async () => {
+    return request<unknown[]>(API_BASE_URL, '/notifications');
+  },
+  unreadCount: async () => {
+    return request<{ unread: number }>(API_BASE_URL, '/notifications/unread-count');
+  },
+  markRead: async (ids: string[]) => {
+    return request<{ message: string }>(API_BASE_URL, '/notifications/read', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  },
+  markAll: async () => {
+    return request<{ message: string }>(API_BASE_URL, '/notifications/read-all', {
+      method: 'POST',
+    });
+  },
+};
+
+// ============= CONVERSATIONS APIs =============
+export const conversationsAPI = {
+  getMine: async () => {
+    return request<Conversation>(API_BASE_URL, '/conversations/me');
+  },
+  send: async (text: string) => {
+    return request<{ message: string }>(API_BASE_URL, '/conversations/send', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  },
+};
+
+// ============= VIRTUAL CARDS APIs =============
+export const cardsAPI = {
+  list: async () => {
+    return request<unknown[]>(API_BASE_URL, '/cards');
+  },
+  create: async (amount: number, currency = 'NGN', pin?: string) => {
+    return request<unknown>(API_BASE_URL, '/cards', {
+      method: 'POST',
+      headers: { 'X-Idempotency-Key': createIdempotencyKey() },
+      body: JSON.stringify({ amount, currency, pin }),
+    });
+  },
+  freeze: async (cardId: string) => {
+    return request<{ message: string }>(API_BASE_URL, `/cards/${cardId}/freeze`, {
+      method: 'POST',
+    });
+  },
+  unfreeze: async (cardId: string) => {
+    return request<{ message: string }>(API_BASE_URL, `/cards/${cardId}/unfreeze`, {
+      method: 'POST',
+    });
+  },
+  getSettings: async (cardId: string) => {
+    return request<Record<string, unknown>>(API_BASE_URL, `/cards/${cardId}/settings`);
+  },
+  updateSettings: async (cardId: string, payload: Record<string, unknown>) => {
+    return request<{ message: string }>(API_BASE_URL, `/cards/${cardId}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+};
+
+// ============= ADMIN APIs =============
+export const adminAPI = {
+  login: async (data: { email: string; password: string; totp?: string }) => {
+    const deviceId = await getDeviceId();
+    const response = await request<AuthLoginResponse>(
+      ADMIN_API_BASE_URL,
+      '/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...data, deviceId }),
+      },
+      { auth: false, admin: true }
+    );
+    // CSRF token is managed via double-submit (cookie + header)
+    return response;
+  },
+  me: async () => {
+    return request<AdminProfile>(ADMIN_API_BASE_URL, '/auth/me', {}, { admin: true });
+  },
+
+  refresh: async () => {
+    const csrfToken = await ensureAdminCsrfToken();
+    const deviceId = await getDeviceId();
+    const response = await request<unknown>(
+      ADMIN_API_BASE_URL,
+      '/auth/refresh',
+      {
+        method: 'POST',
+        headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+        body: JSON.stringify({ deviceId }),
+      },
+      { auth: false, admin: true }
+    );
+    // CSRF token is managed via double-submit (cookie + header)
+    return response;
+  },
+
+  logout: async () => {
+    await request<unknown>(
+      ADMIN_API_BASE_URL,
+      '/auth/logout',
+      { method: 'POST' },
+      { auth: false, admin: true }
+    );
+    // CSRF token cleared server-side
+  },
+
+  forgotPassword: async (data: { email: string }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/auth/forgot-password',
+      { method: 'POST', body: JSON.stringify(data) },
+      { auth: false, admin: true }
+    );
+  },
+
+  resetPassword: async (data: { email: string; code: string; newPassword: string }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/auth/reset-password',
+      { method: 'POST', body: JSON.stringify(data) },
+      { auth: false, admin: true }
+    );
+  },
+
+  getFinanceOverview: async () => {
+    return request<unknown>(ADMIN_API_BASE_URL, '/finance/overview', {}, { admin: true });
+  },
+
+  getUsers: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/users', {}, { admin: true });
+  },
+
+  getTransactions: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/transactions', {}, { admin: true });
+  },
+
+  getAudit: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/audit', {}, { admin: true });
+  },
+  getSecurityEvents: async (params?: { limit?: number; offset?: number; severity?: string; type?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    if (params?.severity) search.set('severity', params.severity);
+    if (params?.type) search.set('type', params.type);
+    const query = search.toString();
+    return request<unknown[]>(
+      ADMIN_API_BASE_URL,
+      `/security-events${query ? `?${query}` : ''}`,
+      {},
+      { admin: true }
+    );
+  },
+  downloadSecurityEvents: async () => {
+    const res = await fetch(`${ADMIN_API_BASE_URL}/security-events?export=csv`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await parseResponse(res);
+      throw new Error(error?.error || 'Download failed');
+    }
+    return res.blob();
+  },
+  getAnomalies: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/anomalies', {}, { admin: true });
+  },
+  getComplianceQueue: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/compliance', {}, { admin: true });
+  },
+
+  getAuditLogs: async (params?: {
+    limit?: number;
+    offset?: number;
+    actorType?: string;
+    actorId?: string;
+    action?: string;
+    entityType?: string;
+    from?: string;
+    to?: string;
+  }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    if (params?.actorType) search.set('actorType', params.actorType);
+    if (params?.actorId) search.set('actorId', params.actorId);
+    if (params?.action) search.set('action', params.action);
+    if (params?.entityType) search.set('entityType', params.entityType);
+    if (params?.from) search.set('from', params.from);
+    if (params?.to) search.set('to', params.to);
+    const query = search.toString();
+    return request<unknown[]>(
+      ADMIN_API_BASE_URL,
+      `/audit${query ? `?${query}` : ''}`,
+      {},
+      { admin: true }
+    );
+  },
+
+  getHeldTopups: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/transactions/held-topups', {}, { admin: true });
+  },
+
+  approveHeldTopup: async (reference: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/transactions/held-topups/${reference}/approve`,
+      { method: 'POST', headers: { 'X-Idempotency-Key': createIdempotencyKey() } },
+      { admin: true }
+    );
+  },
+
+  rejectHeldTopup: async (reference: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/transactions/held-topups/${reference}/reject`,
+      { method: 'POST' },
+      { admin: true }
+    );
+  },
+
+  getAdminAdjustments: async (status?: string) => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return request<unknown[]>(ADMIN_API_BASE_URL, `/finance/adjustments${query}`, {}, { admin: true });
+  },
+
+  requestAdminAdjustment: async (payload: {
+    userId: string;
+    type: 'credit' | 'debit';
+    amount: number;
+    reason?: string;
+  }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/finance/adjustments',
+      { method: 'POST', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  approveAdminAdjustment: async (id: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/finance/adjustments/${id}/approve`,
+      { method: 'POST', headers: { 'X-Idempotency-Key': createIdempotencyKey() } },
+      { admin: true }
+    );
+  },
+
+  rejectAdminAdjustment: async (id: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/finance/adjustments/${id}/reject`,
+      { method: 'POST' },
+      { admin: true }
+    );
+  },
+
+  getConversations: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/conversations', {}, { admin: true });
+  },
+
+  getConversationMessages: async (id: string) => {
+    return request<unknown[]>(
+      ADMIN_API_BASE_URL,
+      `/conversations/${id}/messages`,
+      {},
+      { admin: true }
+    );
+  },
+
+  sendConversationMessage: async (id: string, text: string) => {
+    return request<unknown>(
+      ADMIN_API_BASE_URL,
+      `/conversations/${id}/send`,
+      { method: 'POST', body: JSON.stringify({ text }) },
+      { admin: true }
+    );
+  },
+
+  sendNotification: async (payload: {
+    title: string;
+    body: string;
+    type?: string;
+    userId?: string;
+    force?: boolean;
+    data?: Record<string, unknown>;
+  }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/notifications',
+      { method: 'POST', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  getBillPricing: async () => {
+    return request<AdminBillPricing[]>(ADMIN_API_BASE_URL, '/bills/pricing', {}, { admin: true });
+  },
+
+  updateBillPricing: async (
+    id: string,
+    payload: {
+      baseFee: number;
+      markupType: 'flat' | 'percent';
+      markupValue: number;
+      currency: string;
+      active: boolean;
+    }
+  ) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/bills/pricing/${id}`,
+      { method: 'PUT', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  getBillProviders: async () => {
+    return request<AdminBillProvider[]>(ADMIN_API_BASE_URL, '/bills/providers', {}, { admin: true });
+  },
+
+  updateBillProvider: async (
+    id: string,
+    payload: { name: string; code: string; logoUrl?: string; active: boolean }
+  ) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/bills/providers/${id}`,
+      { method: 'PUT', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  getVtpassEvents: async (params?: { limit?: number; offset?: number; status?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    if (params?.status) search.set('status', params.status);
+    const query = search.toString();
+    return request<unknown[]>(ADMIN_API_BASE_URL, `/vtpass/events${query ? `?${query}` : ''}`, {}, { admin: true });
+  },
+
+  requeryVtpass: async (requestId: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/vtpass/requery',
+      { method: 'POST', body: JSON.stringify({ requestId }) },
+      { admin: true }
+    );
+  },
+
+  requeryFlutterwaveVirtualAccount: async (payload: { userId?: string; accountReference?: string }) => {
+    return request<unknown>(
+      ADMIN_API_BASE_URL,
+      '/flutterwave/virtual-accounts/requery',
+      { method: 'POST', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  getAdmins: async () => {
+    return request<unknown[]>(ADMIN_API_BASE_URL, '/manage', {}, { admin: true });
+  },
+
+  getAdminRoles: async () => {
+    return request<string[]>(ADMIN_API_BASE_URL, '/manage/roles', {}, { admin: true });
+  },
+
+  getRoleMatrix: async () => {
+    return request<Record<string, string[]>>(ADMIN_API_BASE_URL, '/manage/role-matrix', {}, { admin: true });
+  },
+
+  createAdmin: async (payload: { name: string; email: string; password: string; role: string }) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      '/manage',
+      { method: 'POST', body: JSON.stringify(payload) },
+      { admin: true }
+    );
+  },
+
+  updateAdminRole: async (id: string, role: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/manage/${id}/role`,
+      { method: 'PUT', body: JSON.stringify({ role }) },
+      { admin: true }
+    );
+  },
+
+  deleteAdmin: async (id: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/manage/${id}`,
+      { method: 'DELETE' },
+      { admin: true }
+    );
+  },
+
+  disableAdmin: async (id: string, reason?: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/manage/${id}/disable`,
+      { method: 'PATCH', body: JSON.stringify({ reason }) },
+      { admin: true }
+    );
+  },
+
+  enableAdmin: async (id: string) => {
+    return request<{ message: string }>(
+      ADMIN_API_BASE_URL,
+      `/manage/${id}/enable`,
+      { method: 'PATCH' },
+      { admin: true }
+    );
+  },
+
+  getNotificationHistory: async (params?: { limit?: number; offset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.offset) search.set('offset', String(params.offset));
+    const query = search.toString();
+    return request<unknown[]>(
+      ADMIN_API_BASE_URL,
+      `/notifications/history${query ? `?${query}` : ''}`,
+      {},
+      { admin: true }
+    );
+  },
+};
+
+export const tokenStore = {
+  clear: () => {
+    // CSRF tokens cleared server-side
+  },
+  getDeviceId,
+};

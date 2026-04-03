@@ -1,0 +1,1128 @@
+import express from 'express';
+import { pool } from '../config/db.js';
+import { requireUser } from '../middleware/auth.js';
+import { createVirtualAccountForCustomer, updateCustomer } from '../utils/flutterwave.js';
+import { sanitizeFlutterwaveAccount } from '../utils/sanitize.js';
+import {
+  sendReservedAccountEmail,
+  sendAccountClosureRequestEmail,
+  sendDataExportRequestedEmail,
+} from '../utils/email.js';
+import {
+  isValidPin,
+  setTransactionPin,
+  verifyTransactionPin,
+  getPinStatus,
+  validatePinComplexity,
+} from '../utils/pin.js';
+import { logAudit } from '../utils/audit.js';
+import argon2 from 'argon2';
+import { QUESTIONS, normalizeAnswer, isValidSecurityAnswer } from '../utils/securityQuestions.js';
+import {
+  generateTotpSecret,
+  generateTotpQr,
+  verifyTotp,
+  generateBackupCodes,
+  hashBackupCodes,
+  verifyBackupCode,
+} from '../utils/totp.js';
+import zxcvbn from 'zxcvbn';
+import { getKycLimitConfig } from '../utils/kycLimits.js';
+import { logSecurityEvent } from '../utils/securityEvents.js';
+import {
+  changePasswordSchema,
+  validateRequest,
+  updateProfileSchema,
+  kycSubmissionSchema,
+  validateQuery,
+  validateParams,
+  securityEventsQuerySchema,
+  deviceIdParamSchema,
+  deviceLabelSchema,
+  pinSetupSchema,
+  pinChangeSchema,
+  pinVerifySchema,
+  biometricSchema,
+  accountClosureRequestSchema,
+  accountClosureCancelQuerySchema,
+  securityQuestionSetSchema,
+  securityQuestionEnableSchema,
+  securityQuestionVerifySchema,
+  totpEnableSchema,
+  totpDisableSchema,
+} from '../middleware/requestValidation.js';
+import { logger } from '../utils/logger.js';
+import { applyUserPII, decryptJson, encryptJson, hashPhone, encryptPII } from '../utils/encryption.js';
+import { runKycVerification } from '../utils/kycVerification.js';
+import crypto from 'crypto';
+import Joi from 'joi';
+
+const router = express.Router();
+const MIN_PASSWORD_LENGTH = 10;
+const MIN_ZXCVBN_SCORE = 3;
+const kycPayloadSchema = Joi.object({
+  bvn: Joi.string().length(11).pattern(/^\d+$/).optional(),
+  nin: Joi.string().length(11).pattern(/^\d+$/).optional(),
+  dob: Joi.date().max('now').min('1930-01-01').optional(),
+  address: Joi.string().min(10).max(500).optional(),
+  phone: Joi.string().pattern(/^(\+234|0)[789][0-9]{9}$/).optional(),
+}).unknown(false);
+
+const ALLOWED_UPDATE_FIELDS = {
+  fullName: 'full_name',
+  phone: 'phone',
+};
+
+function validatePasswordStrength(password) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+  }
+  const score = zxcvbn(password).score;
+  if (score < MIN_ZXCVBN_SCORE) {
+    return 'Password is too weak';
+  }
+  return null;
+}
+
+router.get('/profile', requireUser, async (req, res) => {
+  /*
+    #swagger.tags = ['User']
+    #swagger.summary = 'Get user profile and reserved account'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.responses[200] = { description: 'Profile', schema: { $ref: '#/definitions/UserProfile' } }
+    #swagger.responses[404] = { description: 'Not found', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  const [rows] = await pool.query(
+    `SELECT u.id, u.full_name, u.email, u.phone, u.full_name_encrypted, u.email_encrypted, u.phone_encrypted,
+            u.kyc_level, u.kyc_status, u.kyc_payload, u.kyc_payload_encrypted,
+            r.account_number, r.bank_name, r.account_name
+     FROM users u
+     LEFT JOIN reserved_accounts r ON r.user_id = u.id
+     WHERE u.id = ?`,
+    [req.user.sub]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Not found' });
+  const row = applyUserPII(rows[0]);
+  const kycPayload = decryptJson(row.kyc_payload_encrypted, row.id) || row.kyc_payload || null;
+  const safeRow = { ...row };
+  delete safeRow.kyc_payload_encrypted;
+  return res.json({ ...safeRow, kyc_payload: kycPayload });
+});
+
+router.put('/profile', requireUser, validateRequest(updateProfileSchema), async (req, res) => {
+  /*
+    #swagger.tags = ['User']
+    #swagger.summary = 'Update profile'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = {
+      in: 'body',
+      required: true,
+      schema: { $ref: '#/definitions/UpdateProfileRequest' }
+    }
+    #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
+    #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  const { fullName, phone } = req.validated || req.body || {};
+  if (!fullName && !phone) return res.status(400).json({ error: 'Missing fields' });
+
+  if (phone) {
+    const phoneHash = hashPhone(phone);
+    const [existing] = await pool.query(
+      'SELECT id FROM users WHERE phone_hash = ? AND id <> ? LIMIT 1',
+      [phoneHash, req.user.sub]
+    );
+    if (existing.length) return res.status(409).json({ error: 'Phone already in use' });
+  }
+
+  const updates = [];
+  const values = [];
+  const payload = { fullName, phone };
+
+  for (const [field, dbCol] of Object.entries(ALLOWED_UPDATE_FIELDS)) {
+    const value = payload[field];
+    if (!value) continue;
+    if (dbCol === 'full_name') {
+      updates.push('full_name = ?');
+      updates.push('full_name_encrypted = ?');
+      values.push(null);
+      values.push(encryptPII(value, req.user.sub));
+    }
+    if (dbCol === 'phone') {
+      updates.push('phone = ?');
+      updates.push('phone_encrypted = ?');
+      updates.push('phone_hash = ?');
+      values.push(null);
+      values.push(encryptPII(value, req.user.sub));
+      values.push(hashPhone(value));
+    }
+  }
+  values.push(req.user.sub);
+  await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
+  return res.json({ message: 'Profile updated' });
+});
+
+router.put('/kyc', requireUser, validateRequest(kycSubmissionSchema), async (req, res) => {
+  /*
+    #swagger.tags = ['User']
+    #swagger.summary = 'Submit KYC data'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = {
+      in: 'body',
+      required: true,
+      schema: { $ref: '#/definitions/KycRequest' }
+    }
+    #swagger.responses[200] = { description: 'Submitted', schema: { $ref: '#/definitions/MessageResponse' } }
+    #swagger.responses[400] = { description: 'Validation error', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  const { level, payload } = req.validated || req.body || {};
+  if (!level || !payload) return res.status(400).json({ error: 'Missing KYC data' });
+  const { error, value } = kycPayloadSchema.validate(payload, {
+    abortEarly: false,
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({
+      error: 'KYC validation failed',
+      details: error.details.map((detail) => ({
+        field: detail.path.join('.'),
+        message: detail.message,
+      })),
+    });
+  }
+  const cleanedPayload = value || {};
+  const targetLevel = Number(level);
+  if (![2, 3].includes(targetLevel)) return res.status(400).json({ error: 'Invalid level' });
+
+  const [[userRaw]] = await pool.query(
+    `SELECT id, full_name, email, phone, full_name_encrypted, email_encrypted, phone_encrypted,
+            kyc_level, kyc_payload, kyc_payload_encrypted
+     FROM users WHERE id = ?`,
+    [req.user.sub]
+  );
+  const user = applyUserPII(userRaw);
+  if (!user) return res.status(404).json({ error: 'Not found' });
+
+  if (targetLevel === 2) {
+    if (!cleanedPayload.bvn && !cleanedPayload.nin) {
+      logSecurityEvent({
+        type: 'kyc.validation.failed',
+        severity: 'low',
+        actorType: 'user',
+        actorId: req.user.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { level: targetLevel, reason: 'missing_bvn_nin' },
+      }).catch(() => null);
+      return res.status(400).json({ error: 'BVN or NIN is required for Level 2' });
+    }
+    if (!cleanedPayload.dob) {
+      logSecurityEvent({
+        type: 'kyc.validation.failed',
+        severity: 'low',
+        actorType: 'user',
+        actorId: req.user.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { level: targetLevel, reason: 'missing_dob' },
+      }).catch(() => null);
+      return res.status(400).json({ error: 'Date of birth is required for Level 2' });
+    }
+  }
+  if (targetLevel === 3) {
+    if (!cleanedPayload.address) {
+      logSecurityEvent({
+        type: 'kyc.validation.failed',
+        severity: 'low',
+        actorType: 'user',
+        actorId: req.user.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { level: targetLevel, reason: 'missing_address' },
+      }).catch(() => null);
+      return res.status(400).json({ error: 'Address is required for Level 3' });
+    }
+    if (Number(user.kyc_level || 1) < 2) {
+      return res.status(400).json({ error: 'Complete Level 2 verification first' });
+    }
+  }
+
+  if (cleanedPayload.phone && cleanedPayload.phone !== user.phone) {
+    const phoneHash = hashPhone(cleanedPayload.phone);
+    const [existing] = await pool.query(
+      'SELECT id FROM users WHERE phone_hash = ? AND id <> ? LIMIT 1',
+      [phoneHash, req.user.sub]
+    );
+    if (existing.length) return res.status(409).json({ error: 'Phone already in use' });
+    await pool.query(
+      'UPDATE users SET phone = ?, phone_encrypted = ?, phone_hash = ? WHERE id = ?',
+      [null, encryptPII(cleanedPayload.phone, req.user.sub), phoneHash, req.user.sub]
+    );
+  }
+
+  const existingPayload =
+    decryptJson(user?.kyc_payload_encrypted, req.user.sub) ||
+    (user?.kyc_payload ? JSON.parse(user.kyc_payload) : {});
+  const mergedPayload = { ...existingPayload, ...cleanedPayload };
+
+  await pool.query(
+    'UPDATE users SET kyc_level = ?, kyc_status = ?, kyc_payload = ?, kyc_payload_encrypted = ? WHERE id = ?',
+    [
+      targetLevel,
+      'pending',
+      JSON.stringify({ flutterwave_customer_id: existingPayload.flutterwave_customer_id || null }),
+      encryptJson(mergedPayload, req.user.sub),
+      req.user.sub,
+    ]
+  );
+
+  if (targetLevel === 2) {
+    const customerId = existingPayload.flutterwave_customer_id || mergedPayload.flutterwave_customer_id;
+    if (customerId) {
+      updateCustomer(customerId, {
+        bvn: mergedPayload.bvn || undefined,
+        nin: mergedPayload.nin || undefined,
+        dob: mergedPayload.dob || undefined,
+      }).catch(() => null);
+    }
+    const [existing] = await pool.query(
+      'SELECT id FROM reserved_accounts WHERE user_id = ? LIMIT 1',
+      [req.user.sub]
+    );
+    if (!existing.length) {
+      try {
+        const accountReference = `GLY-${req.user.sub}`;
+        const reserved = await createVirtualAccountForCustomer({
+          email: user.email,
+          bvn: mergedPayload.bvn || null,
+          tx_ref: accountReference,
+          firstName: user.full_name?.split(' ')[0] || user.full_name,
+          lastName: user.full_name?.split(' ').slice(1).join(' ') || user.full_name,
+          customerId: customerId || undefined,
+        });
+        const account = reserved?.data || reserved?.response || {};
+        await pool.query(
+          `INSERT INTO reserved_accounts
+           (id, user_id, provider, account_reference, reservation_reference, account_name, account_number, bank_name, bank_code, status, raw_response)
+           VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE account_number = VALUES(account_number), bank_name = VALUES(bank_name), raw_response = VALUES(raw_response)`,
+          [
+            req.user.sub,
+            'flutterwave',
+            accountReference,
+            account.order_ref || account.reference || null,
+            account.account_name || user.full_name,
+            account.account_number || '',
+            account.bank_name || '',
+            account.bank_code || null,
+            account.status || 'ACTIVE',
+            JSON.stringify(sanitizeFlutterwaveAccount(account)),
+          ]
+        );
+        if (user?.email) {
+          sendReservedAccountEmail({
+            to: user.email,
+            name: user.full_name,
+            accountNumber: account.account_number,
+            bankName: account.bank_name,
+          }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
+        }
+      } catch {
+        // Keep KYC submission; reserved account can be retried later.
+      }
+    }
+    runKycVerification({
+      userId: req.user.sub,
+      payload: mergedPayload,
+      level: targetLevel,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch((err) => {
+      logger.warn('KYC verification flow failed', { error: logger.format(err) });
+    });
+  }
+
+  return res.json({ message: 'KYC submitted' });
+});
+
+router.get('/security', requireUser, async (req, res) => {
+  /*
+    #swagger.tags = ['User']
+    #swagger.summary = 'Get security status'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.responses[200] = {
+      description: 'Security status',
+      schema: { type: 'object', properties: { pinSet: { type: 'boolean' }, biometricEnabled: { type: 'boolean' } } }
+    }
+  */
+  const status = await getPinStatus(req.user.sub);
+  if (!status) return res.status(404).json({ error: 'Not found' });
+  const [[row]] = await pool.query(
+    'SELECT security_question_enabled, totp_enabled, totp_backup_codes, biometric_enabled, login_failed_attempts, password_updated_at FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const [devices] = await pool.query(
+    `SELECT id, device_id, label, last_seen, ip_address, user_agent, trusted
+     FROM user_devices WHERE user_id = ? ORDER BY last_seen DESC LIMIT 5`,
+    [req.user.sub]
+  );
+  const [events] = await pool.query(
+    `SELECT id, event_type, severity, ip_address, user_agent, metadata, created_at
+     FROM security_events
+     WHERE actor_type = 'user' AND actor_id = ?
+     ORDER BY created_at DESC
+     LIMIT 5`,
+    [req.user.sub]
+  );
+  const mappedEvents = (events || []).map((event) => {
+    let meta = event.metadata;
+    if (typeof meta === 'string') {
+      try {
+        meta = JSON.parse(meta);
+      } catch {
+        meta = {};
+      }
+    }
+    return {
+      id: event.id,
+      type: event.event_type,
+      title: event.event_type.replace(/\./g, ' '),
+      description: meta?.message || meta?.reason || 'Security activity recorded',
+      severity: event.severity,
+      createdAt: event.created_at,
+      ipAddress: event.ip_address,
+      userAgent: event.user_agent,
+    };
+  });
+  const suspiciousActivities = (events || [])
+    .filter((event) => ['high', 'critical'].includes(event.severity))
+    .slice(0, 5)
+    .map((event) => {
+      let meta = event.metadata;
+      if (typeof meta === 'string') {
+        try {
+          meta = JSON.parse(meta);
+        } catch {
+          meta = {};
+        }
+      }
+      return {
+        id: event.id,
+        type: event.event_type,
+        message: meta?.message || event.event_type,
+        ip: event.ip_address || '',
+        timestamp: event.created_at,
+        severity: event.severity === 'critical' ? 'high' : event.severity,
+      };
+    });
+
+  let backupCodesCount = 0;
+  try {
+    backupCodesCount = JSON.parse(row?.totp_backup_codes || '[]').length;
+  } catch {
+    backupCodesCount = 0;
+  }
+
+  return res.json({
+    pinSet: Boolean(status?.hasPin),
+    biometricEnabled: Boolean(row?.biometric_enabled),
+    totpEnabled: Boolean(row?.totp_enabled),
+    backupCodesGenerated: backupCodesCount > 0,
+    devicesCount: devices?.length || 0,
+    lastActivityAt: devices?.[0]?.last_seen || null,
+    securityQuestionEnabled: Boolean(row?.security_question_enabled),
+    loginFailedAttempts: Number(row?.login_failed_attempts || 0),
+    passwordUpdatedAt: row?.password_updated_at,
+    recentLogins: (devices || []).map((device) => ({
+      ip: device.ip_address,
+      userAgent: device.user_agent,
+      lastSeen: device.last_seen,
+    })),
+    securityEvents: mappedEvents,
+    suspiciousActivities,
+  });
+});
+
+function csvEscape(value) {
+  const str = value === null || value === undefined ? '' : String(value);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+router.get('/security-events', requireUser, validateQuery(securityEventsQuerySchema), async (req, res) => {
+  const exportCsv = String(req.validatedQuery?.export || '').toLowerCase() === 'csv';
+  const limit = Math.min(Number(req.validatedQuery?.limit || 50), 200);
+  const offset = Math.max(Number(req.validatedQuery?.offset || 0), 0);
+
+  const [rows] = await pool.query(
+    `SELECT id, event_type, severity, ip_address, user_agent, metadata, created_at
+     FROM security_events
+     WHERE actor_type = 'user' AND actor_id = ?
+     ORDER BY created_at DESC
+     LIMIT ? OFFSET ?`,
+    [req.user.sub, limit, offset]
+  );
+
+  if (!exportCsv) {
+    const normalized = (rows || []).map((row) => {
+      let meta = row.metadata;
+      if (typeof meta === 'string') {
+        try {
+          meta = JSON.parse(meta);
+        } catch {
+          meta = {};
+        }
+      }
+      return {
+        id: row.id,
+        event_type: row.event_type,
+        severity: row.severity,
+        ip_address: row.ip_address,
+        user_agent: row.user_agent,
+        metadata: meta,
+        created_at: row.created_at,
+        type: row.event_type,
+        title: row.event_type.replace(/\./g, ' '),
+        description: meta?.message || meta?.reason || 'Security activity recorded',
+        ipAddress: row.ip_address,
+        userAgent: row.user_agent,
+        createdAt: row.created_at,
+      };
+    });
+    return res.json(normalized);
+  }
+
+  const header = ['id', 'event_type', 'severity', 'ip_address', 'user_agent', 'metadata', 'created_at'];
+  const lines = [header.join(',')];
+  for (const row of rows || []) {
+    lines.push(
+      [
+        row.id,
+        row.event_type,
+        row.severity,
+        row.ip_address || '',
+        row.user_agent || '',
+        row.metadata ? JSON.stringify(row.metadata) : '',
+        row.created_at ? new Date(row.created_at).toISOString() : '',
+      ]
+        .map(csvEscape)
+        .join(',')
+    );
+  }
+
+  const filename = `security-events-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  return res.send(lines.join('\n'));
+});
+
+router.get('/kyc/limits', requireUser, async (req, res) => {
+  const [[user]] = await pool.query(
+    'SELECT kyc_level, kyc_status FROM users WHERE id = ? LIMIT 1',
+    [req.user.sub]
+  );
+  if (!user) return res.status(404).json({ error: 'Not found' });
+  const level = Number(user.kyc_level || 1);
+  return res.json({
+    level,
+    status: user.kyc_status || 'pending',
+    limits: {
+      send: getKycLimitConfig(level, 'send'),
+      bill: getKycLimitConfig(level, 'bill'),
+      topup: getKycLimitConfig(level, 'topup'),
+    },
+  });
+});
+
+router.get('/sessions', requireUser, async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT id, device_id, label, last_seen, ip_address, user_agent, trusted
+     FROM user_devices WHERE user_id = ? ORDER BY last_seen DESC`,
+    [req.user.sub]
+  );
+  return res.json(rows);
+});
+
+router.post('/sessions/:id/revoke', requireUser, validateParams(deviceIdParamSchema), async (req, res) => {
+  const [deviceRows] = await pool.query(
+    'SELECT device_id FROM user_devices WHERE id = ? AND user_id = ? LIMIT 1',
+    [req.validatedParams.id, req.user.sub]
+  );
+  const device = deviceRows?.[0];
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+  await pool.query('UPDATE user_devices SET trusted = 0 WHERE id = ? AND user_id = ?', [
+    req.validatedParams.id,
+    req.user.sub,
+  ]);
+  await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ? AND device_id = ?', [
+    req.user.sub,
+    device.device_id,
+  ]);
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: 'device.revoked',
+    entityType: 'device',
+    entityId: device.device_id,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  return res.json({ message: 'Session revoked' });
+});
+
+router.post('/sessions/:id/label', requireUser, validateParams(deviceIdParamSchema), validateRequest(deviceLabelSchema), async (req, res) => {
+  const label = String(req.validated?.label || '').trim();
+  const [rows] = await pool.query(
+    'SELECT id FROM user_devices WHERE id = ? AND user_id = ? LIMIT 1',
+    [req.validatedParams.id, req.user.sub]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Device not found' });
+  await pool.query('UPDATE user_devices SET label = ? WHERE id = ? AND user_id = ?', [
+    label,
+    req.validatedParams.id,
+    req.user.sub,
+  ]);
+  return res.json({ message: 'Device label updated' });
+});
+
+router.post('/password/change', requireUser, validateRequest(changePasswordSchema), async (req, res) => {
+  const { currentPassword, newPassword } = req.validated || req.body || {};
+  
+  const passwordError = validatePasswordStrength(newPassword);
+  if (passwordError) return res.status(400).json({ error: passwordError });
+  const [[userRaw]] = await pool.query(
+    'SELECT id, password_hash, email, email_encrypted FROM users WHERE id = ? LIMIT 1',
+    [req.user.sub]
+  );
+  const user = applyUserPII(userRaw);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const ok = await argon2.verify(user.password_hash, currentPassword);
+  if (!ok) {
+    logSecurityEvent({
+      type: 'password.change.failed',
+      severity: 'medium',
+      actorType: 'user',
+      actorId: req.user.sub,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => null);
+    return res.status(400).json({ error: 'Invalid password' });
+  }
+  const passwordHash = await argon2.hash(newPassword, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
+  await pool.query('UPDATE users SET password_hash = ?, password_updated_at = NOW() WHERE id = ?', [
+    passwordHash,
+    req.user.sub,
+  ]);
+  await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ?', [
+    req.user.sub,
+  ]);
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: 'user.password.change',
+    entityType: 'user',
+    entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  logSecurityEvent({
+    type: 'password.changed',
+    severity: 'low',
+    actorType: 'user',
+    actorId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  return res.json({ message: 'Password updated' });
+});
+
+router.post('/pin/setup', requireUser, validateRequest(pinSetupSchema), async (req, res) => {
+  /*
+    #swagger.tags = ['User']
+    #swagger.summary = 'Create transaction PIN'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/PinSetupRequest' } }
+    #swagger.responses[200] = { description: 'Created', schema: { $ref: '#/definitions/MessageResponse' } }
+  */
+  const { pin } = req.validated || req.body || {};
+  const pinError = validatePinComplexity(pin);
+  if (pinError) return res.status(400).json({ error: pinError });
+  const [[row]] = await pool.query(
+    'SELECT transaction_pin_hash FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (row?.transaction_pin_hash) {
+    return res.status(409).json({ error: 'Transaction PIN already set' });
+  }
+  await setTransactionPin(req.user.sub, pin);
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: 'pin.setup',
+    entityType: 'user',
+    entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
+  return res.json({ message: 'Transaction PIN created' });
+});
+
+router.post('/pin/change', requireUser, validateRequest(pinChangeSchema), async (req, res) => {
+  /*
+    #swagger.tags = ['User']
+    #swagger.summary = 'Change transaction PIN'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/PinChangeRequest' } }
+    #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
+    #swagger.responses[400] = { description: 'Invalid PIN', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  const { currentPin, newPin } = req.validated || req.body || {};
+  const pinError = validatePinComplexity(newPin);
+  if (pinError) return res.status(400).json({ error: pinError });
+  try {
+    await verifyTransactionPin(req.user.sub, currentPin);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  await setTransactionPin(req.user.sub, newPin);
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: 'pin.changed',
+    entityType: 'user',
+    entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
+  return res.json({ message: 'Transaction PIN updated' });
+});
+
+router.post('/pin/verify', requireUser, validateRequest(pinVerifySchema), async (req, res) => {
+  /*
+    #swagger.tags = ['User']
+    #swagger.summary = 'Verify transaction PIN'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/PinVerifyRequest' } }
+    #swagger.responses[200] = {
+      description: 'Verification result',
+      schema: { type: 'object', properties: { valid: { type: 'boolean' } } }
+    }
+    #swagger.responses[400] = { description: 'Invalid PIN', schema: { $ref: '#/definitions/ErrorResponse' } }
+  */
+  const { pin } = req.validated || req.body || {};
+  if (!isValidPin(pin)) return res.status(400).json({ error: 'PIN must be exactly 6 digits' });
+  try {
+    await verifyTransactionPin(req.user.sub, pin);
+    return res.json({ valid: true });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/biometric', requireUser, validateRequest(biometricSchema), async (req, res) => {
+  /*
+    #swagger.tags = ['User']
+    #swagger.summary = 'Enable or disable biometric login'
+    #swagger.security = [{ "bearerAuth": [] }]
+    #swagger.parameters['body'] = { in: 'body', required: true, schema: { $ref: '#/definitions/BiometricRequest' } }
+    #swagger.responses[200] = { description: 'Updated', schema: { $ref: '#/definitions/MessageResponse' } }
+  */
+  const { enabled } = req.validated || req.body || {};
+  const [[row]] = await pool.query(
+    'SELECT transaction_pin_hash FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!row?.transaction_pin_hash) {
+    return res.status(400).json({ error: 'Set a transaction PIN first' });
+  }
+  await pool.query('UPDATE users SET biometric_enabled = ? WHERE id = ?', [
+    enabled ? 1 : 0,
+    req.user.sub,
+  ]);
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: enabled ? 'biometric.enabled' : 'biometric.disabled',
+    entityType: 'user',
+    entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
+  return res.json({ message: 'Biometric preference updated' });
+});
+
+router.get('/security-alerts', requireUser, async (req, res) => {
+  const [[user]] = await pool.query(
+    'SELECT id, email, email_encrypted, totp_enabled, password_updated_at, login_failed_attempts, last_login_failed_at, created_at FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const alerts = [];
+  const now = Date.now();
+  const passwordUpdatedAt = user?.password_updated_at || user?.created_at;
+  if (!user?.totp_enabled) {
+    alerts.push({
+      id: 'totp-disabled',
+      title: 'Two-factor authentication is disabled',
+      message: 'Enable 2FA to protect your account from unauthorized logins.',
+      severity: 'medium',
+      actionUrl: '/auth/setup-2fa',
+      createdAt: new Date().toISOString(),
+    });
+  }
+  if (passwordUpdatedAt) {
+    const ageDays = Math.floor((now - new Date(passwordUpdatedAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (ageDays >= 90) {
+      alerts.push({
+        id: 'password-stale',
+        title: 'Password has not been changed in 90+ days',
+        message: 'Update your password to keep your account secure.',
+        severity: 'medium',
+        actionUrl: '/security/password',
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
+  if ((user?.login_failed_attempts || 0) >= 3) {
+    alerts.push({
+      id: 'failed-logins',
+      title: 'Multiple failed login attempts',
+      message: 'We detected several failed login attempts on your account.',
+      severity: 'high',
+      actionUrl: '/security/activity',
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  const [untrusted] = await pool.query(
+    `SELECT id, device_id, last_seen FROM user_devices WHERE user_id = ? AND trusted = 0 ORDER BY last_seen DESC LIMIT 1`,
+    [req.user.sub]
+  );
+  if (untrusted?.length) {
+    alerts.push({
+      id: 'untrusted-device',
+      title: 'Unrecognized device detected',
+      message: 'Review and revoke any devices you do not recognize.',
+      severity: 'high',
+      actionUrl: '/settings/devices',
+      createdAt: untrusted[0].last_seen,
+    });
+  }
+
+  const [largeTx] = await pool.query(
+    `SELECT id, total, created_at FROM transactions
+     WHERE user_id = ? AND status = 'success' AND type IN ('send','bill')
+       AND total >= 100000 AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+     ORDER BY created_at DESC LIMIT 1`,
+    [req.user.sub]
+  );
+  if (largeTx?.length) {
+    alerts.push({
+      id: 'large-withdrawal',
+      title: 'Large withdrawal detected',
+      message: 'A large outgoing transaction was completed recently.',
+      severity: 'high',
+      actionUrl: '/transactions',
+      createdAt: largeTx[0].created_at,
+    });
+  }
+
+  return res.json({ alerts });
+});
+
+router.post('/account/closure-request', requireUser, validateRequest(accountClosureRequestSchema), async (req, res) => {
+  const { reason, feedbackMessage } = req.validated || req.body || {};
+  const cleanupReason = String(reason || '').trim();
+  if (!cleanupReason) {
+    return res.status(400).json({ error: 'Reason is required' });
+  }
+  const deletionDate = new Date();
+  deletionDate.setDate(deletionDate.getDate() + 30);
+  const cancelToken = crypto.randomBytes(32).toString('hex');
+  const cancelTokenHash = crypto.createHash('sha256').update(cancelToken).digest('hex');
+
+  await pool.query(
+    `INSERT INTO account_closure_requests
+     (id, user_id, reason, feedback, requested_at, scheduled_deletion_at, status, cancel_token_hash)
+     VALUES (UUID(), ?, ?, ?, NOW(), ?, 'pending', ?)`,
+    [req.user.sub, cleanupReason, feedbackMessage || null, deletionDate, cancelTokenHash]
+  );
+
+  logSecurityEvent({
+    type: 'account.closure_requested',
+    severity: 'medium',
+    actorType: 'user',
+    actorId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    metadata: { deletionDate: deletionDate.toISOString() },
+  }).catch(() => null);
+
+  const [[userRaw]] = await pool.query(
+    'SELECT id, email, full_name, email_encrypted, full_name_encrypted FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const user = applyUserPII(userRaw);
+  if (user?.email) {
+    const baseUrl = process.env.BRAND_URL || 'https://app.glyvtu.com';
+    const cancelUrl = `${baseUrl}/app/api/user/account/closure/cancel?token=${cancelToken}`;
+    const deletionDateLabel = deletionDate.toLocaleDateString('en-NG', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    sendAccountClosureRequestEmail({
+      to: user.email,
+      name: user.full_name,
+      deletionDateLabel,
+      cancelUrl,
+    }).catch(() => null);
+  }
+
+  return res.json({ success: true, deletionDate });
+});
+
+router.post('/account/closure-cancel', requireUser, async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT id FROM account_closure_requests
+     WHERE user_id = ? AND status = 'pending'
+     ORDER BY requested_at DESC LIMIT 1`,
+    [req.user.sub]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'No pending request' });
+  await pool.query(
+    'UPDATE account_closure_requests SET status = ?, cancelled_at = NOW() WHERE id = ?',
+    ['cancelled', rows[0].id]
+  );
+  logSecurityEvent({
+    type: 'account.closure_cancelled',
+    severity: 'low',
+    actorType: 'user',
+    actorId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  return res.json({ success: true });
+});
+
+router.get('/account/closure/cancel', validateQuery(accountClosureCancelQuerySchema), async (req, res) => {
+  const token = String(req.validatedQuery?.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'Token required' });
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const [rows] = await pool.query(
+    `SELECT id, user_id FROM account_closure_requests
+     WHERE cancel_token_hash = ? AND status = 'pending' LIMIT 1`,
+    [tokenHash]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Request not found' });
+  await pool.query(
+    'UPDATE account_closure_requests SET status = ?, cancelled_at = NOW() WHERE id = ?',
+    ['cancelled', rows[0].id]
+  );
+  logSecurityEvent({
+    type: 'account.closure_cancelled',
+    severity: 'low',
+    actorType: 'user',
+    actorId: rows[0].user_id,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch(() => null);
+  return res.json({ success: true });
+});
+
+router.post('/data-export', requireUser, async (req, res) => {
+  await pool.query(
+    `INSERT INTO data_export_requests (id, user_id, status, requested_at)
+     VALUES (UUID(), ?, 'pending', NOW())`,
+    [req.user.sub]
+  );
+  const [[userRaw]] = await pool.query(
+    'SELECT id, email, full_name, email_encrypted, full_name_encrypted FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const user = applyUserPII(userRaw);
+  if (user?.email) {
+    sendDataExportRequestedEmail({
+      to: user.email,
+      name: user.full_name,
+    }).catch(() => null);
+  }
+  return res.json({ success: true });
+});
+
+router.get('/security-questions', requireUser, async (req, res) => {
+  return res.json(QUESTIONS);
+});
+
+router.get('/security-question', requireUser, async (req, res) => {
+  const [[row]] = await pool.query(
+    'SELECT security_question, security_updated_at, security_question_enabled FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  return res.json({
+    question: row?.security_question || null,
+    updatedAt: row?.security_updated_at || null,
+    enabled: Boolean(row?.security_question_enabled),
+  });
+});
+
+router.post('/security-question/set', requireUser, validateRequest(securityQuestionSetSchema), async (req, res) => {
+  const { question, answer } = req.validated || req.body || {};
+  if (!question || !answer) {
+    return res.status(400).json({ error: 'Question and answer are required' });
+  }
+  if (!QUESTIONS.includes(question)) {
+    return res.status(400).json({ error: 'Invalid security question' });
+  }
+  if (!isValidSecurityAnswer(answer)) {
+    return res.status(400).json({ error: 'Security answer is too weak' });
+  }
+  const answerHash = await argon2.hash(normalizeAnswer(answer), {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1,
+  });
+  await pool.query(
+    'UPDATE users SET security_question = ?, security_answer_hash = ?, security_updated_at = NOW() WHERE id = ?',
+    [question, answerHash, req.user.sub]
+  );
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: 'security.question.set',
+    entityType: 'user',
+    entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
+  return res.json({ message: 'Security question updated' });
+});
+
+router.post('/security-question/enable', requireUser, validateRequest(securityQuestionEnableSchema), async (req, res) => {
+  const { enabled } = req.validated || req.body || {};
+  const [[row]] = await pool.query(
+    'SELECT security_question FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (enabled && !row?.security_question) {
+    return res.status(400).json({ error: 'Set a security question first' });
+  }
+  await pool.query('UPDATE users SET security_question_enabled = ? WHERE id = ?', [
+    enabled ? 1 : 0,
+    req.user.sub,
+  ]);
+  logAudit({
+    actorType: 'user',
+    actorId: req.user.sub,
+    action: enabled ? 'security.question.enabled' : 'security.question.disabled',
+    entityType: 'user',
+    entityId: req.user.sub,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  }).catch((err) => logger.error('Async operation failed', { error: logger.format(err) }));
+  return res.json({ message: enabled ? 'Security question enabled' : 'Security question disabled' });
+});
+
+router.post('/security-question/verify', requireUser, validateRequest(securityQuestionVerifySchema), async (req, res) => {
+  const { answer } = req.validated || req.body || {};
+  if (!answer) return res.status(400).json({ error: 'Answer required' });
+  const [[row]] = await pool.query(
+    'SELECT security_answer_hash FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!row?.security_answer_hash) {
+    return res.status(400).json({ error: 'Security question not set' });
+  }
+  const ok = await argon2.verify(row.security_answer_hash, normalizeAnswer(answer));
+  if (!ok) return res.status(400).json({ error: 'Incorrect answer' });
+  return res.json({ valid: true });
+});
+
+router.post('/totp/setup', requireUser, async (req, res) => {
+  const [[userRaw]] = await pool.query(
+    'SELECT id, email, email_encrypted, totp_enabled FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  const user = applyUserPII(userRaw);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const secret = generateTotpSecret(user.email || 'user');
+  const qrCode = await generateTotpQr(secret.otpauth_url);
+
+  await pool.query(
+    'UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?',
+    [secret.base32, req.user.sub]
+  );
+
+  return res.json({
+    secret: secret.base32,
+    otpauthUrl: secret.otpauth_url,
+    qrCode,
+  });
+});
+
+router.post('/totp/enable', requireUser, validateRequest(totpEnableSchema), async (req, res) => {
+  const { token } = req.validated || req.body || {};
+  if (!token) return res.status(400).json({ error: 'TOTP code required' });
+
+  const [[user]] = await pool.query(
+    'SELECT totp_secret FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!user?.totp_secret) return res.status(400).json({ error: 'TOTP not set up' });
+
+  const valid = verifyTotp({ token, secret: user.totp_secret });
+  if (!valid) return res.status(400).json({ error: 'Invalid TOTP code' });
+
+  const backupCodes = generateBackupCodes();
+  const hashed = await hashBackupCodes(backupCodes);
+  await pool.query(
+    'UPDATE users SET totp_enabled = 1, totp_backup_codes = ?, backup_codes_used = ? WHERE id = ?',
+    [JSON.stringify(hashed), JSON.stringify([]), req.user.sub]
+  );
+
+  return res.json({ enabled: true, backupCodes });
+});
+
+router.post('/totp/disable', requireUser, validateRequest(totpDisableSchema), async (req, res) => {
+  const { token, backupCode } = req.validated || req.body || {};
+  const [[user]] = await pool.query(
+    'SELECT totp_secret, totp_backup_codes, backup_codes_used FROM users WHERE id = ?',
+    [req.user.sub]
+  );
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  let valid = false;
+  if (token && user.totp_secret) {
+    valid = verifyTotp({ token, secret: user.totp_secret });
+  }
+  if (!valid && backupCode) {
+    const used = new Set(JSON.parse(user.backup_codes_used || '[]'));
+    const codes = JSON.parse(user.totp_backup_codes || '[]');
+    const matched = await verifyBackupCode(backupCode, codes);
+    if (matched && !used.has(matched)) {
+      used.add(matched);
+      await pool.query('UPDATE users SET backup_codes_used = ? WHERE id = ?', [
+        JSON.stringify([...used]),
+        req.user.sub,
+      ]);
+      valid = true;
+    }
+  }
+  if (!valid) return res.status(400).json({ error: 'Invalid TOTP or backup code' });
+
+  await pool.query(
+    'UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_backup_codes = NULL, backup_codes_used = NULL WHERE id = ?',
+    [req.user.sub]
+  );
+
+  return res.json({ disabled: true });
+});
+
+export default router;

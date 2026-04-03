@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -e
+
+node scripts/bump-versions.js --target changed
