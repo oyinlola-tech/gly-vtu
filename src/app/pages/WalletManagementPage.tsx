@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, Wallet, Plus, Eye, EyeOff, TrendingUp, Send } from 'lucide-react';
 import { userAPI } from '../../services/api';
+import PageShell from '../components/layout/PageShell';
+import SectionCard from '../components/layout/SectionCard';
 
 interface WalletInfo {
   balance: number;
@@ -97,7 +99,7 @@ export function WalletManagementPage() {
   }
 
   return (
-    <div className="page-shell py-8 px-4 sm:px-6 lg:px-8">
+    <PageShell className="py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-8">
@@ -325,6 +327,6 @@ export function WalletManagementPage() {
         </div>
       </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

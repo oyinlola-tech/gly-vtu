@@ -5,6 +5,8 @@ import { ChevronLeft } from 'lucide-react';
 import { userAPI } from '../../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BottomNav from '../components/BottomNav';
+import PageShell from '../components/layout/PageShell';
+import SectionCard from '../components/layout/SectionCard';
 
 export default function KYC() {
   type UserProfile = {
@@ -49,7 +51,7 @@ export default function KYC() {
   };
 
   return (
-    <div className="page-shell pb-32">
+    <PageShell className="pb-32">
       <div className="fintech-hero p-6 pb-24 rounded-b-[28px]">
         <div className="flex items-center gap-4">
           <Link to="/more" className="text-white">
@@ -61,19 +63,19 @@ export default function KYC() {
 
       <div className="px-6 -mt-16 space-y-6">
         {profile && (
-          <div className="section-card rounded-2xl p-4">
+          <SectionCard className="rounded-2xl p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Current Level</p>
             <p className="text-lg font-bold text-gray-900 dark:text-white">
               Level {profile.kyc_level} - {profile.kyc_status}
             </p>
-          </div>
+          </SectionCard>
         )}
 
         <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-4 rounded-2xl text-sm">
           Complete higher KYC levels to unlock higher limits, card issuance, and bank transfers.
         </div>
 
-        <div className="section-card rounded-2xl p-6">
+        <SectionCard className="rounded-2xl p-6">
           {message && (
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 p-3 rounded-xl text-sm mb-4">
               {message}
@@ -161,10 +163,10 @@ export default function KYC() {
               {loading ? <LoadingSpinner size="sm" /> : 'Submit KYC'}
             </button>
           </form>
-        </div>
+        </SectionCard>
       </div>
 
       <BottomNav />
-    </div>
+    </PageShell>
   );
 }
