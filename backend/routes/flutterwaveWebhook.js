@@ -14,7 +14,6 @@ import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
 const MAX_TOPUP_AMOUNT = Number(process.env.TOPUP_MAX_AMOUNT || 10_000_000);
-const MAX_DECIMALS = 2;
 
 function normalizeMoney(value) {
   const amount = Number(value);
@@ -139,6 +138,107 @@ router.post('/', webhookLimiter, async (req, res) => {
     throw err;
   }
 
+  const isTransferEvent =
+    String(event || '').toLowerCase().includes('transfer') ||
+    String(data?.type || '').toLowerCase().includes('transfer');
+
+  if (isTransferEvent) {
+    const reference = data.reference || data.tx_ref || data.id || null;
+    if (!reference) {
+      return res.json({ message: 'No transfer reference' });
+    }
+
+    const normalizedStatus = normalizeStatus(status);
+    if (normalizedStatus === 'pending') {
+      return res.json({ message: 'Transfer pending' });
+    }
+
+    const incomingAmount = normalizeMoney(data.amount);
+    if (incomingAmount === null) {
+      logSecurityEvent({
+        type: 'webhook.flutterwave.transfer.amount_invalid',
+        severity: 'medium',
+        actorType: 'system',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { reference, amount: data.amount },
+      }).catch(() => null);
+      return res.json({ message: 'Invalid amount' });
+    }
+    if (data.currency && String(data.currency).toUpperCase() !== 'NGN') {
+      logSecurityEvent({
+        type: 'webhook.flutterwave.transfer.currency_mismatch',
+        severity: 'medium',
+        actorType: 'system',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { reference, currency: data.currency },
+      }).catch(() => null);
+      return res.json({ message: 'Currency mismatch' });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [[tx]] = await conn.query(
+        'SELECT id, user_id, total, status FROM transactions WHERE reference = ? AND type = ? FOR UPDATE',
+        [reference, 'send']
+      );
+      if (!tx) {
+        await conn.rollback();
+        return res.json({ message: 'Transfer not found' });
+      }
+
+      const expectedAmount = Number(tx.total || 0);
+      if (incomingAmount !== expectedAmount) {
+        await conn.rollback();
+        logSecurityEvent({
+          type: 'webhook.flutterwave.transfer.amount_mismatch',
+          severity: 'high',
+          actorType: 'system',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { reference, incomingAmount, expectedAmount },
+        }).catch(() => null);
+        return res.json({ message: 'Amount mismatch' });
+      }
+
+      if (tx.status !== 'pending') {
+        await conn.rollback();
+        return res.json({ message: 'Transfer already processed' });
+      }
+
+      if (normalizedStatus === 'failed') {
+        await conn.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [
+          expectedAmount,
+          tx.user_id,
+        ]);
+      }
+
+      await conn.query('UPDATE transactions SET status = ? WHERE id = ?', [
+        normalizedStatus,
+        tx.id,
+      ]);
+      await conn.commit();
+    } catch {
+      await conn.rollback();
+      return res.status(500).json({ error: 'Transfer update failed' });
+    } finally {
+      conn.release();
+    }
+
+    logSecurityEvent({
+      type: `webhook.flutterwave.transfer.${normalizedStatus}`,
+      severity: normalizedStatus === 'failed' ? 'high' : 'low',
+      actorType: 'system',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { reference, status: normalizedStatus },
+    }).catch(() => null);
+
+    return res.json({ message: 'OK' });
+  }
+
   if (event !== 'charge.completed') {
     return res.json({ message: 'Ignored' });
   }
@@ -176,9 +276,30 @@ router.post('/', webhookLimiter, async (req, res) => {
     }).catch(() => null);
     return res.json({ message: 'Account inactive' });
   }
+  if (data.account_number && String(data.account_number) !== String(account.account_number || '')) {
+    logSecurityEvent({
+      type: 'webhook.flutterwave.account_mismatch',
+      severity: 'high',
+      actorType: 'system',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { tx_ref: txRef, accountNumber: data.account_number },
+    }).catch(() => null);
+    return res.json({ message: 'Account mismatch' });
+  }
 
-  const amount = Number(data.amount || 0);
-  if (!amount || amount <= 0) return res.json({ message: 'Invalid amount' });
+  const amount = normalizeMoney(data.amount);
+  if (amount === null || amount <= 0) {
+    logSecurityEvent({
+      type: 'webhook.flutterwave.amount_invalid',
+      severity: 'medium',
+      actorType: 'system',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { amount: data.amount, tx_ref: txRef },
+    }).catch(() => null);
+    return res.json({ message: 'Invalid amount' });
+  }
   if (amount > MAX_TOPUP_AMOUNT) {
     logSecurityEvent({
       type: 'webhook.flutterwave.amount_exceeds_limit',
