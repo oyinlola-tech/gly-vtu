@@ -4,6 +4,8 @@ import { userAPI } from '../../services/api';
 import type { Transaction as ApiTransaction } from '../../types/api';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import { toast } from 'sonner';
+import PageShell from '../components/layout/PageShell';
+import SectionCard from '../components/layout/SectionCard';
 
 interface Transaction {
   id: string;
@@ -137,7 +139,7 @@ export function TransactionHistoryPage() {
   }
 
   return (
-    <div className="page-shell py-6 px-4 sm:px-6 lg:px-8">
+    <PageShell className="py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
@@ -170,7 +172,7 @@ export function TransactionHistoryPage() {
         </button>
 
         {showFilters && (
-          <div className="mt-4 p-4 section-card grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SectionCard className="mt-4 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label htmlFor="txnSearch" className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <div className="relative">
@@ -239,7 +241,7 @@ export function TransactionHistoryPage() {
                 />
               </div>
             </div>
-          </div>
+          </SectionCard>
         )}
       </div>
 
@@ -257,7 +259,7 @@ export function TransactionHistoryPage() {
           )}
         </div>
       ) : (
-        <div className="section-card overflow-hidden">
+        <SectionCard className="overflow-hidden">
           <div className="grid gap-3 p-4 sm:hidden">
             {filteredTransactions.map((tx) => (
               <TransactionStatusCard
@@ -362,9 +364,9 @@ export function TransactionHistoryPage() {
               </div>
             </div>
           </div>
-        </div>
+        </SectionCard>
       )}
       </div>
-    </div>
+    </PageShell>
   );
 }

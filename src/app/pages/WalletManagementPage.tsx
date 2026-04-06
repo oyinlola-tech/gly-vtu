@@ -309,7 +309,7 @@ export function WalletManagementPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="mt-8 section-card rounded-2xl p-6">
+      <SectionCard className="mt-8 rounded-2xl p-6">
         <h3 className="font-bold text-gray-900 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <a
@@ -326,7 +326,7 @@ export function WalletManagementPage() {
           </a>
         </SectionCard>
       </SectionCard>
-      </div>
+      </SectionCard>
     </PageShell>
   );
 }
