@@ -6,12 +6,16 @@ import { requirePermission } from '../middleware/permissions.js';
 import { emitToUser, emitToAllUsers } from '../utils/realtime.js';
 import { logAudit } from '../utils/audit.js';
 import { validateRequest, validateQuery, adminNotificationSchema, adminNotificationHistoryQuerySchema } from '../middleware/requestValidation.js';
+import { sanitizeUserText } from '../utils/sanitize.js';
 
 const router = express.Router();
 
 router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest(adminNotificationSchema), async (req, res) => {
   const { title, body, type = 'info', userId, force = false, data } = req.validated || req.body || {};
-  if (!title || !body) {
+  // SECURITY: Sanitize admin-composed notification text to prevent stored XSS.
+  const safeTitle = sanitizeUserText(title, 200);
+  const safeBody = sanitizeUserText(body, 2000);
+  if (!safeTitle || !safeBody) {
     return res.status(400).json({ error: 'Title and body are required' });
   }
 
@@ -19,15 +23,15 @@ router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest
     const id = crypto.randomUUID();
     await pool.query(
       'INSERT INTO notifications (id, user_id, title, body, type, data, force) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, userId, title, body, type, data ? JSON.stringify(data) : null, force ? 1 : 0]
+      [id, userId, safeTitle, safeBody, type, data ? JSON.stringify(data) : null, force ? 1 : 0]
     );
     await pool.query(
       'INSERT INTO admin_notifications (id, title, body, type, target_user_id, target_scope, force, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [crypto.randomUUID(), title, body, type, userId, 'single', force ? 1 : 0, req.admin.sub]
+      [crypto.randomUUID(), safeTitle, safeBody, type, userId, 'single', force ? 1 : 0, req.admin.sub]
     );
     emitToUser(userId, {
       type: 'notification.new',
-      notification: { id, title, body, type, data, force: Boolean(force), createdAt: new Date().toISOString() },
+      notification: { id, title: safeTitle, body: safeBody, type, data, force: Boolean(force), createdAt: new Date().toISOString() },
     });
   } else {
     const [users] = await pool.query('SELECT id FROM users');
@@ -35,8 +39,8 @@ router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest
       const values = users.map((row) => [
         crypto.randomUUID(),
         row.id,
-        title,
-        body,
+        safeTitle,
+        safeBody,
         type,
         data ? JSON.stringify(data) : null,
         force ? 1 : 0,
@@ -50,8 +54,8 @@ router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest
     emitToAllUsers({
       type: 'notification.new',
       notification: {
-        title,
-        body,
+        title: safeTitle,
+        body: safeBody,
         type,
         data,
         force: Boolean(force),
@@ -60,7 +64,7 @@ router.post('/', requireAdmin, requirePermission('notify:send'), validateRequest
     });
     await pool.query(
       'INSERT INTO admin_notifications (id, title, body, type, target_user_id, target_scope, force, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [crypto.randomUUID(), title, body, type, null, 'broadcast', force ? 1 : 0, req.admin.sub]
+      [crypto.randomUUID(), safeTitle, safeBody, type, null, 'broadcast', force ? 1 : 0, req.admin.sub]
     );
   }
 
