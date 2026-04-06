@@ -9,6 +9,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { walletAPI, userAPI } from '../../services/api';
 import type { KYCLimits, SecurityAlert, SecurityStatus, Transaction } from '../../types/api';
+import PageShell from '../components/layout/PageShell';
+import SectionCard from '../components/layout/SectionCard';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -99,7 +101,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="page-shell pb-32">
+    <PageShell className="pb-32">
       {/* Header with Gradient */}
       <div className="fintech-hero rounded-b-[28px] p-6 pb-24">
         <div className="flex items-center justify-between mb-8">
@@ -178,7 +180,7 @@ export default function Dashboard() {
       </div>
 
       <div className="px-6 -mt-16">
-        <div className="section-card rounded-2xl p-4 mb-6 transition-transform hover:-translate-y-0.5">
+        <SectionCard className="rounded-2xl p-4 mb-6 transition-transform hover:-translate-y-0.5">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Security Status</p>
@@ -223,8 +225,8 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </div>
-        <div className="section-card rounded-2xl p-4 mb-6 transition-transform hover:-translate-y-0.5">
+        </SectionCard>
+        <SectionCard className="rounded-2xl p-4 mb-6 transition-transform hover:-translate-y-0.5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">KYC Tier</p>
@@ -242,9 +244,9 @@ export default function Dashboard() {
               View limits
             </Link>
           </div>
-        </div>
+        </SectionCard>
         {/* Quick Actions */}
-        <div className="section-card rounded-2xl p-4 mb-6">
+        <SectionCard className="rounded-2xl p-4 mb-6">
           <div className="flex items-center justify-around">
             <Link to="/add-money" className="flex flex-col items-center gap-2">
               <div className="w-14 h-14 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
@@ -265,7 +267,7 @@ export default function Dashboard() {
               <span className="text-xs text-[#3a3c4c] dark:text-white">My cards</span>
             </Link>
           </div>
-        </div>
+        </SectionCard>
 
         {/* Get Started Section */}
         <div className="mb-6">
@@ -321,15 +323,15 @@ export default function Dashboard() {
           </div>
 
           {recentTransactions.length === 0 ? (
-            <div className="section-card rounded-xl p-8 text-center">
+            <SectionCard className="rounded-xl p-8 text-center">
               <p className="text-[#7d7c93] dark:text-gray-400">You haven&apos;t made any transactions yet.</p>
-            </div>
+            </SectionCard>
           ) : (
             <div className="space-y-2">
               {recentTransactions.map((transaction) => (
-                <div
+                <SectionCard
                   key={transaction.id}
-                  className="section-card rounded-xl p-4 flex items-center gap-4"
+                  className="rounded-xl p-4 flex items-center gap-4"
                 >
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     transaction.type === 'credit' ? 'bg-green-100' : 'bg-red-100'
@@ -349,7 +351,7 @@ export default function Dashboard() {
                   }`}>
                     {transaction.amount}
                   </p>
-                </div>
+                </SectionCard>
               ))}
             </div>
           )}
@@ -364,6 +366,6 @@ export default function Dashboard() {
       </div>
 
       <BottomNav />
-    </div>
+    </PageShell>
   );
 }
