@@ -231,6 +231,80 @@
 }
 
 @layer utilities {
+  .page-shell {
+    min-height: 100vh;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: radial-gradient(circle at 12% 12%, rgba(35, 86, 151, 0.18), transparent 40%),
+      radial-gradient(circle at 88% 18%, rgba(16, 185, 129, 0.12), transparent 38%),
+      linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 251, 0.96));
+  }
+
+  .dark .page-shell {
+    background: radial-gradient(circle at 12% 12%, rgba(56, 189, 248, 0.12), transparent 42%),
+      radial-gradient(circle at 88% 18%, rgba(16, 185, 129, 0.08), transparent 36%),
+      linear-gradient(180deg, rgba(11, 18, 32, 0.98), rgba(15, 23, 42, 0.98));
+  }
+
+  .page-header {
+    @apply flex flex-col gap-2;
+  }
+
+  .section-card {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    border-radius: 20px;
+  }
+
+  .dark .section-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 18px 40px rgba(2, 6, 23, 0.5);
+  }
+
+  .fintech-hero {
+    background: linear-gradient(135deg, rgba(15, 61, 110, 0.98), rgba(11, 44, 87, 0.96));
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  }
+
+  .btn-primary {
+    @apply text-white font-semibold transition-all;
+    background: linear-gradient(135deg, #235697, #1a4a86 50%, #0b2c57);
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.2);
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.03);
+  }
+
+  .btn-secondary {
+    @apply font-semibold transition-all;
+    background: rgba(15, 23, 42, 0.06);
+    color: #0f172a;
+  }
+
+  .dark .btn-secondary {
+    background: rgba(148, 163, 184, 0.15);
+    color: #e2e8f0;
+  }
+
+  .btn-ghost {
+    @apply font-semibold transition-all;
+    background: transparent;
+    color: #235697;
+  }
+
+  .fintech-nav {
+    backdrop-filter: blur(18px);
+    background: rgba(255, 255, 255, 0.88);
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+  }
+
+  .dark .fintech-nav {
+    background: rgba(11, 18, 32, 0.85);
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+  }
+
   .fintech-bg {
     position: relative;
     background: radial-gradient(circle at 10% 10%, rgba(35, 86, 151, 0.16), transparent 45%),
@@ -247,7 +321,7 @@
   .fintech-card {
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid rgba(148, 163, 184, 0.2);
-    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
     backdrop-filter: blur(16px);
   }
 
@@ -259,6 +333,6 @@
 
   .fintech-input {
     @apply rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-[#235697] focus:outline-none;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
   }
 }
