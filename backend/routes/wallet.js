@@ -19,7 +19,7 @@ import {
   recipientLookupSchema
 } from '../middleware/requestValidation.js';
 import { logger } from '../utils/logger.js';
-import { createTransfer } from '../utils/flutterwave.js';
+import { createTransfer, resolveBankAccount } from '../utils/flutterwave.js';
 
 const router = express.Router();
 
@@ -73,6 +73,13 @@ function maskPhone(phone) {
   const digits = String(phone).replace(/\D/g, '');
   if (digits.length < 4) return '****';
   return `${digits.slice(0, 2)}****${digits.slice(-2)}`;
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .trim();
 }
 
 async function checkInternalTransferCooldown({ userId, recipient, amount }) {
@@ -307,6 +314,30 @@ router.post('/send', requireUser, validateRequest(walletSendSchema), async (req,
       ]);
       if (!bank) return respond(400, { error: 'Invalid bank selected' });
       bankName = bank.name;
+
+      // SECURITY: Server-side account verification to prevent spoofed account names.
+      try {
+        const result = await resolveBankAccount({
+          account_number: accountNumber,
+          account_bank: bankCode,
+        });
+        const resolvedName = result?.data?.account_name || result?.data?.accountName || null;
+        if (resolvedName && normalizeName(resolvedName) !== normalizeName(accountName)) {
+          logSecurityEvent({
+            type: 'wallet.transfer.account_name_mismatch',
+            severity: 'medium',
+            actorType: 'user',
+            actorId: req.user.sub,
+            ip: req.ip,
+            userAgent: req.headers['user-agent'],
+            metadata: { provided: accountName, resolved: resolvedName, bankCode },
+          }).catch(() => null);
+          return respond(400, { error: 'Account name mismatch' });
+        }
+      } catch (err) {
+        logger.warn('Bank account verification failed', { error: logger.format(err) });
+        return respond(400, { error: 'Account verification failed' });
+      }
     }
   } else {
     if (!to) return respond(400, { error: 'Recipient required' });
