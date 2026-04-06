@@ -146,25 +146,15 @@ router.get('/export', requireAdmin, requirePermission('finance:read'), validateQ
     return;
   }
 
-  const csv = [
-    ['Metric', 'Value'],
-    ['From', fromLabel],
-    ['To', toLabel],
-    ['Total Volume', Number(volume.total || 0).toFixed(2)],
-    ['Total Revenue', Number(revenue.total || 0).toFixed(2)],
-    ['Total Credits', Number(credits.total || 0).toFixed(2)],
-    ['Total Debits', Number(debits.total || 0).toFixed(2)],
-  ]
-    .map((row) =>
-      row
-        .map((c) => {
-          let value = String(c);
-          if (/^[=+\-@]/.test(value)) value = `'${value}`;
-          return `"${value.replace(/"/g, '""')}"`;
-        })
-        .join(',')
-    )
-    .join('\n');
+  const csv = toCsv([
+    csvRow('Metric', 'Value'),
+    csvRow('From', fromLabel),
+    csvRow('To', toLabel),
+    csvRow('Total Volume', Number(volume.total || 0).toFixed(2)),
+    csvRow('Total Revenue', Number(revenue.total || 0).toFixed(2)),
+    csvRow('Total Credits', Number(credits.total || 0).toFixed(2)),
+    csvRow('Total Debits', Number(debits.total || 0).toFixed(2)),
+  ]);
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="finance-report.csv"');
   res.send(csv);
