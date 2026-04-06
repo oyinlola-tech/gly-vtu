@@ -14,6 +14,24 @@ import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 
 const router = express.Router();
 const MAX_TOPUP_AMOUNT = Number(process.env.TOPUP_MAX_AMOUNT || 10_000_000);
+const MAX_DECIMALS = 2;
+
+function normalizeMoney(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return null;
+  const rounded = Math.round(amount * 100) / 100;
+  const hasTooManyDecimals = Math.abs(amount - rounded) > 1e-9;
+  if (hasTooManyDecimals) return null;
+  return rounded;
+}
+
+function normalizeStatus(value) {
+  const raw = String(value || '').toLowerCase();
+  if (['successful', 'success', 'completed'].includes(raw)) return 'success';
+  if (['failed', 'error', 'reversed', 'cancelled', 'canceled'].includes(raw)) return 'failed';
+  return 'pending';
+}
+
 
 // IP whitelist validation for Flutterwave webhooks - MANDATORY in production
 function isIpAllowed(req) {
