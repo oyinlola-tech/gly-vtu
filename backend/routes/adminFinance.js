@@ -9,6 +9,7 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { buildTransactionMetadata } from '../utils/transactionMetadata.js';
 import { checkAdminAdjustmentAnomaly } from '../utils/anomalies.js';
 import { applyUserPII } from '../utils/encryption.js';
+import { toCsv, csvRow } from '../utils/csv.js';
 import {
   validateQuery,
   validateParams,

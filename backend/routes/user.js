@@ -29,6 +29,7 @@ import {
 import zxcvbn from 'zxcvbn';
 import { getKycLimitConfig } from '../utils/kycLimits.js';
 import { logSecurityEvent } from '../utils/securityEvents.js';
+import { toCsv, csvRow } from '../utils/csv.js';
 import {
   changePasswordSchema,
   validateRequest,
@@ -442,20 +443,6 @@ router.get('/security', requireUser, async (req, res) => {
   });
 });
 
-function csvEscape(value) {
-  const str = value === null || value === undefined ? '' : String(value);
-  if (/[",\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function csvSanitize(value) {
-  const str = value === null || value === undefined ? '' : String(value);
-  if (/^[=+\-@]/.test(str)) return `'${str}`;
-  return str;
-}
-
 router.get('/security-events', requireUser, validateQuery(securityEventsQuerySchema), async (req, res) => {
   const exportCsv = String(req.validatedQuery?.export || '').toLowerCase() === 'csv';
   const limit = Math.min(Number(req.validatedQuery?.limit || 50), 200);
@@ -499,29 +486,26 @@ router.get('/security-events', requireUser, validateQuery(securityEventsQuerySch
     return res.json(normalized);
   }
 
-  const header = ['id', 'event_type', 'severity', 'ip_address', 'user_agent', 'metadata', 'created_at'];
-  const lines = [header.join(',')];
+  const header = csvRow('id', 'event_type', 'severity', 'ip_address', 'user_agent', 'metadata', 'created_at');
+  const lines = [header];
   for (const row of rows || []) {
     lines.push(
-      [
+      csvRow(
         row.id,
         row.event_type,
         row.severity,
         row.ip_address || '',
         row.user_agent || '',
         row.metadata ? JSON.stringify(row.metadata) : '',
-        row.created_at ? new Date(row.created_at).toISOString() : '',
-      ]
-        .map(csvSanitize)
-        .map(csvEscape)
-        .join(',')
+        row.created_at ? new Date(row.created_at).toISOString() : ''
+      )
     );
   }
 
   const filename = `security-events-${new Date().toISOString().slice(0, 10)}.csv`;
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  return res.send(lines.join('\n'));
+  return res.send(toCsv(lines));
 });
 
 router.get('/kyc/limits', requireUser, async (req, res) => {

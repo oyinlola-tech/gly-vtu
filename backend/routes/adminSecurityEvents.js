@@ -3,22 +3,9 @@ import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { validateQuery, adminSecurityEventsQuerySchema } from '../middleware/requestValidation.js';
+import { toCsv, csvRow } from '../utils/csv.js';
 
 const router = express.Router();
-
-function csvEscape(value) {
-  const str = value === null || value === undefined ? '' : String(value);
-  if (/[",\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function csvSanitize(value) {
-  const str = value === null || value === undefined ? '' : String(value);
-  if (/^[=+\-@]/.test(str)) return `'${str}`;
-  return str;
-}
 
 router.get('/', requireAdmin, requirePermission('audit:read'), validateQuery(adminSecurityEventsQuerySchema), async (req, res) => {
   const exportCsv = String(req.validatedQuery?.export || '').toLowerCase() === 'csv';
@@ -50,11 +37,11 @@ router.get('/', requireAdmin, requirePermission('audit:read'), validateQuery(adm
     return res.json(rows || []);
   }
 
-  const header = ['id', 'event_type', 'severity', 'actor_type', 'actor_id', 'ip_address', 'user_agent', 'metadata', 'created_at'];
-  const lines = [header.join(',')];
+  const header = csvRow('id', 'event_type', 'severity', 'actor_type', 'actor_id', 'ip_address', 'user_agent', 'metadata', 'created_at');
+  const lines = [header];
   for (const row of rows || []) {
     lines.push(
-      [
+      csvRow(
         row.id,
         row.event_type,
         row.severity,
@@ -63,18 +50,15 @@ router.get('/', requireAdmin, requirePermission('audit:read'), validateQuery(adm
         row.ip_address || '',
         row.user_agent || '',
         row.metadata ? JSON.stringify(row.metadata) : '',
-        row.created_at ? new Date(row.created_at).toISOString() : '',
-      ]
-        .map(csvSanitize)
-        .map(csvEscape)
-        .join(',')
+        row.created_at ? new Date(row.created_at).toISOString() : ''
+      )
     );
   }
 
   const filename = `security-events-${new Date().toISOString().slice(0, 10)}.csv`;
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  return res.send(lines.join('\n'));
+  return res.send(toCsv(lines));
 });
 
 export default router;
