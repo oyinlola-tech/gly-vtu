@@ -64,7 +64,7 @@ export default function KYC() {
           <div className="section-card rounded-2xl p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Current Level</p>
             <p className="text-lg font-bold text-gray-900 dark:text-white">
-              Level {profile.kyc_level} • {profile.kyc_status}
+              Level {profile.kyc_level} - {profile.kyc_status}
             </p>
           </div>
         )}

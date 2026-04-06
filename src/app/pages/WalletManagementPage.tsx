@@ -300,7 +300,7 @@ export function WalletManagementPage() {
         <div className="mt-8 pt-6 border-t">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
-              <strong>🔒 Secure:</strong> All transactions are encrypted and protected. Your payment information is never stored on our servers.
+              <strong>Secure:</strong> All transactions are encrypted and protected. Your payment information is never stored on our servers.
             </p>
           </div>
         </div>
