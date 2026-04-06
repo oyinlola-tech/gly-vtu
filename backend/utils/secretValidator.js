@@ -37,8 +37,6 @@ export class SecretValidator {
   static validateSecrets() {
     const errors = [];
     const isProduction = process.env.NODE_ENV === 'production';
-    const awsEnabled = process.env.AWS_SECRETS_ENABLED === 'true';
-    const awsManagedSecrets = new Set(['FLW_SECRET_KEY', 'VTPASS_API_KEY', 'VTPASS_SECRET_KEY']);
 
     // Check for required secrets
     for (const secretName of this.requiredSecrets) {
@@ -46,9 +44,6 @@ export class SecretValidator {
 
       // In production, all secrets are required
       if (isProduction && !secretValue) {
-        if (awsEnabled && awsManagedSecrets.has(secretName)) {
-          continue;
-        }
         errors.push(`[CRITICAL] ${secretName} is not configured. Set the environment variable.`);
         continue;
       }
@@ -97,7 +92,7 @@ export class SecretValidator {
       logger.error('To fix:');
       logger.error('1. Create a .env file in the project root');
       logger.error('2. Generate random secrets:');
-      logger.error("   node -e \"console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))\"");
+      logger.error('   node -e "const crypto=require(\'crypto\');console.log(crypto.randomBytes(32).toString(\'hex\'))"');
       logger.error('3. Set all required environment variables');
       logger.error('4. Do NOT commit .env to version control');
       process.exit(1);

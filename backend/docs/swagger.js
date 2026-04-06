@@ -94,7 +94,7 @@ const doc = {
       example: {
         fullName: 'Ada Lovelace',
         email: 'ada@example.com',
-        password: 'StrongPassword1!',
+              password: 'pwd1',
       },
     },
     AuthLoginRequest: {
@@ -107,7 +107,7 @@ const doc = {
         totp: { type: 'string', description: 'TOTP code (admin MFA)' },
         backupCode: { type: 'string', description: 'Backup code (admin MFA fallback)' },
       },
-      example: { email: 'ada@example.com', password: 'StrongPassword1!', deviceId: 'device-xyz' },
+            example: { email: 'ada@example.com', password: 'pwd1', deviceId: 'device-xyz' },
     },
     AuthTokensResponse: {
       type: 'object',
@@ -115,7 +115,7 @@ const doc = {
         csrfToken: { type: 'string', description: 'CSRF token for state-changing requests' },
       },
       example: {
-        csrfToken: 'csrf_12345',
+              csrfToken: 'tkn',
       },
     },
     AuthLoginResponse: {
@@ -134,7 +134,7 @@ const doc = {
         },
       },
       example: {
-        csrfToken: 'csrf_12345',
+              csrfToken: 'tkn',
         user: { id: 'uuid', fullName: 'Ada Lovelace', email: 'ada@example.com', phone: '+2348012345678' },
       },
     },
@@ -154,7 +154,7 @@ const doc = {
         },
       },
       example: {
-        csrfToken: 'csrf_admin_123',
+              csrfToken: 'tkn',
         admin: { id: 'uuid', name: 'Admin User', email: 'admin@example.com', role: 'superadmin' },
       },
     },
@@ -197,7 +197,7 @@ const doc = {
         code: { type: 'string', description: 'OTP code' },
         newPassword: { type: 'string', description: 'New password' },
       },
-      example: { email: 'ada@example.com', code: '123456', newPassword: 'NewStrongPass1!' },
+            example: { email: 'ada@example.com', code: '123456', newPassword: 'pwd2' },
     },
     UserProfile: {
       type: 'object',
@@ -372,7 +372,7 @@ const doc = {
         password: { type: 'string', description: 'Admin password' },
         role: { type: 'string', description: 'Admin role' },
       },
-      example: { name: 'Admin User', email: 'admin@example.com', password: 'AdminPass1!', role: 'superadmin' },
+            example: { name: 'Admin User', email: 'admin@example.com', password: 'pwd3', role: 'superadmin' },
     },
     AdminRoleUpdateRequest: {
       type: 'object',

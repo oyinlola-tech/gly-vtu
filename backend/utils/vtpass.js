@@ -21,7 +21,7 @@ async function getVtpassKeys() {
 }
 
 export const vtpassEnabled = Boolean(
-  process.env.VTPASS_API_KEY || process.env.VTPASS_PUBLIC_KEY || process.env.VTPASS_SECRET_KEY || process.env.AWS_SECRETS_ENABLED === 'true'
+  process.env.VTPASS_API_KEY || process.env.VTPASS_PUBLIC_KEY || process.env.VTPASS_SECRET_KEY
 );
 
 function buildUrl(path, params) {

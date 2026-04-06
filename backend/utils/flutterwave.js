@@ -13,7 +13,7 @@ async function getFlutterwaveSecret() {
 }
 
 export function flutterwaveEnabled() {
-  return Boolean(process.env.FLW_SECRET_KEY || process.env.AWS_SECRETS_ENABLED === 'true');
+  return Boolean(process.env.FLW_SECRET_KEY);
 }
 
 async function flwRequest(method, path, payload) {

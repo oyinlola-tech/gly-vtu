@@ -25,7 +25,7 @@ Portfolio: https://oyinlola.site
 ## Tech Stack
 - Backend: Node.js, Express, MySQL
 - Frontend: React, Vite, Tailwind
-- Integrations: VTpass (bills), Flutterwave (virtual cards), SMTP (email), optional AWS Secrets Manager
+- Integrations: VTpass (bills), Flutterwave (virtual cards), SMTP (email)
 
 ## Quick Start (Fastest Path)
 1. Install dependencies:
@@ -92,6 +92,10 @@ npm run kyc:health
 Generate audit report PDF:
 ```
 node scripts/generate-audit-report.js
+```
+Include `node_modules` or `dist` in the audit scan:
+```
+node scripts/generate-audit-report.js --include-node-modules --include-dist
 ```
 
 ## Repository Structure

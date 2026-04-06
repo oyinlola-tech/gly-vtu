@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import PDFDocument from 'pdfkit';
+import { runAuditScan, parseAuditFlags } from './audit-scan.js';
 
 const root = process.cwd();
 const outDir = path.join(root, 'reports');
@@ -32,9 +33,30 @@ const bullet = (text) => {
   doc.fontSize(11).fillColor('#1f2937').text(`- ${text}`);
 };
 
+const flags = parseAuditFlags();
+const audit = await runAuditScan({
+  ...flags,
+  includeNodeModules: false,
+  includeDist: false,
+  excludeNodeModules: true,
+  excludeDist: true,
+});
+const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+const sortedFindings = [...audit.findings].sort((a, b) => {
+  return (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9);
+});
+const counts = sortedFindings.reduce(
+  (acc, f) => {
+    acc[f.severity] = (acc[f.severity] || 0) + 1;
+    return acc;
+  },
+  { critical: 0, high: 0, medium: 0, low: 0 }
+);
+
 doc.fontSize(22).fillColor('#0f172a').text('GLY VTU Security + UX Audit Report', { align: 'left' });
 doc.moveDown(0.2);
 doc.fontSize(11).fillColor('#6b7280').text(`Report date: ${dateLabel}`);
+doc.fontSize(11).fillColor('#6b7280').text(`Files scanned: ${audit.scannedCount} | Skipped (binary/unreadable): ${audit.skippedCount}`);
 
 heading('Executive Summary');
 doc.fontSize(11).fillColor('#1f2937').text(
@@ -43,10 +65,10 @@ doc.fontSize(11).fillColor('#1f2937').text(
 
 heading('Security Posture');
 subheading('Status');
-bullet('Critical: 0');
-bullet('High: 0');
-bullet('Medium: 0');
-bullet('Low: 0');
+bullet(`Critical: ${counts.critical || 0}`);
+bullet(`High: ${counts.high || 0}`);
+bullet(`Medium: ${counts.medium || 0}`);
+bullet(`Low: ${counts.low || 0}`);
 
 subheading('Key Protections Implemented');
 bullet('Strong JWT validation, refresh token rotation, and max session lifetime enforcement.');
@@ -81,6 +103,19 @@ heading('Validation');
 bullet('Lint: PASS');
 bullet('Typecheck: PASS');
 bullet('Production build: PASS');
+
+heading('Audit Findings (Hardcoded Secrets / Risky Patterns)');
+if (!sortedFindings.length) {
+  bullet('No hardcoded secrets or risky patterns detected by the automated scan.');
+} else {
+  sortedFindings.slice(0, 50).forEach((finding) => {
+    const label = `${finding.severity.toUpperCase()}: ${finding.reason} (${finding.file}:${finding.line})`;
+    bullet(label);
+  });
+  if (sortedFindings.length > 50) {
+    bullet(`... ${sortedFindings.length - 50} more findings (see logs or extend report limit).`);
+  }
+}
 
 heading('Recommendations (Ongoing)');
 bullet('Continue migrating raw inputs to shared UI components.');
