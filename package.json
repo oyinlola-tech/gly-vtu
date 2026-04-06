@@ -1,7 +1,7 @@
 {
   "name": "gly-vtu",
   "private": true,
-  "version": "3.4.17",
+  "version": "3.4.18",
   "type": "module",
   "author": "Oluwayemi Oyinlola Michael (https://oyinlola.site)",
   "scripts": {

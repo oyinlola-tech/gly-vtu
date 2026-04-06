@@ -181,7 +181,7 @@ export function TransactionHistoryPage() {
                   placeholder="Reference or description"
                   value={filters.search}
                   onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-4 py-2 fintech-input"
                 />
               </div>
             </div>
@@ -192,7 +192,7 @@ export function TransactionHistoryPage() {
                 id="txnType"
                 value={filters.type}
                 onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 fintech-input"
               >
                 <option value="">All Types</option>
                 <option value="topup">Wallet Top-up</option>
@@ -208,7 +208,7 @@ export function TransactionHistoryPage() {
                 id="txnStatus"
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 fintech-input"
               >
                 <option value="">All Status</option>
                 <option value="success">Success</option>
@@ -225,7 +225,7 @@ export function TransactionHistoryPage() {
                   type="date"
                   value={filters.dateFrom}
                   onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 fintech-input"
                 />
               </div>
               <div className="flex-1">
@@ -235,7 +235,7 @@ export function TransactionHistoryPage() {
                   type="date"
                   value={filters.dateTo}
                   onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 fintech-input"
                 />
               </div>
             </div>
