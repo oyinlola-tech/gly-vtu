@@ -169,7 +169,7 @@ export function WalletManagementPage() {
 
       {/* Info Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        <div className="section-card rounded-2xl p-6 border-l-4 border-emerald-500">
+        <SectionCard className="rounded-2xl p-6 border-l-4 border-emerald-500">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-green-100 rounded-lg">
               <TrendingUp className="text-green-600" size={24} />
@@ -183,7 +183,7 @@ export function WalletManagementPage() {
           </div>
         </div>
 
-        <div className="section-card rounded-2xl p-6 border-l-4 border-blue-500">
+        <SectionCard className="rounded-2xl p-6 border-l-4 border-blue-500">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Wallet className="text-blue-600" size={24} />
@@ -193,11 +193,11 @@ export function WalletManagementPage() {
               <p className="text-2xl font-bold text-gray-900 mt-1">Individual</p>
             </div>
           </div>
-        </div>
+        </SectionCard>
       </div>
 
       {/* Topup Section */}
-      <div className="section-card rounded-2xl p-8">
+      <SectionCard className="rounded-2xl p-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
           <Plus className="text-blue-600" size={28} />
           Add Funds to Wallet
@@ -324,8 +324,8 @@ export function WalletManagementPage() {
           >
             Security Settings
           </a>
-        </div>
-      </div>
+        </SectionCard>
+      </SectionCard>
       </div>
     </PageShell>
   );
