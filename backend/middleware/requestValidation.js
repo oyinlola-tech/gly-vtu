@@ -735,6 +735,16 @@ export const adminVtpassRequerySchema = Joi.object({
   requestId: Joi.string().max(120).required(),
 });
 
+export const adminTransactionsExportSchema = Joi.object({
+  type: Joi.string().valid('send', 'receive', 'bill', 'topup', 'request').optional(),
+  status: Joi.string().valid('pending', 'success', 'failed').optional(),
+  search: Joi.string().max(120).optional(),
+  userId: Joi.string().guid({ version: 'uuidv4' }).optional(),
+  dateFrom: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateTo: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  limit: Joi.number().min(1).max(5000).optional(),
+});
+
 export const adminAuditQuerySchema = Joi.object({
   limit: Joi.number().min(1).max(200).optional(),
   offset: Joi.number().min(0).max(100000).optional(),
@@ -944,6 +954,7 @@ export default {
   adminVtpassRequerySchema,
   adminAuditQuerySchema,
   adminSecurityEventsQuerySchema,
+  adminTransactionsExportSchema,
   cardCreateSchema,
   transactionsExportSchema,
   updateProfileSchema,

@@ -8,7 +8,13 @@ import { logSecurityEvent } from '../utils/securityEvents.js';
 import { applyUserPII } from '../utils/encryption.js';
 import { runFullReconciliation } from '../utils/reconciliation.js';
 import { hydrateTransactionMetadata } from '../utils/transactionMetadata.js';
-import { validateParams, adminReferenceParamSchema } from '../middleware/requestValidation.js';
+import { toCsv, csvRow } from '../utils/csv.js';
+import {
+  validateParams,
+  validateRequest,
+  adminReferenceParamSchema,
+  adminTransactionsExportSchema,
+} from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -62,6 +68,75 @@ router.get('/metrics', requireAdmin, requirePermission('transactions:read'), asy
     transactions: tx.total,
     volume: Number(volume.total || 0),
   });
+});
+
+router.post('/export', requireAdmin, requirePermission('transactions:read'), validateRequest(adminTransactionsExportSchema), async (req, res) => {
+  const { type, status, search, userId, dateFrom, dateTo, limit } = req.validated || req.body || {};
+  const filters = [];
+  const params = [];
+
+  if (userId) {
+    filters.push('t.user_id = ?');
+    params.push(userId);
+  }
+  if (type) {
+    filters.push('t.type = ?');
+    params.push(type);
+  }
+  if (status) {
+    filters.push('t.status = ?');
+    params.push(status);
+  }
+  if (search) {
+    filters.push('t.reference LIKE ?');
+    params.push(`%${String(search).trim()}%`);
+  }
+  if (dateFrom) {
+    filters.push('t.created_at >= CONCAT(?, " 00:00:00")');
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    filters.push('t.created_at <= CONCAT(?, " 23:59:59")');
+    params.push(dateTo);
+  }
+
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const capped = Math.min(Number(limit || 1000), 5000);
+
+  const [rows] = await pool.query(
+    `SELECT t.id, t.user_id, u.full_name, u.full_name_encrypted, t.type, t.amount, t.fee, t.total, t.status, t.reference, t.created_at
+     FROM transactions t
+     JOIN users u ON u.id = t.user_id
+     ${where}
+     ORDER BY t.created_at DESC
+     LIMIT ?`,
+    [...params, capped]
+  );
+
+  const header = csvRow('id', 'user_id', 'user_name', 'type', 'amount', 'fee', 'total', 'status', 'reference', 'created_at');
+  const lines = [header];
+  for (const row of rows || []) {
+    const safe = applyUserPII(row);
+    lines.push(
+      csvRow(
+        safe.id,
+        safe.user_id,
+        safe.full_name || '',
+        safe.type,
+        Number(safe.amount || 0).toFixed(2),
+        Number(safe.fee || 0).toFixed(2),
+        Number(safe.total || 0).toFixed(2),
+        safe.status,
+        safe.reference,
+        safe.created_at ? new Date(safe.created_at).toISOString() : ''
+      )
+    );
+  }
+
+  const filename = `admin-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  return res.send(toCsv(lines));
 });
 
 router.get('/held-topups', requireAdmin, requirePermission('transactions:read'), async (req, res) => {
