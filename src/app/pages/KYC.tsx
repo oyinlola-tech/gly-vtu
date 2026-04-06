@@ -61,7 +61,7 @@ export default function KYC() {
 
       <div className="px-6 -mt-16 space-y-6">
         {profile && (
-          <div className="fintech-card rounded-2xl p-4">
+          <div className="section-card rounded-2xl p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Current Level</p>
             <p className="text-lg font-bold text-gray-900 dark:text-white">
               Level {profile.kyc_level} • {profile.kyc_status}
@@ -73,7 +73,7 @@ export default function KYC() {
           Complete higher KYC levels to unlock higher limits, card issuance, and bank transfers.
         </div>
 
-        <div className="fintech-card rounded-2xl p-6">
+        <div className="section-card rounded-2xl p-6">
           {message && (
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 p-3 rounded-xl text-sm mb-4">
               {message}
@@ -87,9 +87,7 @@ export default function KYC() {
                 type="button"
                 onClick={() => setLevel(lvl as 2 | 3)}
                 className={`flex-1 py-3 rounded-xl font-semibold ${
-                  level === lvl
-                    ? 'bg-[#235697] text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                  level === lvl ? 'btn-primary' : 'btn-secondary'
                 }`}
               >
                 Level {lvl}
@@ -158,7 +156,7 @@ export default function KYC() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-[#235697] via-[#1a4a86] to-[#0b2c57] text-white py-3 rounded-2xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="w-full btn-primary py-3 rounded-2xl hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {loading ? <LoadingSpinner size="sm" /> : 'Submit KYC'}
             </button>
