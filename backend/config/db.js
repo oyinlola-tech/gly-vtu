@@ -31,10 +31,20 @@ export const pool = mysql.createPool({
   user: DB_USER,
   password: DB_PASSWORD,
   database: DB_NAME,
+  charset: 'utf8mb4',
   waitForConnections: true,
   connectionLimit: 10,
   decimalNumbers: true,
   multipleStatements: false,
+});
+
+// SECURITY: Enforce strict SQL modes and UTC timezone for every new connection.
+// This helps prevent silent truncation and inconsistent date handling.
+pool.on('connection', (conn) => {
+  conn.query(
+    "SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+  );
+  conn.query("SET SESSION time_zone = '+00:00'");
 });
 
 function hashToken(token) {

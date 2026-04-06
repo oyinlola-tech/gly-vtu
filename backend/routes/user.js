@@ -450,6 +450,12 @@ function csvEscape(value) {
   return str;
 }
 
+function csvSanitize(value) {
+  const str = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@]/.test(str)) return `'${str}`;
+  return str;
+}
+
 router.get('/security-events', requireUser, validateQuery(securityEventsQuerySchema), async (req, res) => {
   const exportCsv = String(req.validatedQuery?.export || '').toLowerCase() === 'csv';
   const limit = Math.min(Number(req.validatedQuery?.limit || 50), 200);
@@ -506,6 +512,7 @@ router.get('/security-events', requireUser, validateQuery(securityEventsQuerySch
         row.metadata ? JSON.stringify(row.metadata) : '',
         row.created_at ? new Date(row.created_at).toISOString() : '',
       ]
+        .map(csvSanitize)
         .map(csvEscape)
         .join(',')
     );
