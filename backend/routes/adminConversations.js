@@ -12,6 +12,7 @@ import {
   adminConversationIdParamSchema,
   adminConversationSendSchema,
 } from '../middleware/requestValidation.js';
+import { sanitizeUserText } from '../utils/sanitize.js';
 
 const router = express.Router();
 
@@ -41,7 +42,8 @@ router.get('/:id/messages', requireAdmin, requirePermission('support:chat'), val
 
 router.post('/:id/send', requireAdmin, requirePermission('support:chat'), validateParams(adminConversationIdParamSchema), validateRequest(adminConversationSendSchema), async (req, res) => {
   const { text } = req.validated || req.body || {};
-  const body = String(text || '').trim();
+  // SECURITY: Sanitize admin-generated content to avoid persisted HTML payloads.
+  const body = sanitizeUserText(text, 2000);
   if (!body) return res.status(400).json({ error: 'Message required' });
 
   const [[conversation]] = await pool.query(

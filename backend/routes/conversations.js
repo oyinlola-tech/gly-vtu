@@ -5,6 +5,7 @@ import { requireUser } from '../middleware/auth.js';
 import { emitToAdmins, emitToUser } from '../utils/realtime.js';
 import { logAudit } from '../utils/audit.js';
 import { validateRequest, conversationSendSchema } from '../middleware/requestValidation.js';
+import { sanitizeUserText } from '../utils/sanitize.js';
 
 const router = express.Router();
 
@@ -37,7 +38,8 @@ router.get('/me', requireUser, async (req, res) => {
 
 router.post('/send', requireUser, validateRequest(conversationSendSchema), async (req, res) => {
   const { text } = req.validated || req.body || {};
-  const body = String(text || '').trim();
+  // SECURITY: Sanitize user-generated content to reduce stored XSS risk.
+  const body = sanitizeUserText(text, 2000);
   if (!body) return res.status(400).json({ error: 'Message required' });
 
   const conversation = await ensureConversation(req.user.sub);
