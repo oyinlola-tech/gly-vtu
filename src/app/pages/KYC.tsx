@@ -49,8 +49,8 @@ export default function KYC() {
   };
 
   return (
-    <div className="min-h-screen fintech-bg pb-32">
-      <div className="bg-gradient-to-br from-[#235697] via-[#1a4a86] to-[#0b2c57] p-6 pb-24 rounded-b-[28px] shadow-[0_20px_45px_rgba(15,23,42,0.3)]">
+    <div className="page-shell pb-32">
+      <div className="fintech-hero p-6 pb-24 rounded-b-[28px]">
         <div className="flex items-center gap-4">
           <Link to="/more" className="text-white">
             <ChevronLeft size={24} />
