@@ -685,6 +685,29 @@ export const transactionsAPI = {
     }
     return res.blob();
   },
+  exportCsv: async (payload: {
+    type?: string;
+    status?: string;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }) => {
+    const token = await ensureCsrfToken();
+    const res = await fetch(`${API_BASE_URL}/transactions/export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-CSRF-Token': token } : {}),
+      },
+      body: JSON.stringify(payload || {}),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await parseResponse(res);
+      throw new Error(error?.error || 'Export failed');
+    }
+    return res.blob();
+  },
 };
 
 // ============= BILLS PAYMENT APIs =============

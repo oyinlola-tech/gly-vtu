@@ -760,6 +760,15 @@ export const cardCreateSchema = Joi.object({
   pin: Joi.string().required().length(6).pattern(/^\d+$/),
 });
 
+export const transactionsExportSchema = Joi.object({
+  type: Joi.string().valid('send', 'receive', 'bill', 'topup', 'request').optional(),
+  status: Joi.string().valid('pending', 'success', 'failed').optional(),
+  search: Joi.string().max(120).optional(),
+  dateFrom: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateTo: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  limit: Joi.number().min(1).max(2000).optional(),
+});
+
 export const updateProfileSchema = Joi.object({
   fullName: Joi.string().min(2).max(100).optional(),
   phone: Joi.string()
@@ -936,6 +945,7 @@ export default {
   adminAuditQuerySchema,
   adminSecurityEventsQuerySchema,
   cardCreateSchema,
+  transactionsExportSchema,
   updateProfileSchema,
   // Middleware
   createValidationMiddleware,

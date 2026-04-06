@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ArrowDown, ArrowUp, Filter, Download, Search } from 'lucide-react';
-import { userAPI } from '../../services/api';
+import { userAPI, transactionsAPI } from '../../services/api';
 import type { Transaction as ApiTransaction } from '../../types/api';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import { toast } from 'sonner';
@@ -78,22 +78,13 @@ export function TransactionHistoryPage() {
 
   async function handleExport() {
     try {
-      const csv = [
-        ['Date', 'Type', 'Amount', 'Fee', 'Status', 'Reference', 'Description'],
-        ...filteredTransactions.map(tx => [
-          new Date(tx.createdAt).toISOString().split('T')[0],
-          tx.type,
-          tx.amount,
-          tx.fee,
-          tx.status,
-          tx.reference,
-          tx.description,
-        ]),
-      ]
-        .map(row => row.map(cell => `"${cell}"`).join(','))
-        .join('\n');
-
-      const blob = new Blob([csv], { type: 'text/csv' });
+      const blob = await transactionsAPI.exportCsv({
+        type: filters.type || undefined,
+        status: filters.status || undefined,
+        search: filters.search || undefined,
+        dateFrom: filters.dateFrom || undefined,
+        dateTo: filters.dateTo || undefined,
+      });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

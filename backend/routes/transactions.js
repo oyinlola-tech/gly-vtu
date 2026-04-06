@@ -4,11 +4,13 @@ import { requireUser } from '../middleware/auth.js';
 import { generateStatementPdf, sendStatementEmail, generateReceiptPdf } from '../utils/email.js';
 import { applyUserPII } from '../utils/encryption.js';
 import { hydrateTransactionMetadata } from '../utils/transactionMetadata.js';
+import { toCsv, csvRow } from '../utils/csv.js';
 import {
   validateRequest,
   validateParams,
   transactionIdParamSchema,
-  statementSchema
+  statementSchema,
+  transactionsExportSchema
 } from '../middleware/requestValidation.js';
 
 const router = express.Router();
@@ -291,6 +293,67 @@ router.post('/statement/download', requireUser, validateRequest(statementSchema)
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   return res.send(pdf);
+});
+
+router.post('/export', requireUser, validateRequest(transactionsExportSchema), async (req, res) => {
+  const { type, status, search, dateFrom, dateTo, limit } = req.validated || req.body || {};
+  const filters = ['user_id = ?'];
+  const params = [req.user.sub];
+
+  if (type) {
+    filters.push('type = ?');
+    params.push(type);
+  }
+  if (status) {
+    filters.push('status = ?');
+    params.push(status);
+  }
+  if (search) {
+    filters.push('reference LIKE ?');
+    params.push(`%${String(search).trim()}%`);
+  }
+  if (dateFrom) {
+    filters.push('created_at >= CONCAT(?, " 00:00:00")');
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    filters.push('created_at <= CONCAT(?, " 23:59:59")');
+    params.push(dateTo);
+  }
+
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const capped = Math.min(Number(limit || 1000), 2000);
+
+  const [rows] = await pool.query(
+    `SELECT id, type, amount, fee, total, status, reference, created_at
+     FROM transactions
+     ${where}
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    [...params, capped]
+  );
+
+  const header = csvRow('id', 'type', 'amount', 'fee', 'total', 'status', 'reference', 'created_at');
+  const lines = [header];
+  for (const row of rows || []) {
+    lines.push(
+      csvRow(
+        row.id,
+        row.type,
+        Number(row.amount || 0).toFixed(2),
+        Number(row.fee || 0).toFixed(2),
+        Number(row.total || 0).toFixed(2),
+        row.status,
+        row.reference,
+        row.created_at ? new Date(row.created_at).toISOString() : ''
+      )
+    );
+  }
+
+  const filename = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  return res.send(toCsv(lines));
 });
 
 export default router;
