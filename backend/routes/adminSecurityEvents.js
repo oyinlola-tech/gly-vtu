@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../config/db.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { requirePermission } from '../middleware/permissions.js';
+import { validateQuery, adminSecurityEventsQuerySchema } from '../middleware/requestValidation.js';
 
 const router = express.Router();
 
@@ -13,20 +14,26 @@ function csvEscape(value) {
   return str;
 }
 
-router.get('/', requireAdmin, requirePermission('audit:read'), async (req, res) => {
-  const exportCsv = String(req.query.export || '').toLowerCase() === 'csv';
-  const limit = Math.min(Number(req.query.limit || 100), 200);
-  const offset = Math.max(Number(req.query.offset || 0), 0);
+function csvSanitize(value) {
+  const str = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@]/.test(str)) return `'${str}`;
+  return str;
+}
+
+router.get('/', requireAdmin, requirePermission('audit:read'), validateQuery(adminSecurityEventsQuerySchema), async (req, res) => {
+  const exportCsv = String(req.validatedQuery?.export || '').toLowerCase() === 'csv';
+  const limit = Math.min(Number(req.validatedQuery?.limit || 100), 200);
+  const offset = Math.max(Number(req.validatedQuery?.offset || 0), 0);
   const filters = [];
   const params = [];
 
-  if (req.query.severity) {
+  if (req.validatedQuery?.severity) {
     filters.push('severity = ?');
-    params.push(req.query.severity);
+    params.push(req.validatedQuery.severity);
   }
-  if (req.query.type) {
+  if (req.validatedQuery?.type) {
     filters.push('event_type LIKE ?');
-    params.push(`%${req.query.type}%`);
+    params.push(`%${req.validatedQuery.type}%`);
   }
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
@@ -58,6 +65,7 @@ router.get('/', requireAdmin, requirePermission('audit:read'), async (req, res) 
         row.metadata ? JSON.stringify(row.metadata) : '',
         row.created_at ? new Date(row.created_at).toISOString() : '',
       ]
+        .map(csvSanitize)
         .map(csvEscape)
         .join(',')
     );

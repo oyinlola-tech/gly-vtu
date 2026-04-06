@@ -735,6 +735,25 @@ export const adminVtpassRequerySchema = Joi.object({
   requestId: Joi.string().max(120).required(),
 });
 
+export const adminAuditQuerySchema = Joi.object({
+  limit: Joi.number().min(1).max(200).optional(),
+  offset: Joi.number().min(0).max(100000).optional(),
+  actorType: Joi.string().valid('user', 'admin', 'system').optional(),
+  actorId: Joi.string().max(120).optional(),
+  action: Joi.string().max(120).optional(),
+  entityType: Joi.string().max(80).optional(),
+  from: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}/).optional(),
+  to: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}/).optional(),
+});
+
+export const adminSecurityEventsQuerySchema = Joi.object({
+  export: Joi.string().valid('csv', 'json').optional(),
+  limit: Joi.number().min(1).max(200).optional(),
+  offset: Joi.number().min(0).max(100000).optional(),
+  severity: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
+  type: Joi.string().max(120).optional(),
+});
+
 export const cardCreateSchema = Joi.object({
   amount: Joi.number().required().min(100).max(5_000_000).integer(),
   currency: Joi.string().length(3).optional(),
@@ -914,6 +933,8 @@ export default {
   adminFlutterwaveRequerySchema,
   adminVtpassEventsQuerySchema,
   adminVtpassRequerySchema,
+  adminAuditQuerySchema,
+  adminSecurityEventsQuerySchema,
   cardCreateSchema,
   updateProfileSchema,
   // Middleware
