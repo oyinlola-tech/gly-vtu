@@ -63,7 +63,7 @@ export function sanitizeUserText(value, maxLen = 2000) {
   if (value === null || value === undefined) return '';
   const raw = String(value);
   const noTags = raw.replace(/<[^>]*>/g, '');
-  const noCtl = noTags.replace(/[\u0000-\u001F\u007F]/g, '');
+  const noCtl = noTags.replace(/[\p{Cc}]/gu, '');
   const trimmed = noCtl.trim();
   if (trimmed.length <= maxLen) return trimmed;
   return trimmed.slice(0, maxLen);

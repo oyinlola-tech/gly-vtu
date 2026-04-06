@@ -181,7 +181,7 @@ export function WalletManagementPage() {
               </p>
             </div>
           </div>
-        </div>
+        </SectionCard>
 
         <SectionCard className="rounded-2xl p-6 border-l-4 border-blue-500">
           <div className="flex items-start gap-4">
@@ -306,7 +306,7 @@ export function WalletManagementPage() {
             </p>
           </div>
         </div>
-      </div>
+      </SectionCard>
 
       {/* Quick Actions */}
       <SectionCard className="mt-8 rounded-2xl p-6">
@@ -324,9 +324,9 @@ export function WalletManagementPage() {
           >
             Security Settings
           </a>
-        </SectionCard>
+        </div>
       </SectionCard>
-      </SectionCard>
+      </div>
     </PageShell>
   );
 }
