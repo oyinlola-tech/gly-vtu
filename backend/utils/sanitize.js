@@ -56,3 +56,15 @@ export function sanitizeVtpassPayload(payload = {}) {
     },
   };
 }
+
+// SECURITY: Basic text sanitization to reduce stored XSS risk in user-generated content.
+// This strips HTML tags and control chars, then trims and length-limits the content.
+export function sanitizeUserText(value, maxLen = 2000) {
+  if (value === null || value === undefined) return '';
+  const raw = String(value);
+  const noTags = raw.replace(/<[^>]*>/g, '');
+  const noCtl = noTags.replace(/[\u0000-\u001F\u007F]/g, '');
+  const trimmed = noCtl.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return trimmed.slice(0, maxLen);
+}
